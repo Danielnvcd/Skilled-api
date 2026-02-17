@@ -42,7 +42,8 @@ def update_last_seen():
                 if user:
                     user.last_seen = datetime.now()
                     db.session.commit()
-        except Exception:
+        except Exception as e:
+            print(f"Error updating last_seen: {e}")
             db.session.rollback()
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -63,6 +64,8 @@ def login():
             session['user'] = u.username
             session['role'] = u.role
             session.permanent = True
+            u.last_seen = datetime.now()
+            db.session.commit()
             log_action("Login exitoso") 
             return redirect(url_for('main.home'))
         

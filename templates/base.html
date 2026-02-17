@@ -175,6 +175,13 @@
                 <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Supervisores">
                 Supervisores
             </a>
+            </a>
+            {% if session.get('role') == 'admin' %}
+            <a href="{{ url_for('users.list_users') }}">
+                <img src="{{ url_for('static', filename='iconos/usuario.png') }}" class="menu-icon" alt="Usuarios">
+                Usuarios
+            </a>
+            {% endif %}
         </nav>
         <div class="user-info">
             <p>Usuario: <a href="{{ url_for('auth.profile') }}"

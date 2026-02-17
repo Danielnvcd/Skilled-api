@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Professional Modal Styling */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(5px);
+        /* Glassmorphism effect */
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    .modal-content {
+        background-color: #ffffff;
+        margin: 8% auto;
+        padding: 30px;
+        border: none;
+        width: 450px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        position: relative;
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            transform: translateY(-30px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 24px;
+        font-weight: bold;
+        transition: color 0.2s;
+        cursor: pointer;
+    }
+
+    .close:hover,
+    .close:focus {
+        color: #333;
+        text-decoration: none;
+    }
+
+    /* Form Styling */
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #546e7a;
+        font-weight: 500;
+        font-size: 0.95em;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        box-sizing: border-box;
+        /* Fix input width issue */
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        border-color: #546e7a;
+        box-shadow: 0 0 0 3px rgba(84, 110, 122, 0.1);
+        outline: none;
+    }
+
+    /* Buttons */
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 0.95em;
+        font-weight: 600;
+        display: inline-block;
+        transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    .btn:active {
+        transform: translateY(1px);
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #546e7a 0%, #37474f 100%);
+        color: white;
+        box-shadow: 0 4px 6px rgba(55, 71, 79, 0.2);
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #607d8b 0%, #455a64 100%);
+    }
+
+    .btn-danger {
+        background-color: #ef5350;
+        color: white;
+    }
+
+    .btn-warning {
+        background-color: #ffa726;
+        color: white;
+    }
+
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 0.85em;
+    }
+
+    /* Table Styling */
+    table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-top: 25px;
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    th,
+    td {
+        padding: 16px 20px;
+        text-align: left;
+        border-bottom: 1px solid #eceff1;
+    }
+
+    th {
+        background-color: #546e7a;
+        color: white;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85em;
+        letter-spacing: 0.5px;
+    }
+
+    tr:last-child td {
+        border-bottom: none;
+    }
+
+    tr:hover {
+        background-color: #f9fafb;
+    }
+
+    /* Status Indicators */
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+
+    .status-online {
+        background-color: #4caf50;
+        box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+    }
+
+    .status-offline {
+        background-color: #bdbdbd;
+    }
+
+    /* Role Badges */
+    .badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .badge-admin {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+
+    .badge-supervisor {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+
+    .badge-user {
+        background-color: #f5f5f5;
+        color: #616161;
+    }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <div>
+        <h2 style="color: #37474f; margin: 0; font-size: 1.8em;">Gestión de Usuarios</h2>
+        <p style="color: #78909c; margin: 5px 0 0 0;">Administra el acceso y roles del sistema</p>
+    </div>
+    <button id="btnAddUser" class="btn btn-primary">
+        + Nuevo Usuario
+    </button>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th style="width: 80px;">ID</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th>Estado</th>
+            <th style="text-align: right;">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td style="color: #78909c;">#{{ user.id }}</td>
+            <td style="font-weight: 500; color: #37474f;">{{ user.username }}</td>
+            <td>
+                <span class="badge badge-{{ user.role }}">
+                    {{ user.role }}
+                </span>
+            </td>
+            <td>
+                {% if user.last_seen and (now() - user.last_seen).total_seconds() < 300 %} <span
+                    class="status-indicator status-online"></span> <span style="color: #4caf50; font-size: 0.9em;">En
+                        línea</span>
+                    {% else %}
+                    <span class="status-indicator status-offline"></span> <span
+                        style="color: #90a4ae; font-size: 0.9em;">Desconectado</span>
+                    {% endif %}
+            </td>
+            <td style="text-align: right;">
+                <button class="btn btn-warning btn-sm btn-change-password" data-id="{{ user.id }}"
+                    data-username="{{ user.username }}">
+                    Cambiar Contraseña
+                </button>
+                <form action="{{ url_for('users.delete_user', user_id=user.id) }}" method="POST" style="display:inline;"
+                    class="form-delete-user" data-username="{{ user.username }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        Eliminar
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Add User Modal -->
+<div id="addUserModal" class="modal">
+    <div class="modal-content">
+        <span class="close" id="closeAddUser">&times;</span>
+        <h3 style="margin-top: 0; color: #37474f; margin-bottom: 25px;">Agregar Nuevo Usuario</h3>
+        <form action="{{ url_for('users.add_user') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label>Usuario</label>
+                <input type="text" name="username" placeholder="Ej. usuario1" required>
+            </div>
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" name="password" placeholder="••••••••" required>
+            </div>
+            <div class="form-group">
+                <label>Rol</label>
+                <select name="role" required>
+                    <option value="" disabled selected>Selecciona un rol</option>
+                    <option value="admin">Administrador</option>
+                    <option value="supervisor">Supervisor</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Crear Usuario</button>
+        </form>
+    </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="changePasswordModal" class="modal">
+    <div class="modal-content">
+        <span class="close" id="closeChangePassword">&times;</span>
+        <h3 style="margin-top: 0; color: #37474f;">Cambiar Contraseña</h3>
+        <p id="passwordUserDisplay" style="margin-bottom: 25px; color: #78909c; font-size: 0.95em;"></p>
+        <form id="changePasswordForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label>Nueva Contraseña</label>
+                <input type="password" name="new_password" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="btn btn-warning" style="width: 100%; margin-top: 10px;">Actualizar
+                Contraseña</button>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/users.js') }}"></script>
+{% endblock %}

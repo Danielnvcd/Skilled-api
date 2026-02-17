@@ -50,19 +50,20 @@ def create_app():
 
     csp = {
         'default-src': '\'self\'',
-        'script-src': ['\'self\'', 'https://static.cloudflareinsights.com'],
-        'style-src': ['\'self\'', '\'unsafe-inline\''],
+        'script-src': ['\'self\'', 'https://static.cloudflareinsights.com', 'https://cdnjs.cloudflare.com'],
+        'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
-        'font-src': '\'self\'',
+        'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com'],
         'connect-src': ['\'self\'', 'https://cloudflare.com'],
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
         'media-src': '\'self\''
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main
+    from app.routes import auth, main, users
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
+    app.register_blueprint(users.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):
