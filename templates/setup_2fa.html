@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div
+    style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <h3 style="text-align: center; color: #455a64;">Configurar 2FA</h3>
+    <div style="text-align: center; margin: 20px 0;">
+        <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code"
+            style="max-width: 200px; border: 1px solid #ddd; padding: 5px;">
+    </div>
+    <p style="text-align: center;">Código secreto: <code>{{ secret }}</code></p>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="margin-bottom: 20px;">
+            <label>Ingresa el código verificado:</label>
+            <input type="text" name="code" placeholder="000000" maxlength="6" required autocomplete="off"
+                style="width: 100%; padding: 10px; font-size: 1.2rem; text-align: center; margin-top: 5px;">
+        </div>
+        <button type="submit"
+            style="width: 100%; padding: 12px; background: #546e7a; color: white; border: none; border-radius: 5px; font-size: 1.1rem; cursor: pointer;">Activar</button>
+    </form>
+</div>
+<script src="{{ url_for('static', filename='js/2fa.js') }}"></script>
+{% endblock %}

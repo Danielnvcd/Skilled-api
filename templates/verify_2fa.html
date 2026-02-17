@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div
+    style="max-width: 500px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <h3 style="text-align: center; color: #455a64;">Verificación de Seguridad</h3>
+    <p style="text-align: center; color: #666;">Ingresa el código de 6 dígitos.</p>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="margin-bottom: 20px;">
+            <input type="text" name="code" placeholder="000000" maxlength="6" required autocomplete="off"
+                style="width: 100%; padding: 15px; font-size: 1.5rem; text-align: center; letter-spacing: 5px; border: 1px solid #ccc; border-radius: 5px;">
+        </div>
+        <button type="submit"
+            style="width: 100%; padding: 12px; background: #546e7a; color: white; border: none; border-radius: 5px; font-size: 1.1rem; cursor: pointer;">Verificar</button>
+    </form>
+</div>
+<script src="{{ url_for('static', filename='js/2fa.js') }}"></script>
+{% endblock %}

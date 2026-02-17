@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <h2 style="color: #37474f; margin-bottom: 20px;">Mi Perfil</h2>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h3 style="color: #546e7a; margin-bottom: 15px; border-bottom: 1px solid #cfd8dc; padding-bottom: 10px;">
+            Información de Usuario
+        </h3>
+        <p><strong>Usuario:</strong> {{ user.username }}</p>
+        <p><strong>Rol:</strong> {{ user.role }}</p>
+        <p><strong>Última sesión:</strong> {{ user.last_seen.strftime('%d/%m/%Y %H:%M') if user.last_seen else 'N/A' }}
+        </p>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <h3 style="color: #546e7a; margin-bottom: 15px; border-bottom: 1px solid #cfd8dc; padding-bottom: 10px;">
+            Cambiar Contraseña
+        </h3>
+        <form method="POST" action="{{ url_for('auth.profile') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; color: #37474f;">Nueva Contraseña</label>
+                <input type="password" name="new_password" required
+                    style="width: 100%; padding: 10px; border: 1px solid #cfd8dc; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; color: #37474f;">Confirmar Contraseña</label>
+                <input type="password" name="confirm_password" required
+                    style="width: 100%; padding: 10px; border: 1px solid #cfd8dc; border-radius: 4px;">
+            </div>
+            <button type="submit"
+                style="background-color: #546e7a; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                Actualizar Contraseña
+            </button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 style="color: #546e7a; margin-bottom: 15px; border-bottom: 1px solid #cfd8dc; padding-bottom: 10px;">
+            Seguridad
+        </h3>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong style="display: block; color: #37474f;">Doble Factor de Autenticación (2FA)</strong>
+                {% if user.totp_secret %}
+                <span style="font-size: 0.9em; color: #2ecc71;">Activado</span>
+                {% else %}
+                <span style="font-size: 0.9em; color: #e74c3c;">Desactivado</span>
+                {% endif %}
+            </div>
+            {% if user.totp_secret %}
+            <a href="{{ url_for('auth.setup_2fa') }}"
+                style="background-color: #95a5a6; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 0.9em;">
+                Reconfigurar 2FA
+            </a>
+            {% else %}
+            <a href="{{ url_for('auth.setup_2fa') }}"
+                style="background-color: #27ae60; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 0.9em;">
+                Activar 2FA
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+{% endblock %}
