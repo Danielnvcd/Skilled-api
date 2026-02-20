@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Recibo de Prenómina</title>
+    <style>
+        @page {
+            size: letter landscape;
+            margin: 1cm;
+        }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #000;
+            margin: 0;
+            padding: 0;
+            font-size: 10px;
+        }
+
+        .header-title {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-decoration: underline;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            border: 1px solid #000;
+            padding: 4px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .bg-dark {
+            background-color: #333;
+            color: white;
+            font-weight: bold;
+        }
+
+        .bg-gray {
+            background-color: #f2f2f2;
+        }
+
+        .text-left {
+            text-align: left;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        /* Table 1: Employee Info */
+        .info-table th {
+            font-size: 10px;
+        }
+
+        .info-table td {
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        /* Table 2: Financial Concepts */
+        .financial-table th {
+            font-size: 10px;
+        }
+
+        .financial-table td {
+            font-size: 11px;
+        }
+
+        .total-row td {
+            font-weight: bold;
+            background-color: #333;
+            color: white;
+        }
+
+        /* Table 3: Daily Records */
+        .records-table th {
+            font-size: 8px;
+            color: #1f4e78;
+            background-color: #fff;
+        }
+
+        .records-table td {
+            font-size: 9px;
+            color: #1f4e78;
+            background-color: #e6ebf5;
+        }
+
+        .emp-name-box {
+            font-weight: bold;
+            font-size: 12px;
+            color: #1f4e78;
+            background-color: #fff;
+        }
+
+        .total-hrs-box {
+            font-weight: bold;
+            font-size: 16px;
+            color: #1f4e78;
+            background-color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Title -->
+    <div class="header-title">INFORMATIVA DE PAGO</div>
+
+    <!-- Info Table -->
+    <table class="info-table">
+        <tr class="bg-dark">
+            <th width="10%">No. Empleado</th>
+            <th width="35%">Nombre</th>
+            <th width="15%">Fecha de Pago</th>
+            <th width="40%" colspan="3">Periodo de pago</th>
+        </tr>
+        <tr>
+            <td rowspan="2" class="bg-dark">{{ p.trabajador.no_empleado }}</td>
+            <td rowspan="2" class="bg-dark">{{ p.trabajador.nombre_apellidos }}</td>
+            <td rowspan="2" class="bg-dark">{{ reporte.fecha_fin_semana.strftime('%d/%m/%Y') }}</td>
+            <td rowspan="2" class="bg-dark">Sem {{ reporte.fecha_inicio_semana.isocalendar()[1] }}</td>
+            <td class="text-left bg-dark" style="border-right: none;">Fecha inicial de pago</td>
+            <td class="text-right bg-dark" style="border-left: none;">{{
+                reporte.fecha_inicio_semana.strftime('%d/%m/%Y') }}</td>
+        </tr>
+        <tr>
+            <td class="text-left bg-dark" style="border-right: none;">Fecha final de pago</td>
+            <td class="text-right bg-dark" style="border-left: none;">{{ reporte.fecha_fin_semana.strftime('%d/%m/%Y')
+                }}</td>
+        </tr>
+    </table>
+
+    <!-- Financial Table -->
+    <table class="financial-table">
+        <tr class="bg-dark">
+            <th width="5%">Clave</th>
+            <th width="35%">Concepto</th>
+            <th width="15%" colspan="2">Cant.</th>
+            <th width="15%">Percepción</th>
+            <th width="15%">Deducciones</th>
+            <th width="15%">Neto a Pagar</th>
+        </tr>
+
+        <!-- Percepciones -->
+        <tr>
+            <td>1</td>
+            <td class="text-left">{% if p.trabajador.tipo_nomina == 'Por hora' %}Horas Trabajadas{% else %}Sueldo{%
+                endif %}</td>
+            <td class="text-right" style="border-right: none;">{% if p.trabajador.tipo_nomina == 'Por hora' %}{{
+                total_hrs }}{% endif %}</td>
+            <td class="text-left" style="border-left: none;">{% if p.trabajador.tipo_nomina == 'Por hora' %}hrs.{% endif
+                %}</td>
+            <td class="text-left">$ {{ "%.2f"|format(p.salario_base) }}</td>
+            <td class="text-left">$</td>
+            <td rowspan="6"></td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td class="text-left">INFONAVIT</td>
+            <td colspan="2"></td>
+            <td class="text-left">$</td>
+            <td class="text-left">$ {{ "%.2f"|format(p.descuento_infonavit) }}</td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td class="text-left">Horas Extras</td>
+            <td class="text-right" style="border-right: none;"></td>
+            <td class="text-left" style="border-left: none;"></td>
+            <td class="text-left">$ {{ "%.2f"|format(p.pago_horas_extras) }}</td>
+            <td class="text-left">$</td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td class="text-left">Viáticos</td>
+            <td class="text-right" style="border-right: none;"></td>
+            <td class="text-left" style="border-left: none;">{% if p.pago_viaticos > 0 %}días{% endif %}</td>
+            <td class="text-left">$ {{ "%.2f"|format(p.pago_viaticos) }}</td>
+            <td class="text-left">$</td>
+        </tr>
+        <tr>
+            <td>5</td>
+            <td class="text-left">Préstamo Personal</td>
+            <td colspan="2"></td>
+            <td class="text-left">$</td>
+            <td class="text-left">$ {{ "%.2f"|format(p.descuento_prestamos) }}</td>
+        </tr>
+        <tr>
+            <td>6</td>
+            <td class="text-left">Adelanto Inbursa / Otros</td>
+            <td colspan="2"></td>
+            <td class="text-left">$ {{ "%.2f"|format(p.pago_festivos + p.depositos_otros + p.depositos_prestamos) }}
+            </td>
+            <td class="text-left">$ {{ "%.2f"|format(p.ajuste_inbursa + p.descuento_incidencias + p.descuentos_otros +
+                p.recuperacion_manual) }}</td>
+        </tr>
+        <tr class="total-row">
+            <td colspan="4" class="text-right">TOTALES</td>
+            <td class="text-left">$ {{ "%.2f"|format(p.total_percepciones) }}</td>
+            <td class="text-left">$ {{ "%.2f"|format(p.total_deducciones) }}</td>
+            <td class="text-left bg-dark">$ {{ "%.2f"|format(p.total_a_pagar) }}</td>
+        </tr>
+    </table>
+
+    <!-- Daily Records Table -->
+    <table class="records-table">
+        <tr>
+            <th width="20%">SELECCIÓN DE EMPLEADOS</th>
+            <th width="5%">DÍA</th>
+            <th width="8%">FECHA</th>
+            <th width="6%">HORA INICIO</th>
+            <th width="6%">HORA FIN</th>
+            <th width="6%">HR COMIDA</th>
+            <th width="8%">PROYECTO</th>
+            <th width="10%">INCIDENCIA</th>
+            <th width="8%">TIPO DE PAGO</th>
+            <th width="5%">Σ HR PRODUCTIVAS</th>
+            <th width="18%">NOMBRE DEL EMPLEADO</th>
+            <th width="10%">TOTAL DE HORAS LABORADAS</th>
+        </tr>
+
+        {% for reg in registros_trabajador %}
+        <tr>
+            {% if loop.first %}
+            <td rowspan="7" class="emp-name-box">{{ p.trabajador.nombre_apellidos }}</td>
+            {% endif %}
+
+            <td>{{ ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'][reg.fecha.weekday()] }}</td>
+            <td>{{ reg.fecha.strftime('%d-%m-%y') }}</td>
+            <td>{{ reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '' }}</td>
+            <td>{{ reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '' }}</td>
+            <td>{{ 'SI' if reg.tomo_comida else '' }}</td>
+            <td>{{ reg.reporte.proyecto.numero_proyecto if not reg.incidencia else '' }}</td>
+            <td>{{ reg.incidencia or '' }}</td>
+            <td>{{ reg.tipo_nomina or p.trabajador.tipo_nomina }}</td>
+            <td>{{ "%.1f"|format(reg.horas_productivas) if reg.horas_productivas else '0.0' }}</td>
+
+            <td>{{ p.trabajador.nombre_apellidos }}</td>
+
+            {% if loop.first %}
+            <td rowspan="7" class="total-hrs-box">{{ "%.1f"|format(total_hrs) }}</td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+
+        {# Fill empty rows if less than 7 days are present #}
+        {% set remaining = 7 - registros_trabajador|length %}
+        {% for i in range(remaining) %}
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    {% if not loop_last %}
+    <pdf:nextpage />
+    {% endif %}
+
+</body>
+
+</html>

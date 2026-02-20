@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<!-- Select2 CSS for searchable dropdowns -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="captura-wrapper">
+    <div class="reporte-info-bar">
+        <div class="details">
+            <div class="info-item">
+                <label>Proyecto</label>
+                <span>{{ reporte.proyecto.numero_proyecto }}</span>
+            </div>
+            <div class="info-item">
+                <label>Periodo</label>
+                <span>{{ reporte.fecha_inicio_semana.strftime('%d/%m') }} al {{
+                    reporte.fecha_fin_semana.strftime('%d/%m') }}</span>
+            </div>
+            <div class="info-item">
+                <label>Estatus</label>
+                <span class="badge {{ reporte.estado|lower }}"
+                    style="font-size:0.85rem; padding: 2px 8px; margin-top:2px;">{{ reporte.estado }}</span>
+            </div>
+        </div>
+        <div>
+            <a href="{{ url_for('horas.index') }}" class="btn-secondary" style="margin-right:0.5rem;">← Regresar</a>
+            {% if reporte.estado == 'BORRADOR' %}
+            <form action="{{ url_for('horas.cerrar_reporte', reporte_id=reporte.id) }}" method="POST"
+                style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-primary"
+                    style="background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);">
+                    Cerrar Captura Semanal
+                </button>
+            </form>
+            {% else %}
+            <span class="badge"
+                style="background:#E5E7EB; color:#4B5563; font-size: 0.9rem; padding: 0.5rem 1rem;">Reporte
+                Cerrado</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if reporte.estado == 'BORRADOR' %}
+    <div class="captura-form-bg">
+        <h3 style="margin-top:0; color:var(--text-main); margin-bottom:1.5rem;">Cargar Nuevo Registro Diario</h3>
+        <form action="{{ url_for('horas.guardar_registro', reporte_id=reporte.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="captura-row">
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Trabajador *</label>
+                    <select name="trabajador_id" id="trabajadorSelect" class="form-control" required
+                        style="width: 100%;">
+                        <option value=""></option>
+                        {% for t in trabajadores %}
+                        <option value="{{ t.id }}">{{ t.no_empleado }} - {{ t.nombre_apellidos }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Día *</label>
+                    <input type="date" name="fecha" class="form-control"
+                        value="{{ reporte.fecha_inicio_semana.strftime('%Y-%m-%d') }}"
+                        min="{{ reporte.fecha_inicio_semana.strftime('%Y-%m-%d') }}"
+                        max="{{ reporte.fecha_fin_semana.strftime('%Y-%m-%d') }}" required>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem;">
+                    <div class="form-group" style="margin-bottom:0; flex:1;">
+                        <label>Entrada</label>
+                        <select name="hora_entrada" class="form-control">
+                            <option value="">--:--</option>
+                            {% for h in horas_dropdown %}
+                            <option value="{{ h }}">{{ h }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0; flex:1;">
+                        <label>Salida</label>
+                        <select name="hora_salida" class="form-control">
+                            <option value="">--:--</option>
+                            {% for h in horas_dropdown %}
+                            <option value="{{ h }}">{{ h }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group"
+                    style="margin-bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                    <label>¿Comida?</label>
+                    <input type="checkbox" name="tomo_comida" value="1"
+                        style="width: 20px; height: 20px; cursor: pointer;">
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Incidencia (Opcional)</label>
+                    <select name="incidencia" class="form-control">
+                        <option value="">Sin Incidencia</option>
+                        {% for inc in incidencias_lista %}
+                        <option value="{{ inc }}">{{ inc }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-primary" style="height: 42px; padding: 0 1rem;">
+                    Guardar
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="captura-form-bg" style="margin-top: 2rem; padding-top:1.5rem;">
+        <h3 style="margin:0; color:var(--text-main);">Registros Guardados ({{ reporte.registros|length }})</h3>
+
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Día</th>
+                    <th>Nom. Emp.</th>
+                    <th>Trabajador</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Comida</th>
+                    <th>Productivas</th>
+                    <th>Incidencia</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reg in reporte.registros|sort(attribute='fecha', reverse=True) %}
+                <tr>
+                    <td style="font-weight: 600;">{{ reg.fecha.strftime('%a %d/%m') }}</td>
+                    <td style="font-family: monospace;">{{ reg.trabajador.no_empleado }}</td>
+                    <td>{{ reg.trabajador.nombre_apellidos }}</td>
+                    <td>{{ reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '-' }}</td>
+                    <td>{{ reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '-' }}</td>
+                    <td>
+                        {% if reg.tomo_comida %}
+                        <span style="color:var(--primary); font-weight:bold;">Sí</span>
+                        {% else %}
+                        <span style="color:var(--text-muted);">No</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-weight:bold; color:var(--success);">{{ reg.horas_productivas or '0.00' }} hrs.</td>
+                    <td>
+                        {% if reg.incidencia %}
+                        <span class="badge" style="background:#FEE2E2; color:#B91C1C;">{{ reg.incidencia }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if reporte.estado == 'BORRADOR' %}
+                        <form action="{{ url_for('horas.eliminar_registro', registro_id=reg.id) }}" method="POST"
+                            style="margin:0;" onsubmit="return confirm('¿Eliminar este registro?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="delete-btn" title="Eliminar registro">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                    </path>
+                                </svg>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No se han
+                        capturado horas para esta semana.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- Select2 JS for searchable dropdowns -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+<script src="{{ url_for('static', filename='js/horas_captura.js') }}"></script>
+{% endblock %}

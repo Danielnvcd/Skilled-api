@@ -1,63 +1,95 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="max-width: 600px; margin: 0 auto;">
-    <h2 style="color: #37474f; margin-bottom: 20px;">Mi Perfil</h2>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
 
-    <div class="card" style="margin-bottom: 20px;">
-        <h3 style="color: #546e7a; margin-bottom: 15px; border-bottom: 1px solid #cfd8dc; padding-bottom: 10px;">
-            Información de Usuario
-        </h3>
-        <p><strong>Usuario:</strong> {{ user.username }}</p>
-        <p><strong>Rol:</strong> {{ user.role }}</p>
-        <p><strong>Última sesión:</strong> {{ user.last_seen.strftime('%d/%m/%Y %H:%M') if user.last_seen else 'N/A' }}
-        </p>
+<div class="profile-wrapper">
+    <div class="profile-header">
+        <h2 class="main-title">Mi Perfil</h2>
+        <p class="subtitle">Gestiona tu información personal y ajustes de seguridad</p>
     </div>
 
-    <div class="card" style="margin-bottom: 20px;">
-        <h3 style="color: #546e7a; margin-bottom: 15px; border-bottom: 1px solid #cfd8dc; padding-bottom: 10px;">
+    <div class="profile-card">
+        <h3 class="card-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Información de Usuario
+        </h3>
+        <div class="info-list">
+            <div class="info-item">
+                <span class="info-label">Nombre de Usuario</span>
+                <span class="info-value">{{ user.username }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Rol de Acceso</span>
+                <span class="info-value">
+                    <span class="role-badge role-{{ user.role }}">{{ user.role }}</span>
+                </span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Última Sesión</span>
+                <span class="info-value" style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500;">
+                    {{ user.last_seen.strftime('%d/%m/%Y %H:%M') if user.last_seen else 'N/A' }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-card">
+        <h3 class="card-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
             Cambiar Contraseña
         </h3>
         <form method="POST" action="{{ url_for('auth.profile') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; color: #37474f;">Nueva Contraseña</label>
-                <input type="password" name="new_password" required
-                    style="width: 100%; padding: 10px; border: 1px solid #cfd8dc; border-radius: 4px;">
+            <div class="form-group">
+                <label>Nueva Contraseña</label>
+                <input type="password" name="new_password" required placeholder="Ingresa tu nueva contraseña">
             </div>
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; color: #37474f;">Confirmar Contraseña</label>
-                <input type="password" name="confirm_password" required
-                    style="width: 100%; padding: 10px; border: 1px solid #cfd8dc; border-radius: 4px;">
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <label>Confirmar Contraseña</label>
+                <input type="password" name="confirm_password" required placeholder="Confirma tu nueva contraseña">
             </div>
-            <button type="submit"
-                style="background-color: #546e7a; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+            <button type="submit" class="btn-primary">
                 Actualizar Contraseña
             </button>
         </form>
     </div>
 
-    <div class="card">
-        <h3 style="color: #546e7a; margin-bottom: 15px; border-bottom: 1px solid #cfd8dc; padding-bottom: 10px;">
-            Seguridad
+    <div class="profile-card">
+        <h3 class="card-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            Seguridad Avanzada
         </h3>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <strong style="display: block; color: #37474f;">Doble Factor de Autenticación (2FA)</strong>
+        <div class="security-flex">
+            <div class="security-info">
+                <span class="security-title">Doble Factor de Autenticación (2FA)</span>
                 {% if user.totp_secret %}
-                <span style="font-size: 0.9em; color: #2ecc71;">Activado</span>
+                <span class="status-badge status-active">
+                    <span class="status-dot dot-active"></span> Activado y protegiendo tu cuenta
+                </span>
                 {% else %}
-                <span style="font-size: 0.9em; color: #e74c3c;">Desactivado</span>
+                <span class="status-badge status-inactive">
+                    <span class="status-dot dot-inactive"></span> Desactivado (Recomendado)
+                </span>
                 {% endif %}
             </div>
             {% if user.totp_secret %}
-            <a href="{{ url_for('auth.setup_2fa') }}"
-                style="background-color: #95a5a6; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 0.9em;">
+            <a href="{{ url_for('auth.setup_2fa') }}" class="btn btn-secondary">
                 Reconfigurar 2FA
             </a>
             {% else %}
-            <a href="{{ url_for('auth.setup_2fa') }}"
-                style="background-color: #27ae60; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 0.9em;">
+            <a href="{{ url_for('auth.setup_2fa') }}" class="btn btn-success">
                 Activar 2FA
             </a>
             {% endif %}

@@ -17,3 +17,4 @@ redis
 Pillow
 pillow-heif
 gunicorn
+xhtml2pdf

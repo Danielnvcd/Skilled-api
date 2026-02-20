@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="reporte-info-bar">
+        <div class="details">
+            <div class="info-item">
+                <label>Proyecto</label>
+                <span>{{ reporte.proyecto.numero_proyecto }}</span>
+            </div>
+            <div class="info-item">
+                <label>Semana Calculada</label>
+                <span>{{ reporte.fecha_inicio_semana.strftime('%d/%m/%Y') }} - {{
+                    reporte.fecha_fin_semana.strftime('%d/%m/%Y') }}</span>
+            </div>
+            <div class="info-item">
+                <label>Trabajadores</label>
+                <span>{{ prenominas|length }}</span>
+            </div>
+        </div>
+        <div>
+            <a href="{{ url_for('prenomina.index') }}" class="btn-secondary" style="margin-right:0.5rem;">← Regresar</a>
+            <a href="{{ url_for('prenomina.imprimir', reporte_id=reporte.id) }}" target="_blank" class="btn-secondary"
+                style="margin-right:0.5rem; color:#4F46E5; border-color:#4F46E5;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="margin-right:0.25rem;">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                Imprimir Proyección (PDF)
+            </a>
+            <button id="btnGuardarNominas" data-reporte-id="{{ reporte.id }}" class="btn-primary"
+                style="background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);">
+                Guardar y Cerrar Nómina
+            </button>
+        </div>
+    </div>
+
+    <div class="prenomina-grid">
+        {% for p in prenominas %}
+        <div class="recibo-card">
+            <div class="recibo-header">
+                <div class="empleado-info">
+                    <span class="nombre">{{ p.trabajador.nombre_apellidos }}</span>
+                    <span class="meta">
+                        Nº Emp: {{ p.trabajador.no_empleado }} |
+                        Nomina: <strong>{{ p.trabajador.tipo_nomina or 'No Asignada' }}</strong> |
+                        Pago: <strong>{{ p.tipo_pago }}</strong>
+                    </span>
+                </div>
+            </div>
+
+            <div class="recibo-body">
+                <!-- PERCEPCIONES -->
+                <div>
+                    <div class="seccion-titulo percepciones">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Percepciones
+                    </div>
+                    <ul class="concept-list">
+                        <li class="concept-item">
+                            <span>Sueldo Base (Horas/Tabulador)</span>
+                            <span>${{ "%.2f"|format(p.salario_base) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Tiempo Extra</span>
+                            <span>${{ "%.2f"|format(p.pago_horas_extras) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Viáticos Proporcionales</span>
+                            <span>${{ "%.2f"|format(p.pago_viaticos) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Otros (Festivos/Depositos)</span>
+                            <span>${{ "%.2f"|format(p.pago_festivos + p.depositos_otros + p.depositos_prestamos)
+                                }}</span>
+                        </li>
+                        <li class="concept-item total text-success">
+                            <span>Total Percepciones</span>
+                            <span>${{ "%.2f"|format(p.total_percepciones) }}</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- DEDUCCIONES -->
+                <div>
+                    <div class="seccion-titulo deducciones">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Deducciones
+                    </div>
+                    <ul class="concept-list">
+                        <li class="concept-item">
+                            <span>Infonavit</span>
+                            <span>-${{ "%.2f"|format(p.descuento_infonavit) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Ajuste Inbursa</span>
+                            <span>-${{ "%.2f"|format(p.ajuste_inbursa) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Descuento de Préstamos</span>
+                            <span>-${{ "%.2f"|format(p.descuento_prestamos) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Incidencias / Otros</span>
+                            <span>-${{ "%.2f"|format(p.descuento_incidencias + p.descuentos_otros +
+                                p.recuperacion_manual) }}</span>
+                        </li>
+                        <li class="concept-item total text-danger">
+                            <span>Total Deducciones</span>
+                            <span>-${{ "%.2f"|format(p.total_deducciones) }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="recibo-footer">
+                <span style="color: var(--text-muted); font-size: 0.9rem;">Total Neto a Depositar / Entregar</span>
+                <span class="gran-total">${{ "%.2f"|format(p.total_a_pagar) }}</span>
+            </div>
+        </div>
+        {% else %}
+        <div
+            style="grid-column: 1 / -1; text-align: center; padding: 3rem; background: var(--bg-card); border-radius: 12px;">
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">No se encontraron horas registradas para esta
+                semana / proyecto.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/prenomina_generar.js') }}"></script>
+{% endblock %}

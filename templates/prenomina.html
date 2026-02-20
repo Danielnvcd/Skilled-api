@@ -1,8 +1,119 @@
 {% extends "base.html" %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<style>
+    .prenomina-empty {
+        background: var(--bg-card);
+        padding: 3rem;
+        border-radius: 16px;
+        text-align: center;
+        border: 1px dashed var(--border);
+        color: var(--text-muted);
+    }
+
+    .rep-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .rep-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+
+    .info-block {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .info-block.fecha {
+        min-width: 250px;
+    }
+
+    .badge.pagado {
+        background: #D1FAE5;
+        color: #064E3B;
+    }
+
+    .badge.pendiente {
+        background: #FEF3C7;
+        color: #92400E;
+    }
+
+    .badge.listo {
+        background: #DBEAFE;
+        color: #1E40AF;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="card">
-    <h2>Prenómina</h2>
-    <p>Módulo de gestión de prenómina en construcción.</p>
+<div class="horas-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Generación de Prenómina</h1>
+            <p class="subtitle">Calcula el pago de los Trabajadores en base a los Reportes de Horas cerrados.</p>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 2rem;">
+        <h3 style="color: var(--text-main); margin-bottom: 1rem; font-size: 1.25rem;">Reportes Disponibles para Pago
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top:-0.5rem; margin-bottom: 1.5rem;">
+            Aquí aparecen las semanas de Proyecto que ya fueron cerradas por el Coordinador/Supervisor.
+        </p>
+
+        {% for rep in reportes %}
+        <div class="rep-card">
+            <div class="info-block">
+                <span
+                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Proyecto</span>
+                <strong style="font-size: 1.1rem; color: var(--text-main);">{{ rep.proyecto.numero_proyecto }}</strong>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">{{ rep.proyecto.nombre }}</span>
+            </div>
+
+            <div class="info-block fecha">
+                <span
+                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Período</span>
+                <strong>{{ rep.fecha_inicio_semana.strftime('%d/%m/%Y') }} - {{
+                    rep.fecha_fin_semana.strftime('%d/%m/%Y') }}</strong>
+            </div>
+
+            <div class="info-block" style="text-align: right;">
+                {% if rep.id in reportes_procesados_ids %}
+                <span class="badge pagado" style="margin-bottom: 0.5rem; display:inline-block;">Procesada</span>
+                <br>
+                <a href="{{ url_for('prenomina.generar', reporte_id=rep.id) }}" class="btn-secondary"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Ver Recibos</a>
+                {% else %}
+                <span class="badge listo" style="margin-bottom: 0.5rem; display:inline-block;">Lista p/Cálculo</span>
+                <br>
+                <a href="{{ url_for('prenomina.generar', reporte_id=rep.id) }}" class="btn-primary"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Calcular Prenómina</a>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="prenomina-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+            </svg>
+            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin semanas cerradas</h4>
+            <p style="margin:0;">No hay ningún reporte semanal que haya sido "Cerrado" por los supervisores aún. Deben
+                cerrar captura primero.</p>
+        </div>
+        {% endfor %}
+    </div>
 </div>
 {% endblock %}

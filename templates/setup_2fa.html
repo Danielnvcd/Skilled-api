@@ -1,23 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
-<div
-    style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <h3 style="text-align: center; color: #455a64;">Configurar 2FA</h3>
-    <div style="text-align: center; margin: 20px 0;">
-        <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code"
-            style="max-width: 200px; border: 1px solid #ddd; padding: 5px;">
-    </div>
-    <p style="text-align: center;">Código secreto: <code>{{ secret }}</code></p>
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div style="margin-bottom: 20px;">
-            <label>Ingresa el código verificado:</label>
-            <input type="text" name="code" placeholder="000000" maxlength="6" required autocomplete="off"
-                style="width: 100%; padding: 10px; font-size: 1.2rem; text-align: center; margin-top: 5px;">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/two_factor.css') }}">
+
+<div class="two-factor-wrapper">
+    <div class="two-factor-card">
+        <div class="two-factor-header">
+            <div class="two-factor-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    <path d="M9 12l2 2 4-4"></path>
+                </svg>
+            </div>
+            <h3 class="main-title">Configurar 2FA</h3>
+            <p class="subtitle">Escanea este código QR con tu aplicación de autenticación favorita (Google
+                Authenticator, Authy, etc).</p>
         </div>
-        <button type="submit"
-            style="width: 100%; padding: 12px; background: #546e7a; color: white; border: none; border-radius: 5px; font-size: 1.1rem; cursor: pointer;">Activar</button>
-    </form>
+
+        <div class="qr-container">
+            <img class="qr-image" src="data:image/png;base64,{{ qr_code }}" alt="Código QR para 2FA">
+        </div>
+
+        <div class="secret-code-box">
+            Código manual: <span class="secret-code">{{ secret }}</span>
+        </div>
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label>Ingresa el código verificado</label>
+                <input type="text" name="code" class="code-input" placeholder="000000" maxlength="6" required
+                    autocomplete="off">
+            </div>
+            <button type="submit" class="btn-primary">
+                Activar Seguridad 2FA
+            </button>
+        </form>
+    </div>
 </div>
 <script src="{{ url_for('static', filename='js/2fa.js') }}"></script>
 {% endblock %}

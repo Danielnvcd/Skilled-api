@@ -1,0 +1,123 @@
+.prenomina-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.recibo-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.recibo-header {
+    background: #F9FAFB;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.empleado-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.empleado-info .nombre {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.empleado-info .meta {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.recibo-body {
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 768px) {
+    .recibo-body {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
+
+.concept-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.concept-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.95rem;
+}
+
+.concept-item:last-child {
+    border-bottom: none;
+}
+
+.concept-item.total {
+    font-weight: 700;
+    font-size: 1.05rem;
+    border-top: 2px solid var(--border);
+    border-bottom: none;
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.text-success {
+    color: #059669;
+}
+
+.text-danger {
+    color: #DC2626;
+}
+
+.seccion-titulo {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.seccion-titulo.percepciones {
+    color: #059669;
+}
+
+.seccion-titulo.deducciones {
+    color: #DC2626;
+}
+
+.recibo-footer {
+    background: #F8FAFC;
+    padding: 1.25rem 1.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.gran-total {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-main);
+}

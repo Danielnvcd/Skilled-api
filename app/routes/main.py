@@ -7,10 +7,6 @@ bp = Blueprint('main', __name__)
 @login_required
 def home():
     return render_template('index.html')
-@bp.route('/trabajadores')
-@login_required
-def trabajadores():
-    return render_template('trabajadores.html')
 
 @bp.route('/credenciales')
 @login_required

@@ -36,7 +36,7 @@ def create_app():
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
-    app.config['SESSION_COOKIE_SECURE'] = False # Set to True in Prod
+    app.config['SESSION_COOKIE_SECURE'] = True # Set to True in Prod
 
     app.config['RATELIMIT_STORAGE_URI'] = os.environ.get('REDIS_URL', 'memory://')
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
@@ -60,10 +60,13 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users
+    from app.routes import auth, main, users, trabajadores, horas, prenomina
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
+    app.register_blueprint(trabajadores.bp)
+    app.register_blueprint(horas.bp)
+    app.register_blueprint(prenomina.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):

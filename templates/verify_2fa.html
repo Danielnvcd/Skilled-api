@@ -1,18 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
-<div
-    style="max-width: 500px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <h3 style="text-align: center; color: #455a64;">Verificación de Seguridad</h3>
-    <p style="text-align: center; color: #666;">Ingresa el código de 6 dígitos.</p>
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div style="margin-bottom: 20px;">
-            <input type="text" name="code" placeholder="000000" maxlength="6" required autocomplete="off"
-                style="width: 100%; padding: 15px; font-size: 1.5rem; text-align: center; letter-spacing: 5px; border: 1px solid #ccc; border-radius: 5px;">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/two_factor.css') }}">
+
+<div class="two-factor-wrapper">
+    <div class="two-factor-card" style="max-width: 450px; margin: 0 auto;">
+        <div class="two-factor-header">
+            <div class="two-factor-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+            </div>
+            <h3 class="main-title">Verificación de Seguridad</h3>
+            <p class="subtitle">Abre tu aplicación de autenticación e ingresa el código de 6 dígitos.</p>
         </div>
-        <button type="submit"
-            style="width: 100%; padding: 12px; background: #546e7a; color: white; border: none; border-radius: 5px; font-size: 1.1rem; cursor: pointer;">Verificar</button>
-    </form>
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <input type="text" name="code" class="code-input" placeholder="000 000" maxlength="6" required
+                    autocomplete="off" autofocus>
+            </div>
+            <button type="submit" class="btn-primary">
+                Verificar Código
+            </button>
+        </form>
+    </div>
 </div>
 <script src="{{ url_for('static', filename='js/2fa.js') }}"></script>
 {% endblock %}

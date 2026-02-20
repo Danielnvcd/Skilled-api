@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Sistema de Nóminas</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -146,6 +147,7 @@
             transition: 0.3s;
         }
     </style>
+    {% block head %}{% endblock %}
 </head>
 
 <body>
@@ -159,7 +161,7 @@
                 <img src="{{ url_for('static', filename='iconos/inicio.png') }}" class="menu-icon" alt="Inicio"> Inicio
             </a>
             <!-- Add more links here later -->
-            <a href="{{ url_for('main.trabajadores') }}">
+            <a href="{{ url_for('trabajadores.index') }}">
                 <img src="{{ url_for('static', filename='iconos/trabajadores.png') }}" class="menu-icon"
                     alt="Trabajadores"> Trabajadores
             </a>
@@ -171,10 +173,9 @@
                 <img src="{{ url_for('static', filename='iconos/prenomina.png') }}" class="menu-icon" alt="Prenómina">
                 Prenómina
             </a>
-            <a href="{{ url_for('main.supervisores') }}">
+            <a href="{{ url_for('horas.index') }}">
                 <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Supervisores">
-                Supervisores
-            </a>
+                Reporte de Horas
             </a>
             {% if session.get('role') == 'admin' %}
             <a href="{{ url_for('users.list_users') }}">

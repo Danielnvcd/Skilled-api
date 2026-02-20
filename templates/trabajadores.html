@@ -1,8 +1,233 @@
 {% extends "base.html" %}
-
 {% block content %}
-<div class="card">
-    <h2>Trabajadores</h2>
-    <p>Módulo de gestión de trabajadores en construcción.</p>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}">
+
+<div class="trabajadores-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Gestión de Trabajadores</h1>
+            <p class="subtitle">Administra los datos laborales, personales y prenómina del personal operativo y
+                administrativo.</p>
+        </div>
+        <button class="btn-primary" id="btnNuevoTrabajador">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Nuevo Trabajador
+        </button>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header-ops">
+            <div class="search-box">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Buscar por nombre, empleado o rfc...">
+            </div>
+            <div class="filters">
+                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ trabajadores|length }}</span>
+            </div>
+        </div>
+        <table class="modern-table" id="workersTable">
+            <thead>
+                <tr>
+                    <th>No. Emp</th>
+                    <th>Nombre Completo</th>
+                    <th>Área / Puesto</th>
+                    <th>Nómina</th>
+                    <th>Salario Sem.</th>
+                    <th>Ingreso</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in trabajadores %}
+                <tr class="worker-row" data-id="{{ t.id }}">
+                    <td style="font-weight: 600; color: var(--primary);">{{ t.no_empleado }}</td>
+                    <td>
+                        <div style="font-weight: 600; color: #111827;">{{ t.nombre }}</div>
+                        <div style="font-size: 0.8rem; color: #6B7280;">{{ t.nombre_apellidos }}</div>
+                    </td>
+                    <td>
+                        <span class="badge area-default">{{ t.area or 'S/A' }}</span>
+                        <div style="font-size: 0.8rem; margin-top: 4px;">{{ t.puesto or '-' }}</div>
+                    </td>
+                    <td>{{ t.tipo_nomina or 'Semanal' }}</td>
+                    <td style="font-family: monospace;">${{ t.salario_real_pactado_x_sem }}</td>
+                    <td>{{ t.fecha_ingreso.strftime('%d/%m/%Y') if t.fecha_ingreso else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 3rem; color: #6B7280;">
+                        No hay trabajadores registrados en la base de datos. Completa el formulario para iniciar.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+
+<!-- Modal Principal para Alta/Edición -->
+<div class="modal-overlay" id="trabajadorModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Registrar Trabajador</h3>
+            <button class="close-modal" id="btnCloseModalTop">&times;</button>
+        </div>
+        <form id="trabajadorForm" action="{{ url_for('trabajadores.agregar') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+
+                <!-- Nav Tabs -->
+                <div class="tabs">
+                    <button type="button" class="tab-btn active" data-target="laborales">Laborales</button>
+                    <button type="button" class="tab-btn" data-target="generales">Generales</button>
+                    <button type="button" class="tab-btn" data-target="medicos">Médicos</button>
+                    <button type="button" class="tab-btn" data-target="plantas">Plantas/Proy</button>
+                </div>
+
+                <!-- Tab 1: Laborales -->
+                <div id="tab-laborales" class="tab-content active">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>No. de Empleado *</label>
+                            <input type="text" name="no_empleado" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha de Ingreso</label>
+                            <input type="date" name="fecha_ingreso" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Área</label>
+                            <input type="text" name="area" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Puesto</label>
+                            <input type="text" name="puesto" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Salario Real Pactado Semanal ($)</label>
+                            <input type="number" step="0.01" name="salario_real_pactado_x_sem" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de Nómina</label>
+                            <select name="tipo_nomina" class="form-control">
+                                <option value="Semanal">Semanal</option>
+                                <option value="Por hora">Por hora</option>
+                                <option value="Cuadrado">Cuadrado</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de Jornada</label>
+                            <input type="text" name="tipo_jornada" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de Pago</label>
+                            <select name="tipo_pago" class="form-control">
+                                <option value="EFECTIVO">Efectivo</option>
+                                <option value="TRANSFERENCIA">Transferencia</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Generales -->
+                <div id="tab-generales" class="tab-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Nombre(s) *</label>
+                            <input type="text" name="nombre" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Apellidos *</label>
+                            <input type="text" name="nombre_apellidos" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>RFC</label>
+                            <input type="text" name="rfc" class="form-control" maxlength="13">
+                        </div>
+                        <div class="form-group">
+                            <label>CURP</label>
+                            <input type="text" name="curp" class="form-control" maxlength="18">
+                        </div>
+                        <div class="form-group">
+                            <label>NSS</label>
+                            <input type="text" name="nss" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha de Nacimiento</label>
+                            <input type="date" name="fecha_nacimiento" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Correo Electrónico</label>
+                            <input type="email" name="correo" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Celular</label>
+                            <input type="tel" name="celular" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: Medicos -->
+                <div id="tab-medicos" class="tab-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Tipo de Sangre</label>
+                            <input type="text" name="tipo_sangre" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Alergias</label>
+                            <input type="text" name="alergias" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Contacto de Emergencia</label>
+                            <input type="text" name="contacto_emergencia" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Número Emergencia</label>
+                            <input type="tel" name="numero_contacto_emerg" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 4: Plantas -->
+                <div id="tab-plantas" class="tab-content">
+                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">Opcional: Indicar ubicación en
+                        planta actual si aplica.</p>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Ubicación Actual</label>
+                            <input type="text" name="ubicacion_actual" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Coord. a Cargo</label>
+                            <input type="text" name="coord_a_cargo" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Audi</label>
+                            <input type="text" name="audi" class="form-control" placeholder="Sí/No u Observación">
+                        </div>
+                        <div class="form-group">
+                            <label>VW / Stellantis</label>
+                            <input type="text" name="stellantis" class="form-control" placeholder="Sí/No">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="btnCloseModalBottom">Cancelar</button>
+                <button type="submit" class="btn-primary">Guardar Trabajador</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/trabajadores.js') }}"></script>
 {% endblock %}
