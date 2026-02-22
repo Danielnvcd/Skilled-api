@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Sistema de Nóminas</title>
+    <title>Skilled</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -31,9 +31,13 @@
 
         .sidebar {
             width: 280px;
-            background: linear-gradient(180deg, #cfd8dc 0%, #ffffff 100%);
-            border-right: 1px solid #e2e8f0;
-            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
+            background: rgba(255, 255, 255, 0.85);
+            /* Glass effect matching cards */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-right: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
+            /* Softer shadow */
             display: flex;
             flex-direction: column;
             padding: 25px;
@@ -58,13 +62,18 @@
         .menu a {
             display: flex;
             align-items: center;
-            padding: 12px 15px;
-            margin-bottom: 5px;
-            color: #455a64;
+            padding: 12px 18px;
+            margin-bottom: 8px;
+            color: #6b7280;
+            /* Modern gray */
             text-decoration: none;
-            border-radius: 5px;
-            transition: 0.3s;
+            border-radius: 8px;
+            /* Softer, rounder edges */
+            transition: all 0.2s ease;
             font-weight: 500;
+            font-size: 0.95rem;
+            border-left: 4px solid transparent;
+            /* Prepare for active state */
         }
 
         .menu-icon {
@@ -74,12 +83,16 @@
             object-fit: contain;
         }
 
-        .menu a:hover {
-            background: linear-gradient(90deg, #cfd8dc 0%, #eceff1 100%);
-            color: #263238;
-            border-left: 4px solid #455a64;
-            transform: translateX(5px);
-            box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.05);
+        .menu a:hover,
+        .menu a.active {
+            background: #eff6ff;
+            /* Soft blue background */
+            color: #1f2937;
+            /* Darker text */
+            border-left: 4px solid #3b82f6;
+            /* Modern bright blue indicator */
+            transform: translateX(4px);
+            font-weight: 600;
         }
 
         .menu {
@@ -93,9 +106,9 @@
         .user-info {
             margin-top: auto;
             padding-top: 20px;
-            border-top: 1px solid #cfd8dc;
+            border-top: 1px solid #e5e7eb;
             font-size: 0.9em;
-            color: #546e7a;
+            color: #6b7280;
         }
 
         .btn-logout {
@@ -138,13 +151,17 @@
         }
 
         .card {
-            background-color: rgba(255, 255, 255, 0.7);
+            background-color: rgba(255, 255, 255, 0.85);
+            /* Slightly less transparent for better contrast */
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 12px;
+            /* Match everything else */
             padding: 20px;
             transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+            /* Consistent shadow */
         }
     </style>
     {% block head %}{% endblock %}
@@ -153,36 +170,39 @@
 <body>
     <div class="sidebar">
         <div class="logo">
-            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Sistema de Nóminas"
+            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled"
                 style="max-width: 180px; height: auto; mix-blend-mode: multiply; filter: contrast(1.1); margin-bottom: 10px;">
         </div>
         <nav class="menu">
-            <a href="{{ url_for('main.home') }}">
+            <a href="{{ url_for('main.home') }}" class="{{ 'active' if request.endpoint == 'main.home' }}">
                 <img src="{{ url_for('static', filename='iconos/inicio.png') }}" class="menu-icon" alt="Inicio"> Inicio
             </a>
             <!-- Add more links here later -->
-            <a href="{{ url_for('trabajadores.index') }}">
+            <a href="{{ url_for('trabajadores.index') }}"
+                class="{{ 'active' if request.endpoint == 'trabajadores.index' }}">
                 <img src="{{ url_for('static', filename='iconos/trabajadores.png') }}" class="menu-icon"
                     alt="Trabajadores"> Trabajadores
             </a>
-            <a href="{{ url_for('proyectos.index') }}">
+            <a href="{{ url_for('proyectos.index') }}" class="{{ 'active' if request.endpoint == 'proyectos.index' }}">
                 <img src="{{ url_for('static', filename='iconos/proyectos.png') }}" class="menu-icon" alt="Proyectos">
                 Proyectos
             </a>
-            <a href="{{ url_for('main.credenciales') }}">
+            <a href="{{ url_for('main.credenciales') }}"
+                class="{{ 'active' if request.endpoint == 'main.credenciales' }}">
                 <img src="{{ url_for('static', filename='iconos/credenciales.png') }}" class="menu-icon"
                     alt="Credenciales"> Credenciales
             </a>
-            <a href="{{ url_for('main.prenomina') }}">
+            <a href="{{ url_for('main.prenomina') }}" class="{{ 'active' if request.endpoint == 'main.prenomina' }}">
                 <img src="{{ url_for('static', filename='iconos/prenomina.png') }}" class="menu-icon" alt="Prenómina">
                 Prenómina
             </a>
-            <a href="{{ url_for('horas.index') }}">
+            <a href="{{ url_for('horas.index') }}" class="{{ 'active' if request.endpoint == 'horas.index' }}">
                 <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Supervisores">
                 Reporte de Horas
             </a>
             {% if session.get('role') == 'admin' %}
-            <a href="{{ url_for('users.list_users') }}">
+            <a href="{{ url_for('users.list_users') }}"
+                class="{{ 'active' if request.endpoint == 'users.list_users' }}">
                 <img src="{{ url_for('static', filename='iconos/usuario.png') }}" class="menu-icon" alt="Usuarios">
                 Usuarios
             </a>
