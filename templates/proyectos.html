@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}">
+<style>
+    /* Add some specific styles for the multiple select if needed */
+    .participantes-container {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px;
+        max-height: 250px;
+        overflow-y: auto;
+        background: #f9fafb;
+    }
+
+    .participant-item {
+        display: flex;
+        align-items: center;
+        padding: 8px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .participant-item:last-child {
+        border-bottom: none;
+    }
+
+    .participant-item label {
+        margin-left: 10px;
+        cursor: pointer;
+        flex: 1;
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .participant-item input[type="checkbox"] {
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+    }
+</style>
+
+<div class="trabajadores-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Gestión de Proyectos</h1>
+            <p class="subtitle">Administra los diferentes proyectos de la empresa, supervisores y personal asignado.</p>
+        </div>
+        <button class="btn-primary" id="btnNuevoProyecto">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Nuevo Proyecto
+        </button>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header-ops">
+            <div class="search-box">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Buscar por nombre o número...">
+            </div>
+            <div class="filters">
+                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ proyectos|length }}</span>
+            </div>
+        </div>
+        <table class="modern-table" id="proyectosTable">
+            <thead>
+                <tr>
+                    <th>No. Proyecto</th>
+                    <th>Nombre</th>
+                    <th>Estado</th>
+                    <th>Supervisor</th>
+                    <th>Participantes</th>
+                    <th>Creado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in proyectos %}
+                <tr class="proyecto-row" data-id="{{ p.id }}">
+                    <td style="font-weight: 600; color: var(--primary);">{{ p.numero_proyecto }}</td>
+                    <td>
+                        <div style="font-weight: 600; color: #111827;">{{ p.nombre }}</div>
+                    </td>
+                    <td>
+                        {% if p.activo %}
+                        <span class="badge" style="background: #dcfce7; color: #166534;">Activo</span>
+                        {% else %}
+                        <span class="badge" style="background: #fee2e2; color: #991b1b;">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ p.supervisor.nombre_apellidos if p.supervisor else 'Sin Asignar' }}</td>
+                    <td>{{ p.participantes|length }} workers</td>
+                    <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at else '-' }}</td>
+                    <td>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-icon view-btn" data-id="{{ p.id }}" title="Ver / Editar Participantes"
+                                style="background:none; border:none; cursor:pointer; color: #4B5563;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 3rem; color: #6B7280;">
+                        No hay proyectos registrados en la base de datos. Completa el formulario para iniciar.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Principal para Alta/Edición -->
+<div class="modal-overlay" id="proyectoModal">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3>Registrar Proyecto</h3>
+            <button class="close-modal" id="btnCloseModalTop" type="button">&times;</button>
+        </div>
+        <form id="proyectoForm" action="{{ url_for('proyectos.agregar') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- Hidden input for participants JSON array -->
+            <input type="hidden" name="participantes_json" id="participantesJson" value="[]">
+
+            <div class="modal-body" style="padding: 24px;">
+                <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+
+                    <!-- Left Column: Core Info -->
+                    <div>
+                        <h4
+                            style="margin-top: 0; margin-bottom: 16px; color: #374151; font-size: 1.05rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
+                            Datos Generales</h4>
+                        <div class="form-group">
+                            <label>No. de Proyecto *</label>
+                            <input type="text" name="numero_proyecto" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nombre del Proyecto *</label>
+                            <input type="text" name="nombre" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Supervisor</label>
+                            <select name="supervisor_id" class="form-control">
+                                <option value="">--- Sin Supervisor ---</option>
+                                {% for t in trabajadores %}
+                                <option value="{{ t.id }}">{{ t.nombre }} ({{ t.no_empleado }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label
+                                style="display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: 1rem;">
+                                <input type="checkbox" name="activo" id="checkActivo" checked
+                                    style="width: 20px; height: 20px; margin-right: 10px;">
+                                Proyecto Activo
+                            </label>
+                            <p style="font-size: 0.8rem; color: #6b7280; margin-top: 5px; margin-left: 30px;">
+                                Los proyectos inactivos ya no están permitidos para el registro de horas.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Participants -->
+                    <div>
+                        <h4
+                            style="margin-top: 0; margin-bottom: 16px; color: #374151; font-size: 1.05rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
+                            Asignar Participantes</h4>
+                        <div class="search-box" style="margin-bottom: 10px; padding: 6px 10px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="searchParticipantes" placeholder="Filtrar empleados..."
+                                style="border:none; outline:none; font-size: 0.9rem; width: 100%; margin-left: 8px; background: transparent;">
+                        </div>
+                        <div class="participantes-container" id="participantesContainer">
+                            {% for t in trabajadores %}
+                            <div class="participant-item" data-name="{{ t.nombre|lower }} {{ t.no_empleado|lower }}">
+                                <input type="checkbox" class="participant-check" id="part_{{ t.id }}"
+                                    value="{{ t.id }}">
+                                <label for="part_{{ t.id }}">
+                                    <div style="font-weight: 600; color: #111827;">{{ t.nombre }}</div>
+                                    <div style="font-size: 0.8rem; color: #6b7280;">No. {{ t.no_empleado }} - {{
+                                        t.puesto or 'S/P' }}</div>
+                                </label>
+                            </div>
+                            {% endfor %}
+                            {% if not trabajadores %}
+                            <div
+                                style="padding: 15px; text-align: center; color: #9ca3af; font-size: 0.9rem; font-style: italic;">
+                                No hay trabajadores en la base de datos yet.
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="btnCloseModalBottom">Cancelar</button>
+                <button type="submit" class="btn-primary" id="btnSaveProyecto">Guardar Proyecto</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/proyectos.js') }}?v=1"></script>
+{% endblock %}

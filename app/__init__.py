@@ -60,13 +60,14 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
     app.register_blueprint(trabajadores.bp)
     app.register_blueprint(horas.bp)
     app.register_blueprint(prenomina.bp)
+    app.register_blueprint(proyectos.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):

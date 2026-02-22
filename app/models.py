@@ -132,12 +132,23 @@ class DocumentoTrabajador(db.Model):
             'fecha_subida': self.fecha_subida.isoformat() if self.fecha_subida else None
         }
 
+proyecto_trabajador = db.Table('proyecto_trabajador',
+    db.Column('proyecto_id', db.Integer, db.ForeignKey('proyectos.id'), primary_key=True),
+    db.Column('trabajador_id', db.Integer, db.ForeignKey('trabajadores.id'), primary_key=True)
+)
+
 class Proyecto(db.Model):
     __tablename__ = "proyectos"
     id = db.Column(db.Integer, primary_key=True)
     numero_proyecto = db.Column(db.String(100), unique=True, nullable=False)
     nombre = db.Column(db.String(250), nullable=True)
     activo = db.Column(db.Boolean, default=True) # Si es False, "ya no se le deberían cargar horas"
+    
+    supervisor_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=True)
+    supervisor = db.relationship('Trabajador', foreign_keys=[supervisor_id])
+    
+    participantes = db.relationship('Trabajador', secondary=proyecto_trabajador, backref=db.backref('proyectos', lazy='dynamic'))
+    
     created_at = db.Column(db.DateTime, default=datetime.now)
 
 class ReporteSemanal(db.Model):
