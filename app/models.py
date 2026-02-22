@@ -32,8 +32,16 @@ class Trabajador(db.Model):
     # Identificadores
     id = db.Column(db.Integer, primary_key=True)
     no_empleado = db.Column(db.String(50), unique=True, nullable=False)
+    
+    # Credenciales de plantas (One-to-Many)
+    credenciales = db.relationship('CredencialPlanta', backref='trabajador', lazy=True, cascade="all, delete-orphan")
+    
+    # Documentos (One-to-Many)
+    documentos = db.relationship('DocumentoTrabajador', backref='trabajador', lazy=True, cascade="all, delete-orphan")
+    
     nombre_apellidos = db.Column(db.String(250), nullable=False)
     nombre = db.Column(db.String(250), nullable=False)
+    foto_perfil = db.Column(db.String(500), nullable=True)
     
     # Administrativo / Contratación
     tipo_mov = db.Column(db.String(100))
@@ -94,15 +102,35 @@ class Trabajador(db.Model):
     coord_a_cargo = db.Column(db.String(150))
     ubicacion_actual = db.Column(db.String(150))
     observaciones = db.Column(db.Text)
+
+class CredencialPlanta(db.Model):
+    __tablename__ = "credenciales_plantas"
+    id = db.Column(db.Integer, primary_key=True)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    planta = db.Column(db.String(100), nullable=False)
+    credencial_id = db.Column(db.String(40), nullable=False)
     
-    # Plantas
-    caet = db.Column(db.String(100))
-    stellantis = db.Column(db.String(100))
-    audi = db.Column(db.String(100))
-    bmw = db.Column(db.String(100))
-    axalta = db.Column(db.String(100))
-    volvo = db.Column(db.String(100))
-    dtna = db.Column(db.String(100))
+    def to_dict(self):
+        return {
+            'planta': self.planta,
+            'credencial_id': self.credencial_id
+        }
+
+class DocumentoTrabajador(db.Model):
+    __tablename__ = "documentos_trabajador"
+    id = db.Column(db.Integer, primary_key=True)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    nombre_archivo = db.Column(db.String(250), nullable=False)
+    ruta_archivo = db.Column(db.String(500), nullable=False)
+    fecha_subida = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre_archivo': self.nombre_archivo,
+            'ruta_archivo': self.ruta_archivo,
+            'fecha_subida': self.fecha_subida.isoformat() if self.fecha_subida else None
+        }
 
 class Proyecto(db.Model):
     __tablename__ = "proyectos"

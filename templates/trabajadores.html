@@ -42,6 +42,7 @@
                     <th>Nómina</th>
                     <th>Salario Sem.</th>
                     <th>Ingreso</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -59,10 +60,42 @@
                     <td>{{ t.tipo_nomina or 'Semanal' }}</td>
                     <td style="font-family: monospace;">${{ t.salario_real_pactado_x_sem }}</td>
                     <td>{{ t.fecha_ingreso.strftime('%d/%m/%Y') if t.fecha_ingreso else '-' }}</td>
+                    <td>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-icon view-btn" data-id="{{ t.id }}" title="Ver"
+                                style="background:none; border:none; cursor:pointer; color: #3B82F6;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                            <button class="btn-icon edit-btn" data-id="{{ t.id }}" title="Editar"
+                                style="background:none; border:none; cursor:pointer; color: #4B5563;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                            <button class="btn-icon delete-btn" data-id="{{ t.id }}" title="Eliminar"
+                                style="background:none; border:none; cursor:pointer; color: #EF4444;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                    </path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 3rem; color: #6B7280;">
+                    <td colspan="7" style="text-align: center; padding: 3rem; color: #6B7280;">
                         No hay trabajadores registrados en la base de datos. Completa el formulario para iniciar.
                     </td>
                 </tr>
@@ -77,18 +110,22 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>Registrar Trabajador</h3>
-            <button class="close-modal" id="btnCloseModalTop">&times;</button>
+            <button class="close-modal" id="btnCloseModalTop" type="button">&times;</button>
         </div>
-        <form id="trabajadorForm" action="{{ url_for('trabajadores.agregar') }}" method="POST">
+        <form id="trabajadorForm" action="{{ url_for('trabajadores.agregar') }}" method="POST"
+            enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-body">
 
                 <!-- Nav Tabs -->
                 <div class="tabs">
                     <button type="button" class="tab-btn active" data-target="laborales">Laborales</button>
+                    <button type="button" class="tab-btn" data-target="finanzas">Finanzas</button>
                     <button type="button" class="tab-btn" data-target="generales">Generales</button>
                     <button type="button" class="tab-btn" data-target="medicos">Médicos</button>
                     <button type="button" class="tab-btn" data-target="plantas">Plantas/Proy</button>
+                    <button type="button" class="tab-btn" data-target="documentos" id="tabBtnDocumentos"
+                        style="display: none;">Documentos Exp.</button>
                 </div>
 
                 <!-- Tab 1: Laborales -->
@@ -133,43 +170,151 @@
                                 <option value="TRANSFERENCIA">Transferencia</option>
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label>Tipo de Movimiento</label>
+                            <input type="text" name="tipo_mov" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de Contrato</label>
+                            <input type="text" name="tipo_cont" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha de Inicio</label>
+                            <input type="date" name="inicio" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Término de Prueba</label>
+                            <input type="date" name="termino_prueba" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha de Baja</label>
+                            <input type="date" name="fecha_baja" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label>Descripción de Servicio</label>
+                            <input type="text" name="descripcion_servicio" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Finanzas -->
+                <div id="tab-finanzas" class="tab-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Salario Base (SB)</label>
+                            <input type="number" step="0.01" name="sb" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Salario Diario Integrado (SDI)</label>
+                            <input type="number" step="0.01" name="sdi" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Letra (Categoría)</label>
+                            <input type="text" name="letra" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Hrs Extra ($)</label>
+                            <input type="number" step="0.01" name="hr_extra" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Infonavit ($)</label>
+                            <input type="number" step="0.01" name="infonavit" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Ajuste Inbursa ($)</label>
+                            <input type="number" step="0.01" name="ajuste_inbursa" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Caja de Ahorro ($)</label>
+                            <input type="number" step="0.01" name="caja_ahorro" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Viáticos ($)</label>
+                            <input type="number" step="0.01" name="viaticos" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Pagos Efectivo Ext. ($)</label>
+                            <input type="number" step="0.01" name="pagos_efectivo" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Folio Mov. IDSE</label>
+                            <input type="text" name="folio_mov_idse" class="form-control">
+                        </div>
                     </div>
                 </div>
 
                 <!-- Tab 2: Generales -->
                 <div id="tab-generales" class="tab-content">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Nombre(s) *</label>
-                            <input type="text" name="nombre" class="form-control" required>
+                    <div style="display: flex; gap: 20px; align-items: flex-start;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                            <img id="profilePicPreview" src="{{ url_for('static', filename='img/default-avatar.png') }}"
+                                onerror="this.src='https://ui-avatars.com/api/?name=User&background=random'"
+                                style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid #e5e7eb;">
+                            <label for="fotoPerfilInput" class="btn-secondary"
+                                style="font-size: 0.75rem; padding: 4px 8px; cursor: pointer; text-align: center;">Cambiar
+                                Foto</label>
+                            <input type="file" id="fotoPerfilInput" name="foto_perfil" accept="image/*"
+                                style="display: none;">
                         </div>
-                        <div class="form-group">
-                            <label>Apellidos *</label>
-                            <input type="text" name="nombre_apellidos" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>RFC</label>
-                            <input type="text" name="rfc" class="form-control" maxlength="13">
-                        </div>
-                        <div class="form-group">
-                            <label>CURP</label>
-                            <input type="text" name="curp" class="form-control" maxlength="18">
-                        </div>
-                        <div class="form-group">
-                            <label>NSS</label>
-                            <input type="text" name="nss" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>Fecha de Nacimiento</label>
-                            <input type="date" name="fecha_nacimiento" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>Correo Electrónico</label>
-                            <input type="email" name="correo" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>Celular</label>
-                            <input type="tel" name="celular" class="form-control">
+
+                        <div class="form-grid" style="flex: 1;">
+                            <div class="form-group" style="grid-column: span 1;">
+                                <label>Nombre(s) *</label>
+                                <input type="text" name="nombre" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Apellidos *</label>
+                                <input type="text" name="nombre_apellidos" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label>RFC</label>
+                                <input type="text" name="rfc" class="form-control" maxlength="13">
+                            </div>
+                            <div class="form-group">
+                                <label>CURP</label>
+                                <input type="text" name="curp" class="form-control" maxlength="18">
+                            </div>
+                            <div class="form-group">
+                                <label>NSS</label>
+                                <input type="text" name="nss" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Fecha de Nacimiento</label>
+                                <input type="date" name="fecha_nacimiento" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Correo Electrónico</label>
+                                <input type="email" name="correo" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Celular</label>
+                                <input type="tel" name="celular" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Sexo</label>
+                                <select name="sexo" class="form-control">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="M">Masculino</option>
+                                    <option value="F">Femenino</option>
+                                    <option value="X">Otro</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Estado Civil</label>
+                                <input type="text" name="estado_civil" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Nacionalidad</label>
+                                <input type="text" name="nacionalidad" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Edad</label>
+                                <input type="number" name="edad" class="form-control">
+                            </div>
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label>Domicilio</label>
+                                <input type="text" name="domicilio" class="form-control">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -193,41 +338,242 @@
                             <label>Número Emergencia</label>
                             <input type="tel" name="numero_contacto_emerg" class="form-control">
                         </div>
+                        <div class="form-group">
+                            <label>Usa Lentes</label>
+                            <select name="lentes" class="form-control">
+                                <option value="">Seleccionar...</option>
+                                <option value="Si">Sí</option>
+                                <option value="No">No</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Licencia de Conducir</label>
+                            <input type="text" name="licencia_conducir" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Estatura (Metros)</label>
+                            <input type="text" name="estatura" class="form-control" placeholder="Ej: 1.75">
+                        </div>
                     </div>
                 </div>
 
                 <!-- Tab 4: Plantas -->
                 <div id="tab-plantas" class="tab-content">
                     <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">Opcional: Indicar ubicación en
-                        planta actual si aplica.</p>
+                        planta actual y registrar múltiples credenciales de acceso.</p>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label>Ubicación Actual</label>
-                            <input type="text" name="ubicacion_actual" class="form-control">
+                            <label>No. de Proyecto Asociado</label>
+                            <input type="text" name="no_proyecto" class="form-control">
                         </div>
                         <div class="form-group">
-                            <label>Coord. a Cargo</label>
+                            <label>A cargo del Coordinador</label>
                             <input type="text" name="coord_a_cargo" class="form-control">
                         </div>
-                        <div class="form-group">
-                            <label>Audi</label>
-                            <input type="text" name="audi" class="form-control" placeholder="Sí/No u Observación">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label>Ubicación Actual (Planta/Área)</label>
+                            <input type="text" name="ubicacion_actual" class="form-control">
                         </div>
-                        <div class="form-group">
-                            <label>VW / Stellantis</label>
-                            <input type="text" name="stellantis" class="form-control" placeholder="Sí/No">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label>Observaciones Operativas</label>
+                            <textarea name="observaciones" class="form-control" rows="2"></textarea>
                         </div>
+                    </div>
+
+                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
+                    <h4 style="margin-bottom: 10px; font-size: 1rem; color: #1f2937;">Credenciales de Planta</h4>
+
+                    <div class="form-grid" style="align-items: end;">
+                        <div class="form-group" style="grid-column: span 1;">
+                            <label>Planta</label>
+                            <select id="selectPlanta" class="form-control">
+                                <option value="CAET">CAET</option>
+                                <option value="STELLANTIS">STELLANTIS</option>
+                                <option value="AUDI">AUDI</option>
+                                <option value="BMW">BMW</option>
+                                <option value="AXALTA">AXALTA</option>
+                                <option value="VOLVO">VOLVO</option>
+                                <option value="DTNA">DTNA</option>
+                                <option value="OTRA">OTRA...</option>
+                            </select>
+                            <div id="customPlantaContainer" style="display: none; margin-top: 8px;">
+                                <input type="text" id="customPlantaName" class="form-control"
+                                    placeholder="Escribe la planta...">
+                            </div>
+                        </div>
+                        <div class="form-group" style="grid-column: span 1;">
+                            <label>ID de Credencial</label>
+                            <input type="text" id="credencialIdInput" class="form-control" maxlength="40"
+                                placeholder="Máx 40 chars">
+                        </div>
+                        <div class="form-group" style="grid-column: span 2;">
+                            <button type="button" class="btn-secondary" id="btnAddCredential" style="width: 100%;">
+                                + Agregar Credencial
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <ul id="credentialsList"
+                            style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Dynamic credentials will appear here -->
+                        </ul>
+                    </div>
+                    <!-- Hidden input to store JSON array of credentials for the backend -->
+                    <input type="hidden" name="credenciales_json" id="credencialesJson" value="[]">
+                </div>
+
+                <!-- Tab 5: Documentos -->
+                <div id="tab-documentos" class="tab-content">
+                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">Sube expedientes y documentos
+                        (CURP, Acta Nacimiento, Identificaciones) para este trabajador.</p>
+
+                    <div class="form-grid upload-section" style="align-items: end; margin-bottom: 20px;">
+                        <div class="form-group" style="grid-column: span 3;">
+                            <label>Seleccionar Archivo (PDF, JPG, PNG)</label>
+                            <input type="file" id="fileUploadInput" class="form-control" accept=".pdf,image/*">
+                        </div>
+                        <div class="form-group" style="grid-column: span 1;">
+                            <button type="button" class="btn-primary" id="btnUploadDoc" style="width: 100%;">
+                                Subir Archivo
+                            </button>
+                        </div>
+                    </div>
+
+                    <h4 style="margin-bottom: 10px; font-size: 1rem; color: #1f2937;">Archivos Subidos</h4>
+                    <div style="margin-top: 10px;">
+                        <ul id="documentosList"
+                            style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Dynamic documents will appear here -->
+                        </ul>
                     </div>
                 </div>
 
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" id="btnCloseModalBottom">Cancelar</button>
-                <button type="submit" class="btn-primary">Guardar Trabajador</button>
+                <button type="submit" class="btn-primary" id="btnSaveTrabajador">Guardar Trabajador</button>
             </div>
         </form>
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/trabajadores.js') }}"></script>
+<!-- =========================
+     VIEW WORKER MODAL (PRESENTATION) 
+     ========================= -->
+<div id="viewWorkerModal" class="modal-overlay">
+    <div class="modal"
+        style="max-width: 700px; padding: 0; background: var(--bg-card, #ffffff); border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+        <div class="modal-header"
+            style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover)); color: white; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600;"><i class="fas fa-id-card"
+                        style="margin-right: 8px;"></i> Ficha del Trabajador</h3>
+                <button id="btnCloseViewModal"
+                    style="background: none; border: none; color: white; cursor: pointer; font-size: 1.2rem;"><i
+                        class="fas fa-times"></i></button>
+            </div>
+        </div>
+
+        <div class="modal-body" style="padding: 24px; max-height: 75vh; overflow-y: auto;">
+
+            <!-- Header section with Profile Pic and Core Info -->
+            <div
+                style="display: flex; gap: 24px; margin-bottom: 30px; border-bottom: 1px solid #e5e7eb; padding-bottom: 24px; align-items: center;">
+                <div>
+                    <img id="viewProfilePic" src="{{ url_for('static', filename='img/default-avatar.png') }}"
+                        onerror="this.src='https://ui-avatars.com/api/?name=User&background=random'"
+                        style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                </div>
+                <div style="flex: 1;">
+                    <h2 id="viewNombreCompleto" style="margin: 0 0 8px 0; color: #111827; font-size: 1.5rem;">
+                        Cargando...</h2>
+                    <p style="margin: 0; color: #4b5563; font-size: 0.95rem; margin-bottom: 4px;"><i
+                            class="fas fa-briefcase" style="width: 20px; color: var(--primary-color);"></i> <span
+                            id="viewPuesto">Puesto</span> - <span id="viewArea" style="font-weight: 500;">Área</span>
+                    </p>
+                    <p style="margin: 0; color: #4b5563; font-size: 0.95rem;"><i class="fas fa-hashtag"
+                            style="width: 20px; color: var(--primary-color);"></i> No. Empleado: <strong
+                            id="viewNoEmpleado">000</strong></p>
+                    <p style="margin: 0; color: #4b5563; font-size: 0.95rem; margin-top: 4px;"><i
+                            class="fas fa-envelope" style="width: 20px; color: var(--primary-color);"></i> <span
+                            id="viewCorreo">correo@ejemplo.com</span> | <i class="fas fa-phone"
+                            style="width: 20px; margin-left:8px; color: var(--primary-color);"></i> <span
+                            id="viewCelular">---</span></p>
+                </div>
+            </div>
+
+            <!-- Details Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+
+                <!-- Left Column -->
+                <div>
+                    <h4
+                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; font-size: 1.05rem;">
+                        Datos Personales</h4>
+                    <ul
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 10px;">
+                        <li><strong>RFC:</strong> <span id="viewRfc">---</span></li>
+                        <li><strong>CURP:</strong> <span id="viewCurp">---</span></li>
+                        <li><strong>NSS:</strong> <span id="viewNss">---</span></li>
+                        <li><strong>Nacimiento:</strong> <span id="viewNacimiento">---</span></li>
+                        <li><strong>Sangre:</strong> <span id="viewSangre"
+                                style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 999px; font-weight: 600; font-size:0.8rem;">---</span>
+                        </li>
+                        <li><strong>Alergias:</strong> <span id="viewAlergias">---</span></li>
+                    </ul>
+
+                    <h4
+                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
+                        Emergencia</h4>
+                    <ul
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 10px;">
+                        <li><strong>Contacto:</strong> <span id="viewContactoE">---</span></li>
+                        <li><strong>Teléfono:</strong> <span id="viewTelefonoE">---</span></li>
+                    </ul>
+                </div>
+
+                <!-- Right Column -->
+                <div>
+                    <h4
+                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; font-size: 1.05rem;">
+                        Datos Laborales</h4>
+                    <ul
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 10px;">
+                        <li><strong>Fecha Ingreso:</strong> <span id="viewIngreso">---</span></li>
+                        <li><strong>Tipo Nómina:</strong> <span id="viewNomina">---</span></li>
+                        <li><strong>Salario Pactado:</strong> $<span id="viewSalario">0.00</span></li>
+                        <li><strong>Ubicación Act.:</strong> <span id="viewUbicacion">---</span></li>
+                        <li><strong>Coodinador:</strong> <span id="viewCoodinador">---</span></li>
+                    </ul>
+
+                    <h4
+                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
+                        Credenciales Activas</h4>
+                    <ul id="viewCredentialsList"
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Dynamic -->
+                        <li style="color: #9ca3af; font-style: italic;">Ninguna registrada.</li>
+                    </ul>
+
+                    <h4
+                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
+                        Documentos del Expediente</h4>
+                    <ul id="viewDocumentosList"
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Dynamic Documents will appear here -->
+                        <li style="color: #9ca3af; font-style: italic;">Ningún documento subido.</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+        <div class="modal-footer"
+            style="padding: 16px 24px; border-top: 1px solid var(--border-color, #e5e7eb); background: var(--bg-body, #f9fafb); border-radius: 0 0 12px 12px; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn-primary" id="btnCloseViewModalBottom">Cerrar Presentación</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/trabajadores.js') }}?v=5"></script>
 {% endblock %}

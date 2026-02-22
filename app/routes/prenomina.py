@@ -54,7 +54,18 @@ def imprimir(reporte_id):
     
     html_salida = ""
     for idx, p in enumerate(prenominas):
-        html_salida += render_template('recibo_pdf.html', reporte=reporte, p=p, loop_last=(idx == len(prenominas) - 1))
+        # Obtener los registros de la semana para pintar la hoja de horas en el PDF
+        registros_trabajador = RegistroDiarioHoras.query.filter_by(
+            reporte_id=reporte.id, 
+            trabajador_id=p.trabajador_id
+        ).order_by(RegistroDiarioHoras.fecha).all()
+        
+        total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
+        
+        html_salida += render_template('recibo_pdf.html', reporte=reporte, p=p, 
+                                       registros_trabajador=registros_trabajador, 
+                                       total_hrs=total_hrs,
+                                       loop_last=(idx == len(prenominas) - 1))
         
     pdf = BytesIO()
     pisa_status = pisa.CreatePDF(BytesIO(html_salida.encode('utf-8')), dest=pdf)

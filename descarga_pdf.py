@@ -33,19 +33,43 @@ class DummyPrenomina:
         self.total_deducciones = self.descuento_infonavit + self.descuento_prestamos
         self.total_a_pagar = self.total_percepciones - self.total_deducciones
 
+class DummyRegistro:
+    def __init__(self, fecha, hrs, reporte, incidencia='', t_com='SI'):
+        self.fecha = fecha
+        self.hora_entrada = None
+        self.hora_salida = None
+        self.tomo_comida = t_com == 'SI'
+        self.reporte = reporte
+        self.incidencia = incidencia
+        self.tipo_nomina = 'Por hora'
+        self.horas_productivas = hrs
+
 with app.app_context():
     # Setup mock data for rendering
-    proyecto = DummyProyecto(numero_proyecto='PRJ-9021', nombre='Mantenimiento Nave 3 Audi')
+    proyecto = DummyProyecto(numero_proyecto='25 107', nombre='Mantenimiento Nave 3 Audi')
     reporte = DummyReporte(
         proyecto=proyecto, 
-        fecha_inicio_semana=date(2026, 2, 10), 
-        fecha_fin_semana=date(2026, 2, 16)
+        fecha_inicio_semana=date(2026, 1, 20), 
+        fecha_fin_semana=date(2026, 1, 26)
     )
     
     p = DummyPrenomina()
     
+    # Mock Registers
+    regs = [
+        DummyRegistro(date(2026, 1, 20), 10.0, reporte),
+        DummyRegistro(date(2026, 1, 21), 10.0, reporte),
+        DummyRegistro(date(2026, 1, 22), 9.0, reporte, incidencia='de salida'),
+        DummyRegistro(date(2026, 1, 23), 11.0, reporte),
+        DummyRegistro(date(2026, 1, 24), 16.0, reporte),
+        DummyRegistro(date(2026, 1, 25), 0.0, reporte, incidencia='Descanso'),
+        DummyRegistro(date(2026, 1, 26), 9.0, reporte),
+    ]
+    total_hrs = sum(r.horas_productivas for r in regs)
+    
     # Render HTML string
-    html_salida = render_template('recibo_pdf.html', reporte=reporte, p=p, loop_last=True)
+    html_salida = render_template('recibo_pdf.html', reporte=reporte, p=p, 
+                                  registros_trabajador=regs, total_hrs=total_hrs, loop_last=True)
     
     # Process with xhtml2pdf
     pdf = BytesIO()
