@@ -5,7 +5,7 @@
 <div class="trabajadores-wrapper">
     <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title">Gestión de Trabajadores</h1>
+            <h1 class="main-title">Gestión de Empleados</h1>
             <p class="subtitle">Administra los datos laborales, personales y prenómina del personal operativo y
                 administrativo.</p>
         </div>
@@ -15,7 +15,7 @@
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            Nuevo Trabajador
+            Nuevo Empleado
         </button>
     </div>
 
@@ -109,7 +109,7 @@
 <div class="modal-overlay" id="trabajadorModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Registrar Trabajador</h3>
+            <h3>Registrar Empleado</h3>
             <button class="close-modal" id="btnCloseModalTop" type="button">&times;</button>
         </div>
         <form id="trabajadorForm" action="{{ url_for('trabajadores.agregar') }}" method="POST"

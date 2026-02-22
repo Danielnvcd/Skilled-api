@@ -17,8 +17,8 @@
         body {
             margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 40%, rgba(255, 255, 255, 0.0) 100%),
-            url("{{ url_for('static', filename='imagenes/fondo.jpg') }}");
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 40%, rgba(255, 255, 255, 0.4) 100%),
+            url("{{ url_for('static', filename='imagenes/fondo.png') }}");
             background-size: cover;
             background-position: top center;
             background-repeat: no-repeat;
@@ -181,7 +181,7 @@
             <a href="{{ url_for('trabajadores.index') }}"
                 class="{{ 'active' if request.endpoint == 'trabajadores.index' }}">
                 <img src="{{ url_for('static', filename='iconos/trabajadores.png') }}" class="menu-icon"
-                    alt="Trabajadores"> Trabajadores
+                    alt="Empleados"> Empleados
             </a>
             <a href="{{ url_for('proyectos.index') }}" class="{{ 'active' if request.endpoint == 'proyectos.index' }}">
                 <img src="{{ url_for('static', filename='iconos/proyectos.png') }}" class="menu-icon" alt="Proyectos">
