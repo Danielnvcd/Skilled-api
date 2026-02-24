@@ -68,6 +68,9 @@ def login():
             u.last_seen = datetime.now()
             db.session.commit()
             log_action("Login exitoso") 
+            
+            if u.role == 'coordinador':
+                return redirect(url_for('horas.index'))
             return redirect(url_for('main.home'))
         
         flash('Credenciales incorrectas', 'danger')
@@ -93,6 +96,9 @@ def verify_2fa():
             session['role'] = user.role
             session.permanent = True
             log_action(f"Login 2FA exitoso para {user.username}")
+            
+            if user.role == 'coordinador':
+                return redirect(url_for('horas.index'))
             return redirect(url_for('main.home'))
         else:
             flash('Código incorrecto.', 'danger')

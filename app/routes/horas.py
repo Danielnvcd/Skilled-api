@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session
 from app.extensions import db
 from app.models import Proyecto, ReporteSemanal, RegistroDiarioHoras, Trabajador
 from app.utils import login_required, log_action
@@ -10,8 +10,17 @@ bp = Blueprint('horas', __name__, url_prefix='/horas')
 @bp.route('/', methods=['GET'])
 @login_required
 def index():
-    reportes = ReporteSemanal.query.order_by(ReporteSemanal.created_at.desc()).all()
-    proyectos = Proyecto.query.filter_by(activo=True).all()
+    user_id = session.get('user_id')
+    user_role = session.get('role', 'user')
+
+    if user_role == 'coordinador':
+        proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=user_id).all()
+        proyecto_ids = [p.id for p in proyectos] if proyectos else []
+        reportes = ReporteSemanal.query.filter(ReporteSemanal.proyecto_id.in_(proyecto_ids)).order_by(ReporteSemanal.created_at.desc()).all() if proyecto_ids else []
+    else:
+        reportes = ReporteSemanal.query.order_by(ReporteSemanal.created_at.desc()).all()
+        proyectos = Proyecto.query.filter_by(activo=True).all()
+
     return render_template('horas.html', reportes=reportes, proyectos=proyectos)
 
 @bp.route('/crear_reporte', methods=['POST'])
@@ -52,6 +61,14 @@ def crear_reporte():
 @login_required
 def capturar(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    
+    user_id = session.get('user_id')
+    user_role = session.get('role', 'user')
+    
+    if user_role == 'coordinador' and reporte.proyecto.coordinador_id != user_id:
+        flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
+        return redirect(url_for('horas.index'))
+        
     trabajadores = Trabajador.query.order_by(Trabajador.nombre).all()
     
     # Generate 30-min intervals for dropdowns

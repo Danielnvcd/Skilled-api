@@ -101,8 +101,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 form.querySelector('input[name="nombre"]').value = data.nombre;
 
                 // Set select
-                if (data.supervisor_id) {
-                    form.querySelector('select[name="supervisor_id"]').value = data.supervisor_id;
+                if (data.coordinador_id) {
+                    form.querySelector('select[name="coordinador_id"]').value = data.coordinador_id;
                 }
 
                 // Set activo

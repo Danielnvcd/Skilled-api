@@ -29,8 +29,8 @@ def add_user():
         flash('El nombre de usuario ya existe.', 'danger')
         return redirect(url_for('users.list_users'))
 
-    # Default logic: only 'admin' and 'supervisor' for now based on user request
-    if role not in ['admin', 'supervisor']:
+    # Default logic: only 'admin' and 'coordinador' for now based on user request
+    if role not in ['admin', 'coordinador']:
         flash('Rol no válido.', 'danger')
         return redirect(url_for('users.list_users'))
 

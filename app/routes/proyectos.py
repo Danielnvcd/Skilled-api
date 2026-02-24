@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from app.extensions import db
-from app.models import Proyecto, Trabajador
+from app.models import Proyecto, Trabajador, User
 from app.utils import login_required, log_action
 import traceback
 import json
@@ -13,7 +13,8 @@ def index():
     proyectos = Proyecto.query.all()
     # Para el modal, necesitamos todos los trabajadores
     trabajadores = Trabajador.query.order_by(Trabajador.nombre).all()
-    return render_template('proyectos.html', proyectos=proyectos, trabajadores=trabajadores)
+    coordinadores = User.query.filter(User.role.in_(['coordinador', 'admin'])).order_by(User.username).all()
+    return render_template('proyectos.html', proyectos=proyectos, trabajadores=trabajadores, coordinadores=coordinadores)
 
 @bp.route('/agregar', methods=['POST'])
 @login_required
@@ -30,14 +31,14 @@ def agregar():
             numero_proyecto=data.get('numero_proyecto'),
             nombre=data.get('nombre'),
             activo=data.get('activo') == 'true' or data.get('activo') == 'on' or data.get('activo', '').lower() == 'true',
-            supervisor_id=data.get('supervisor_id') if data.get('supervisor_id') else None
+            coordinador_id=data.get('coordinador_id') if data.get('coordinador_id') else None
         )
         
-        supervisor_name = None
-        if nuevo_proyecto.supervisor_id:
-            sup = Trabajador.query.get(nuevo_proyecto.supervisor_id)
+        coordinador_name = None
+        if nuevo_proyecto.coordinador_id:
+            sup = User.query.get(nuevo_proyecto.coordinador_id)
             if sup:
-                supervisor_name = sup.nombre_apellidos
+                coordinador_name = sup.full_name or sup.username
         
         # Checkbox is simple 'on' if checked, else omitted in form.
         nuevo_proyecto.activo = 'activo' in data
@@ -53,8 +54,8 @@ def agregar():
                     # Sync worker's location fields
                     trabajador.no_proyecto = nuevo_proyecto.numero_proyecto
                     trabajador.ubicacion_actual = nuevo_proyecto.nombre
-                    if supervisor_name:
-                        trabajador.coord_a_cargo = supervisor_name
+                    if coordinador_name:
+                        trabajador.coord_a_cargo = coordinador_name
         except Exception as e:
             print(f"Error parseando participantes: {e}")
             flash('Advertencia: Hubo problemas al agregar algunos participantes.', 'warning')
@@ -82,7 +83,7 @@ def get_proyecto(id):
         'numero_proyecto': p.numero_proyecto,
         'nombre': p.nombre or '',
         'activo': p.activo,
-        'supervisor_id': p.supervisor_id or '',
+        'coordinador_id': p.coordinador_id or '',
         'participantes_ids': participantes_ids
     }
     return jsonify(data)
@@ -103,13 +104,13 @@ def editar(id):
         p.numero_proyecto = new_no
         p.nombre = data.get('nombre')
         p.activo = 'activo' in data
-        p.supervisor_id = data.get('supervisor_id') if data.get('supervisor_id') else None
+        p.coordinador_id = data.get('coordinador_id') if data.get('coordinador_id') else None
         
-        supervisor_name = None
-        if p.supervisor_id:
-            sup = Trabajador.query.get(p.supervisor_id)
+        coordinador_name = None
+        if p.coordinador_id:
+            sup = User.query.get(p.coordinador_id)
             if sup:
-                supervisor_name = sup.nombre_apellidos
+                coordinador_name = sup.full_name or sup.username
         
         # Participantes
         try:
@@ -137,8 +138,8 @@ def editar(id):
                     # Sync info
                     trabajador.no_proyecto = p.numero_proyecto
                     trabajador.ubicacion_actual = p.nombre
-                    if supervisor_name:
-                        trabajador.coord_a_cargo = supervisor_name
+                    if coordinador_name:
+                        trabajador.coord_a_cargo = coordinador_name
                     
         except Exception as e:
             print(f"Error parseando participantes (edicion): {e}")

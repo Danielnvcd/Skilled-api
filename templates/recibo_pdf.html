@@ -201,7 +201,7 @@
     <table class="info-table">
         <tr>
             <td width="15%"><strong>Proyecto:</strong></td>
-            <td width="35%">{{ reporte.proyecto.numero_proyecto }}</td>
+            <td width="35%">Consolidada Global</td>
             <td width="15%" class="text-right"><strong>Trabajador:</strong></td>
             <td width="35%" class="text-right">{{ p.trabajador.no_empleado }} - {{ p.trabajador.nombre_apellidos }}</td>
         </tr>
@@ -224,7 +224,7 @@
             <th width="30%" class="bg-green"></th>
         </tr>
         <tr>
-            <td width="50%">Sueldo Base (Horas/Tabulador)</td>
+            <td width="50%">Sueldo Base Ordinario</td>
             <td width="20%" class="text-center">
                 {% if p.trabajador.tipo_nomina == 'Por hora' %}
                 {{ "%.1f"|format(total_hrs) }} Hrs.
@@ -235,14 +235,14 @@
         <tr>
             <td>Tiempo Extra</td>
             <td class="text-center">
-                {% if p.trabajador.tipo_nomina != 'Por hora' and total_hrs > 48 %}
-                {{ "%.1f"|format(total_hrs - 48) }} Hrs.
+                {% if p.trabajador.tipo_nomina == 'Semanal' and total_hrs > 50 %}
+                {{ "%.1f"|format(total_hrs - 50) }} Hrs.
                 {% endif %}
             </td>
             <td class="text-right">${{ "%.2f"|format(p.pago_horas_extras) }}</td>
         </tr>
         <tr>
-            <td>Viáticos Proporcionales</td>
+            <td>Viáticos</td>
             <td class="text-center">
                 {% if p.pago_viaticos > 0 %}
                 días
@@ -279,14 +279,14 @@
             <td class="text-right">-${{ "%.2f"|format(p.ajuste_inbursa) }}</td>
         </tr>
         <tr>
-            <td>Descuento Préstamos</td>
+            <td>Faltas / Retardos (Incidencias)</td>
             <td></td>
-            <td class="text-right">-${{ "%.2f"|format(p.descuento_prestamos) }}</td>
+            <td class="text-right">-${{ "%.2f"|format(p.descuento_incidencias) }}</td>
         </tr>
         <tr>
-            <td>Incidencias / Otros</td>
+            <td>Descuento Préstamos / Otros</td>
             <td></td>
-            <td class="text-right">-${{ "%.2f"|format(p.descuento_incidencias + p.descuentos_otros +
+            <td class="text-right">-${{ "%.2f"|format(p.descuento_prestamos + p.descuentos_otros +
                 p.recuperacion_manual) }}</td>
         </tr>
         <tr class="total-row">

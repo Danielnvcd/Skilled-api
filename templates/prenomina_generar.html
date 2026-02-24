@@ -10,13 +10,12 @@
     <div class="reporte-info-bar">
         <div class="details">
             <div class="info-item">
-                <label>Proyecto</label>
-                <span>{{ reporte.proyecto.numero_proyecto }}</span>
+                <label>Proyectos Integrados</label>
+                <span>{{ proyectos_involucrados|length }} Proyecto(s)</span>
             </div>
             <div class="info-item">
                 <label>Semana Calculada</label>
-                <span>{{ reporte.fecha_inicio_semana.strftime('%d/%m/%Y') }} - {{
-                    reporte.fecha_fin_semana.strftime('%d/%m/%Y') }}</span>
+                <span>{{ fecha_inicio.strftime('%d/%m/%Y') }} - {{ fecha_fin.strftime('%d/%m/%Y') }}</span>
             </div>
             <div class="info-item">
                 <label>Trabajadores</label>
@@ -25,7 +24,7 @@
         </div>
         <div>
             <a href="{{ url_for('prenomina.index') }}" class="btn-secondary" style="margin-right:0.5rem;">← Regresar</a>
-            <a href="{{ url_for('prenomina.imprimir', reporte_id=reporte.id) }}" target="_blank" class="btn-secondary"
+            <a href="{{ url_for('prenomina.imprimir', fecha_str=fecha_str) }}" target="_blank" class="btn-secondary"
                 style="margin-right:0.5rem; color:#4F46E5; border-color:#4F46E5;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     style="margin-right:0.25rem;">
@@ -37,9 +36,9 @@
                 </svg>
                 Imprimir Proyección (PDF)
             </a>
-            <button id="btnGuardarNominas" data-reporte-id="{{ reporte.id }}" class="btn-primary"
+            <button id="btnGuardarNominas" data-fecha-str="{{ fecha_str }}" class="btn-primary"
                 style="background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);">
-                Guardar y Cerrar Nómina
+                Guardar y Cerrar Nómina Global
             </button>
         </div>
     </div>
@@ -71,7 +70,7 @@
                     </div>
                     <ul class="concept-list">
                         <li class="concept-item">
-                            <span>Sueldo Base (Horas/Tabulador)</span>
+                            <span>Sueldo Base Ordinario</span>
                             <span>${{ "%.2f"|format(p.salario_base) }}</span>
                         </li>
                         <li class="concept-item">
@@ -79,7 +78,7 @@
                             <span>${{ "%.2f"|format(p.pago_horas_extras) }}</span>
                         </li>
                         <li class="concept-item">
-                            <span>Viáticos Proporcionales</span>
+                            <span>Viáticos</span>
                             <span>${{ "%.2f"|format(p.pago_viaticos) }}</span>
                         </li>
                         <li class="concept-item">
@@ -101,7 +100,7 @@
                             stroke-width="2">
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        Deducciones
+                        Deducciones Extraídas
                     </div>
                     <ul class="concept-list">
                         <li class="concept-item">
@@ -113,13 +112,13 @@
                             <span>-${{ "%.2f"|format(p.ajuste_inbursa) }}</span>
                         </li>
                         <li class="concept-item">
-                            <span>Descuento de Préstamos</span>
-                            <span>-${{ "%.2f"|format(p.descuento_prestamos) }}</span>
+                            <span>Faltas / Retardos (Incidencias)</span>
+                            <span>-${{ "%.2f"|format(p.descuento_incidencias) }}</span>
                         </li>
                         <li class="concept-item">
-                            <span>Incidencias / Otros</span>
-                            <span>-${{ "%.2f"|format(p.descuento_incidencias + p.descuentos_otros +
-                                p.recuperacion_manual) }}</span>
+                            <span>Descuento Préstamos / Otros</span>
+                            <span>-${{ "%.2f"|format(p.descuento_prestamos + p.descuentos_otros + p.recuperacion_manual)
+                                }}</span>
                         </li>
                         <li class="concept-item total text-danger">
                             <span>Total Deducciones</span>

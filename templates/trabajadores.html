@@ -40,7 +40,7 @@
                     <th>Nombre Completo</th>
                     <th>Área / Puesto</th>
                     <th>Nómina</th>
-                    <th>Salario Sem.</th>
+                    <th>Salario Base</th>
                     <th>Ingreso</th>
                     <th>Acciones</th>
                 </tr>
@@ -148,8 +148,10 @@
                             <input type="text" name="puesto" class="form-control">
                         </div>
                         <div class="form-group">
-                            <label>Salario Real Pactado Semanal ($)</label>
+                            <label>Salario Base Real Pactado ($)</label>
                             <input type="number" step="0.01" name="salario_real_pactado_x_sem" class="form-control">
+                            <small style="color: #6b7280; font-size: 0.75rem;">Si es 'Por hora', ingresa el pago por
+                                hora. Si es 'Semanal'/'Cuadrado', ingresa el pago semanal total.</small>
                         </div>
                         <div class="form-group">
                             <label>Tipo de Nómina</label>
@@ -365,10 +367,6 @@
                         <div class="form-group">
                             <label>No. de Proyecto Asociado</label>
                             <input type="text" name="no_proyecto" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>A cargo del Coordinador</label>
-                            <input type="text" name="coord_a_cargo" class="form-control">
                         </div>
                         <div class="form-group" style="grid-column: span 2;">
                             <label>Ubicación Actual (Planta/Área)</label>

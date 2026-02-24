@@ -73,7 +73,7 @@ def credenciales():
 def prenomina():
     return render_template('prenomina.html')
 
-@bp.route('/supervisores')
+@bp.route('/coordinadores')
 @login_required
-def supervisores():
-    return render_template('supervisores.html')
+def coordinadores():
+    return render_template('coordinadores.html')

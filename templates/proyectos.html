@@ -42,7 +42,7 @@
     <div class="header-card">
         <div class="header-titulos">
             <h1 class="main-title">Gestión de Proyectos</h1>
-            <p class="subtitle">Administra los diferentes proyectos de la empresa, supervisores y personal asignado.</p>
+            <p class="subtitle">Administra los diferentes proyectos de la empresa, coordinadores y personal asignado.</p>
         </div>
         <button class="btn-primary" id="btnNuevoProyecto">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -74,7 +74,7 @@
                     <th>No. Proyecto</th>
                     <th>Nombre</th>
                     <th>Estado</th>
-                    <th>Supervisor</th>
+                    <th>Coordinador</th>
                     <th>Participantes</th>
                     <th>Creado</th>
                     <th>Acciones</th>
@@ -94,7 +94,7 @@
                         <span class="badge" style="background: #fee2e2; color: #991b1b;">Inactivo</span>
                         {% endif %}
                     </td>
-                    <td>{{ p.supervisor.nombre_apellidos if p.supervisor else 'Sin Asignar' }}</td>
+                    <td>{{ (p.coordinador.full_name or p.coordinador.username) if p.coordinador else 'Sin Asignar' }}</td>
                     <td>{{ p.participantes|length }} workers</td>
                     <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at else '-' }}</td>
                     <td>
@@ -151,11 +151,11 @@
                             <input type="text" name="nombre" class="form-control" required>
                         </div>
                         <div class="form-group">
-                            <label>Supervisor</label>
-                            <select name="supervisor_id" class="form-control">
-                                <option value="">--- Sin Supervisor ---</option>
-                                {% for t in trabajadores %}
-                                <option value="{{ t.id }}">{{ t.nombre }} ({{ t.no_empleado }})</option>
+                            <label>Coordinador</label>
+                            <select name="coordinador_id" class="form-control">
+                                <option value="">--- Sin Coordinador ---</option>
+                                {% for s in coordinadores %}
+                                <option value="{{ s.id }}">{{ s.full_name or s.username }}</option>
                                 {% endfor %}
                             </select>
                         </div>

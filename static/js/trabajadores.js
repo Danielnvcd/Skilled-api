@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     safeSetText('viewNomina', data.tipo_nomina || data.tipo_pago || '---');
                     safeSetText('viewSalario', data.salario_real_pactado_x_sem || '0.00');
                     safeSetText('viewUbicacion', data.ubicacion_actual || '---');
-                    safeSetText('viewCoodinador', data.coord_a_cargo || '---');
+                    safeSetText('viewCoodinador', data.coordinadores_actuales || '---');
                 } else {
                     console.warn("viewWorkerModal not found in DOM.");
                     alert("Tu navegador está utilizando una versión en caché de la página web que no incluye la nueva ventana de 'Visualización'. Por favor, limpia la caché de tu navegador (Ctrl + Shift + R o borrando el historial).");

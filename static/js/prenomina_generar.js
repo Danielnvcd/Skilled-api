@@ -10,8 +10,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            const reporteId = this.getAttribute('data-reporte-id');
-            const url = `/prenomina/guardar/${reporteId}`;
+            const fechaStr = this.getAttribute('data-fecha-str');
+            const url = `/prenomina/guardar/${fechaStr}`;
 
             // CSRF token is usually in a meta tag if we set it up, or we can just send the POST
             // We should get CSRF from meta tag if available

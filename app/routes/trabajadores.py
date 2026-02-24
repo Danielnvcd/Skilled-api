@@ -136,6 +136,14 @@ def get_trabajador(id):
     credenciales = [{'planta': c.planta, 'credencial_id': c.credencial_id} for c in t.credenciales]
     documentos = [d.to_dict() for d in t.documentos]
     
+    # Extraer coordinadores de los proyectos activos asignados
+    coordinadores_set = set()
+    for p in t.proyectos:
+        if p.activo and p.coordinador:
+            coordinadores_set.add(p.coordinador.full_name or p.coordinador.username)
+            
+    coordinadores_asignados = ", ".join(coordinadores_set) if coordinadores_set else "Ninguno asignado"
+    
     data = {
         'id': t.id,
         'no_empleado': t.no_empleado,
@@ -194,7 +202,7 @@ def get_trabajador(id):
         
         # Operacion
         'ubicacion_actual': t.ubicacion_actual or '',
-        'coord_a_cargo': t.coord_a_cargo or '',
+        'coordinadores_actuales': coordinadores_asignados,
         'no_proyecto': t.no_proyecto or '',
         'observaciones': t.observaciones or '',
         

@@ -144,8 +144,8 @@ class Proyecto(db.Model):
     nombre = db.Column(db.String(250), nullable=True)
     activo = db.Column(db.Boolean, default=True) # Si es False, "ya no se le deberían cargar horas"
     
-    supervisor_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=True)
-    supervisor = db.relationship('Trabajador', foreign_keys=[supervisor_id])
+    coordinador_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    coordinador = db.relationship('User', foreign_keys=[coordinador_id])
     
     participantes = db.relationship('Trabajador', secondary=proyecto_trabajador, backref=db.backref('proyectos', lazy='dynamic'))
     

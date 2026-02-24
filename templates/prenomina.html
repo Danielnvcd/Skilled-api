@@ -69,36 +69,40 @@
         <h3 style="color: var(--text-main); margin-bottom: 1rem; font-size: 1.25rem;">Reportes Disponibles para Pago
         </h3>
         <p style="color: var(--text-muted); font-size: 0.9rem; margin-top:-0.5rem; margin-bottom: 1.5rem;">
-            Aquí aparecen las semanas de Proyecto que ya fueron cerradas por el Coordinador/Supervisor.
+            Aquí aparecen las semanas de Proyecto que ya fueron cerradas por el Coordinador/Coordinador.
         </p>
 
-        {% for rep in reportes %}
+        {% for s in semanas %}
         <div class="rep-card">
             <div class="info-block">
                 <span
-                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Proyecto</span>
-                <strong style="font-size: 1.1rem; color: var(--text-main);">{{ rep.proyecto.numero_proyecto }}</strong>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">{{ rep.proyecto.nombre }}</span>
+                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Semana
+                    del</span>
+                <strong style="font-size: 1.1rem; color: var(--text-main);">{{ s.fecha_inicio_semana.strftime('%d/%b')
+                    }}</strong>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">{{ s.proyectos|length }} proyecto(s)
+                    cerrados</span>
             </div>
 
             <div class="info-block fecha">
                 <span
                     style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Período</span>
-                <strong>{{ rep.fecha_inicio_semana.strftime('%d/%m/%Y') }} - {{
-                    rep.fecha_fin_semana.strftime('%d/%m/%Y') }}</strong>
+                <strong>{{ s.fecha_inicio_semana.strftime('%d/%m/%Y') }} - {{ s.fecha_fin_semana.strftime('%d/%m/%Y')
+                    }}</strong>
             </div>
 
             <div class="info-block" style="text-align: right;">
-                {% if rep.id in reportes_procesados_ids %}
-                <span class="badge pagado" style="margin-bottom: 0.5rem; display:inline-block;">Procesada</span>
+                {% if s.fecha_str in prenominas_fechas %}
+                <span class="badge pagado" style="margin-bottom: 0.5rem; display:inline-block;">Procesada
+                    Globalmente</span>
                 <br>
-                <a href="{{ url_for('prenomina.generar', reporte_id=rep.id) }}" class="btn-secondary"
-                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Ver Recibos</a>
+                <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-secondary"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Ver Recibos Generados</a>
                 {% else %}
                 <span class="badge listo" style="margin-bottom: 0.5rem; display:inline-block;">Lista p/Cálculo</span>
                 <br>
-                <a href="{{ url_for('prenomina.generar', reporte_id=rep.id) }}" class="btn-primary"
-                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Calcular Prenómina</a>
+                <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-primary"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Calcular Prenómina Consolidada</a>
                 {% endif %}
             </div>
         </div>
@@ -110,7 +114,7 @@
                 <path d="M12 6v6l4 2"></path>
             </svg>
             <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin semanas cerradas</h4>
-            <p style="margin:0;">No hay ningún reporte semanal que haya sido "Cerrado" por los supervisores aún. Deben
+            <p style="margin:0;">No hay ningún reporte semanal que haya sido "Cerrado" por los coordinadores aún. Deben
                 cerrar captura primero.</p>
         </div>
         {% endfor %}
