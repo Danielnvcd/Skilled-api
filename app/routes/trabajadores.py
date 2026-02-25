@@ -71,6 +71,7 @@ def agregar():
             # Sueldos (Finanzas)
             salario_real_pactado_x_sem=data.get('salario_real_pactado_x_sem') or 0,
             tipo_pago=data.get('tipo_pago'),
+            tipo_nomina=data.get('tipo_nomina'),
             sb=data.get('sb') or 0,
             sdi=data.get('sdi') or 0,
             letra=data.get('letra'),
@@ -189,6 +190,7 @@ def get_trabajador(id):
         # Finanzas
         'salario_real_pactado_x_sem': str(t.salario_real_pactado_x_sem) if t.salario_real_pactado_x_sem else '',
         'tipo_pago': t.tipo_pago or '',
+        'tipo_nomina': t.tipo_nomina or '',
         'sb': str(t.sb) if t.sb else '',
         'sdi': str(t.sdi) if t.sdi else '',
         'letra': t.letra or '',
@@ -268,6 +270,7 @@ def editar(id):
         # Finanzas
         t.salario_real_pactado_x_sem = data.get('salario_real_pactado_x_sem') or 0
         t.tipo_pago = data.get('tipo_pago')
+        t.tipo_nomina = data.get('tipo_nomina')
         t.sb = data.get('sb') or 0
         t.sdi = data.get('sdi') or 0
         t.letra = data.get('letra')

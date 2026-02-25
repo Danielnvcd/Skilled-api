@@ -191,8 +191,6 @@
         }
     }
 </style>
-<!-- Inyectar Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -316,5 +314,6 @@
 </div>
 
 <!-- Scripts for Charts -->
-<script src="{{ url_for('static', filename='js/home.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/chart.js') }}"></script>
+<script src="{{ url_for('static', filename='js/home.js') }}?v=2"></script>
 {% endblock %}

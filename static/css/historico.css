@@ -1,0 +1,86 @@
+/* historico.css */
+.historico-empty {
+    background: var(--bg-card);
+    padding: 3rem;
+    border-radius: 16px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+}
+
+.hist-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.hist-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    border-color: #93C5FD;
+}
+
+.info-block {
+    display: flex;
+    flex-direction: column;
+}
+
+.project-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border);
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.project-header {
+    background: #F8FAFC;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.project-body {
+    padding: 1.5rem;
+}
+
+.worker-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.worker-table th, .worker-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.worker-table th {
+    background: #F1F5F9;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.worker-table tr:hover {
+    background-color: #F8FAFC;
+}
+
+.total-footer {
+    background: #E8F5E9;
+    padding: 1rem 1.5rem;
+    text-align: right;
+    font-weight: bold;
+    color: #166534;
+    font-size: 1.1rem;
+}

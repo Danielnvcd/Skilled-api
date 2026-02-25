@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Reporte Nómina Proyecto {{ proyecto.numero_proyecto }}</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 1.5cm;
+
+            @frame footer {
+                -pdf-frame-content: footerContent;
+                bottom: 1cm;
+                margin-left: 1.5cm;
+                margin-right: 1.5cm;
+                height: 1cm;
+            }
+        }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 10pt;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 10px;
+        }
+
+        .header h1 {
+            color: #1e3a8a;
+            font-size: 16pt;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 11pt;
+            color: #4b5563;
+        }
+
+        .main-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .main-table th {
+            background-color: #f3f4f6;
+            color: #1f2937;
+            text-align: left;
+            padding: 8px;
+            font-weight: bold;
+            border-bottom: 2px solid #d1d5db;
+        }
+
+        .main-table td {
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: middle;
+        }
+
+        .col-firma {
+            border-bottom: 1px solid #9ca3af !important;
+            width: 120px;
+            text-align: center;
+        }
+
+        .total-row {
+            background-color: #e0f2fe;
+            font-weight: bold;
+            color: #0c4a6e;
+        }
+
+        .total-row td {
+            border-top: 2px solid #38bdf8;
+            border-bottom: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        {% if logo_path %}
+        <div style="margin-bottom: 10px;">
+            <img src="{{ logo_path }}" style="width: 140px; height: auto;">
+        </div>
+        {% endif %}
+        <h1>RESUMEN DE NÓMINA - PROYECTO {{ proyecto.numero_proyecto }}</h1>
+        <p><strong>{{ proyecto.nombre }}</strong></p>
+        <p>Semana Laborada (Pre-Nómina Global): <strong>{{ fecha_obj|fecha_es('completo') }}</strong></p>
+    </div>
+
+    <table class="main-table">
+        <thead>
+            <tr>
+                <th style="width: 8%;">No.</th>
+                <th style="width: 32%;">Nombre del Trabajador</th>
+                <th style="width: 15%;">Modalidad</th>
+                <th style="width: 15%;">Neto a Depositar</th>
+                <th style="width: 30%;">Firma de Recibido</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set ns = namespace(total_global=0) %}
+            {% for pren in prenominas %}
+            {% set ns.total_global = ns.total_global + pren.total_a_pagar %}
+            <tr>
+                <td>{{ pren.trabajador.no_empleado }}</td>
+                <td>{{ pren.trabajador.nombre_completo }}</td>
+                <td>{{ pren.tipo_pago }}</td>
+                <td><strong>${{ "%.2f"|format(pren.total_a_pagar) }}</strong></td>
+                <td>
+                    <div style="width:100%; height:30px; border-bottom: 1px solid #4b5563;"></div>
+                </td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="3" style="text-align: right; padding-right: 15px;">GRAN TOTAL DEL PROYECTO:</td>
+                <td colspan="2"><strong>${{ "%.2f"|format(ns.total_global) }}</strong></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div id="footerContent" style="text-align: center; color: #9ca3af; font-size: 8pt;">
+        Emitido por el Sistema de Control de Nóminas Interno | <pdf:pagenumber>
+    </div>
+
+</body>
+
+</html>

@@ -43,6 +43,10 @@ class Trabajador(db.Model):
     nombre = db.Column(db.String(250), nullable=False)
     foto_perfil = db.Column(db.String(500), nullable=True)
     
+    @property
+    def nombre_completo(self):
+        return f"{self.nombre} {self.nombre_apellidos}".strip()
+    
     # Administrativo / Contratación
     tipo_mov = db.Column(db.String(100))
     tipo_cont = db.Column(db.String(100))
@@ -96,6 +100,7 @@ class Trabajador(db.Model):
     pagos_efectivo = db.Column(db.Numeric(10, 2))
     folio_mov_idse = db.Column(db.String(100))
     tipo_pago = db.Column(db.String(100))
+    tipo_nomina = db.Column(db.String(50))
     
     # Ubicación y Operación
     no_proyecto = db.Column(db.String(100))
@@ -196,6 +201,7 @@ class Prenomina(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     reporte_semanal_id = db.Column(db.Integer, db.ForeignKey('reportes_semanales.id'), nullable=True) # Ligado a horas
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador = db.relationship('Trabajador')
     
     # Identificación Semanal
     fecha_inicio = db.Column(db.Date, nullable=False)

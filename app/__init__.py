@@ -21,6 +21,27 @@ def create_app():
     def inject_now():
         from datetime import datetime
         return {'now': datetime.now}
+        
+    @app.template_filter('fecha_es')
+    def fecha_es_filter(dt, format_type='completo'):
+        if not dt:
+            return ''
+        meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        dias_cortos = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+        
+        try:
+            mes = meses[dt.month - 1]
+            if format_type == 'completo':
+                return f"{dt.day} de {mes}, {dt.year}"
+            elif format_type == 'dia_corto':
+                dia = dias_cortos[dt.weekday()]
+                return f"{dia} {dt.strftime('%d/%m')}"
+            elif format_type == 'mes_corto':
+                return f"{dt.day}/{mes[:3]}"
+            return dt.strftime('%d/%m/%Y')
+        except Exception:
+            return str(dt)
 
     secret_key = os.environ.get('SECRET_KEY', 'dev_key_for_testing') # Fallback for now
     
@@ -60,7 +81,7 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
@@ -68,6 +89,7 @@ def create_app():
     app.register_blueprint(horas.bp)
     app.register_blueprint(prenomina.bp)
     app.register_blueprint(proyectos.bp)
+    app.register_blueprint(historico_nominas.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):

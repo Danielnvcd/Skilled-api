@@ -42,7 +42,8 @@
     <div class="header-card">
         <div class="header-titulos">
             <h1 class="main-title">Gestión de Proyectos</h1>
-            <p class="subtitle">Administra los diferentes proyectos de la empresa, coordinadores y personal asignado.</p>
+            <p class="subtitle">Administra los diferentes proyectos de la empresa, coordinadores y personal asignado.
+            </p>
         </div>
         <button class="btn-primary" id="btnNuevoProyecto">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -94,8 +95,9 @@
                         <span class="badge" style="background: #fee2e2; color: #991b1b;">Inactivo</span>
                         {% endif %}
                     </td>
-                    <td>{{ (p.coordinador.full_name or p.coordinador.username) if p.coordinador else 'Sin Asignar' }}</td>
-                    <td>{{ p.participantes|length }} workers</td>
+                    <td>{{ (p.coordinador.full_name or p.coordinador.username) if p.coordinador else 'Sin Asignar' }}
+                    </td>
+                    <td>{{ p.participantes|length }} Empleados</td>
                     <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at else '-' }}</td>
                     <td>
                         <div style="display: flex; gap: 8px;">

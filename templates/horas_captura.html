@@ -136,7 +136,7 @@
             <tbody>
                 {% for reg in reporte.registros|sort(attribute='fecha', reverse=True) %}
                 <tr>
-                    <td style="font-weight: 600;">{{ reg.fecha.strftime('%a %d/%m') }}</td>
+                    <td style="font-weight: 600;">{{ reg.fecha|fecha_es('dia_corto') }}</td>
                     <td style="font-family: monospace;">{{ reg.trabajador.no_empleado }}</td>
                     <td>{{ reg.trabajador.nombre_apellidos }}</td>
                     <td>{{ reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '-' }}</td>

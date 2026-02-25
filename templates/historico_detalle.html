@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="header-card" style="margin-bottom: 2rem;">
+        <div class="header-titulos">
+            <h1 class="main-title">Desglose Estadístico de Nómina</h1>
+            <p class="subtitle">Semana procesada: <strong>{{ fecha_obj|fecha_es('completo') }}</strong></p>
+        </div>
+        <div>
+            <a href="{{ url_for('historico.index') }}" class="btn-secondary">← Volver al Histórico</a>
+        </div>
+    </div>
+
+    {% for p_id, datos in proyectos_data.items() %}
+    <div class="project-card">
+        <div class="project-header">
+            <div>
+                <h3 style="margin:0; font-size:1.25rem; color:var(--text-main);">
+                    Proyecto: {{ datos.proyecto.numero_proyecto }}
+                </h3>
+                <div style="font-size:0.9rem; color:var(--text-muted); margin-top:4px;">
+                    {{ datos.proyecto.nombre }}
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <a href="{{ url_for('historico.imprimir_proyecto', fecha_str=fecha_str, proyecto_id=p_id) }}"
+                    target="_blank" class="btn-secondary"
+                    style="font-size:0.85rem; padding:0.5rem 1rem; border-color:#4F46E5; color:#4F46E5;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        style="margin-right:0.25rem;">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    Imprimir Lista de Raya
+                </a>
+            </div>
+        </div>
+
+        <div class="project-body">
+            {% if datos.prenominas %}
+            <div style="overflow-x: auto;">
+                <table class="worker-table">
+                    <thead>
+                        <tr>
+                            <th width="15%">No. Empleado</th>
+                            <th width="40%">Nombre</th>
+                            <th width="20%">Tipo Pago</th>
+                            <th width="25%" style="text-align: right;">Monto Neto Pagado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pren in datos.prenominas %}
+                        <tr>
+                            <td style="font-family: monospace;">{{ pren.trabajador.no_empleado }}</td>
+                            <td style="font-weight: 500;">{{ pren.trabajador.nombre_completo }}</td>
+                            <td>
+                                <span
+                                    style="background: #E0E7FF; color: #3730A3; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    {{ pren.tipo_pago }}
+                                </span>
+                            </td>
+                            <td style="text-align: right; font-weight: 600;">
+                                ${{ "%.2f"|format(pren.total_a_pagar) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="total-footer">
+                <span
+                    style="font-size: 0.95rem; font-weight: 600; color: #15803d; margin-right: 1rem; text-transform: uppercase;">
+                    Total Depositado en Proyecto:
+                </span>
+                <span style="font-size: 1.25rem;">
+                    ${{ "%.2f"|format(datos.total_deposit) }}
+                </span>
+            </div>
+            {% else %}
+            <p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">Aún no hay prenóminas aprobadas
+                para este proyecto en esta semana.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div
+        style="text-align: center; padding: 4rem; background: white; border-radius: 12px; border: 1px dashed var(--border);">
+        <p style="color: var(--text-muted); font-size: 1.1rem;">No se encontraron reportes cerrados de proyectos para
+            esta semana.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

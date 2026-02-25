@@ -179,14 +179,24 @@
 </head>
 
 <body>
+    {% set items = recibos_data if recibos_data else [{'p': p, 'registros_trabajador': registros_trabajador,
+    'total_hrs': total_hrs}] %}
+    {% for item in items %}
+    {% set p = item.p %}
+    {% set registros_trabajador = item.registros_trabajador %}
+    {% set total_hrs = item.total_hrs %}
+
     <!-- Header -->
     <table class="header">
         <tr>
             <td width="30%">
-                <!-- Simulate the logo text "Skilled Proyectos Industriales" -->
+                {% if logo_path %}
+                <img src="{{ logo_path }}" style="width: 140px; height: auto;">
+                {% else %}
                 <div class="logo-text">Sk<span>i</span>lled</div>
                 <div style="font-size: 8px; color: #555; font-weight: bold; letter-spacing: 1px;">Proyectos Industriales
                 </div>
+                {% endif %}
             </td>
             <td width="70%" style="padding-left: 20px;">
                 <div class="header-title">PROYECCIÓN DE NÓMINA - EN REVISIÓN</div>
@@ -315,55 +325,41 @@
         {% for reg in registros_trabajador %}
         <tr>
             {% if loop.first %}
-            <td rowspan="{{ registros_trabajador|length }}" width="14%" class="emp-name-box">{{
-                p.trabajador.nombre_apellidos }}</td>
+            <td rowspan="{{ registros_trabajador|length if registros_trabajador|length > 0 else 1 }}"
+                class="emp-name-box text-center" style="vertical-align: middle;">
+                {{ p.trabajador.nombre_completo }}
+            </td>
             {% endif %}
 
-            <td width="4%">{{ ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'][reg.fecha.weekday()] }}</td>
-            <td width="7%">{{ reg.fecha.strftime('%d-%m-%y') }}</td>
-            <td width="6%">{{ reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '' }}</td>
-            <td width="6%">{{ reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '' }}</td>
-            <td width="5%">{{ 'SI' if reg.tomo_comida else '' }}</td>
-            <td width="7%">{{ reg.reporte.proyecto.numero_proyecto if not reg.incidencia else '' }}</td>
-            <td width="8%">{{ reg.incidencia or '' }}</td>
-            <td width="8%">{{ reg.tipo_nomina or p.trabajador.tipo_nomina }}</td>
-            <td width="5%">{{ "%.1f"|format(reg.horas_productivas) if reg.horas_productivas else '0.0' }}</td>
+            <td width="4%" class="text-center">{{ ['lum', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'][reg.fecha.weekday()]
+                }}</td>
+            <td width="7%" class="text-center">{{ reg.fecha.strftime('%d-%m-%y') }}</td>
+            <td width="6%" class="text-center">{{ reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '' }}</td>
+            <td width="6%" class="text-center">{{ reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '' }}</td>
+            <td width="5%" class="text-center">{{ 'SI' if reg.tomo_comida else '' }}</td>
+            <td width="7%" class="text-center">{{ reg.reporte.proyecto.numero_proyecto if not reg.incidencia else '' }}
+            </td>
+            <td width="8%" class="text-center">{{ reg.incidencia or '' }}</td>
+            <td width="8%" class="text-center">{{ reg.tipo_nomina or p.trabajador.tipo_nomina }}</td>
+            <td width="5%" class="text-center">{{ "%.1f"|format(reg.horas_productivas) if reg.horas_productivas else
+                '0.0' }}</td>
 
-            <td width="18%">{{ p.trabajador.nombre_apellidos }}</td>
+            <td width="18%" class="text-center">{{ p.trabajador.nombre_completo }}</td>
 
             {% if loop.first %}
-            <td rowspan="{{ registros_trabajador|length }}" width="12%" class="total-hrs-box">{{
-                "%.1f"|format(total_hrs) }}</td>
+            <td rowspan="{{ registros_trabajador|length if registros_trabajador|length > 0 else 1 }}"
+                class="total-hrs-box text-center" style="vertical-align: middle;">
+                {{ "%.1f"|format(total_hrs) }}
+            </td>
             {% endif %}
         </tr>
-        {% endfor %}
-
-        {# Fill empty rows if less than 7 days are present #}
-        {% set remaining = 7 - registros_trabajador|length %}
-        {% for i in range(remaining) %}
+        {% else %}
+        <!-- Caso cuando no tiene registros diarios desglosados grabados en DB -->
         <tr>
-            {% if registros_trabajador|length == 0 and loop.first %}
-            <td rowspan="{{ remaining }}" width="14%" class="emp-name-box">{{ p.trabajador.nombre_apellidos }}</td>
-            {% elif registros_trabajador|length > 0 %}
-            <!-- No emp box needed for filling -->
-            {% endif %}
-
-            <td width="4%"></td>
-            <td width="7%"></td>
-            <td width="6%"></td>
-            <td width="6%"></td>
-            <td width="5%"></td>
-            <td width="7%"></td>
-            <td width="8%"></td>
-            <td width="8%"></td>
-            <td width="5%"></td>
-            <td width="18%"></td>
-
-            {% if registros_trabajador|length == 0 and loop.first %}
-            <td rowspan="{{ remaining }}" width="10%" class="total-hrs-box">0.0</td>
-            {% elif registros_trabajador|length > 0 %}
-            <!-- No total hrs box needed for filling -->
-            {% endif %}
+            <td class="emp-name-box text-center" style="vertical-align: middle;">{{ p.trabajador.nombre_completo }}</td>
+            <td colspan="9" class="text-center">Sin desglose diario capturado para esta semana.</td>
+            <td class="text-center">{{ p.trabajador.nombre_completo }}</td>
+            <td class="total-hrs-box text-center" style="vertical-align: middle;">{{ "%.1f"|format(total_hrs) }}</td>
         </tr>
         {% endfor %}
     </table>
@@ -372,10 +368,11 @@
         Total Neto a Recibir: &nbsp;&nbsp;&nbsp; <strong>${{ "%.2f"|format(p.total_a_pagar) }}</strong>
     </div>
 
-    {% if not loop_last %}
+    {% if not loop.last %}
     <pdf:nextpage />
     {% endif %}
 
+    {% endfor %}
 </body>
 
 </html>

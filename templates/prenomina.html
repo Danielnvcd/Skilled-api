@@ -78,8 +78,8 @@
                 <span
                     style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Semana
                     del</span>
-                <strong style="font-size: 1.1rem; color: var(--text-main);">{{ s.fecha_inicio_semana.strftime('%d/%b')
-                    }}</strong>
+                <strong style="font-size: 1.1rem; color: var(--text-main);">{{
+                    s.fecha_inicio_semana|fecha_es('mes_corto') }}</strong>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">{{ s.proyectos|length }} proyecto(s)
                     cerrados</span>
             </div>
@@ -91,15 +91,39 @@
                     }}</strong>
             </div>
 
-            <div class="info-block" style="text-align: right;">
+            <div class="info-block"
+                style="flex: 1; margin: 0 1.5rem; padding-left: 1rem; border-left: 2px solid var(--border);">
+                <span
+                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-bottom: 4px;">Proyectos
+                    Consolidados</span>
+                <div
+                    style="display: flex; flex-direction: column; gap: 4px; max-height: 80px; overflow-y: auto; padding-right: 5px;">
+                    {% for rep in s.proyectos %}
+                    <div style="font-size: 0.85rem; color: var(--text-main);">
+                        <i class="fa-solid fa-folder" style="color: #6366f1; margin-right: 4px;"></i>
+                        <strong>{{ rep.nombre }}</strong>
+                        <span style="color: var(--text-muted); margin-left: 4px;">
+                            (Coord: {{ (rep.coordinador.full_name or rep.coordinador.username) if
+                            rep.coordinador else 'Sin asignar' }})
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="info-block"
+                style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
                 {% if s.fecha_str in prenominas_fechas %}
-                <span class="badge pagado" style="margin-bottom: 0.5rem; display:inline-block;">Procesada
+                <span class="badge pagado"
+                    style="margin-bottom: 0.5rem; display:inline-block; font-size:0.75rem; padding: 4px 10px; border-radius:12px; width: max-content; text-align: center; font-weight: 600;">Procesada
                     Globalmente</span>
                 <br>
                 <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-secondary"
                     style="font-size: 0.9rem; padding: 0.5rem 1rem;">Ver Recibos Generados</a>
                 {% else %}
-                <span class="badge listo" style="margin-bottom: 0.5rem; display:inline-block;">Lista p/Cálculo</span>
+                <span class="badge listo"
+                    style="margin-bottom: 0.5rem; display:inline-block; font-size:0.75rem; padding: 4px 10px; border-radius:12px; width: max-content; text-align: center; font-weight: 600;">Lista
+                    p/Cálculo</span>
                 <br>
                 <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-primary"
                     style="font-size: 0.9rem; padding: 0.5rem 1rem;">Calcular Prenómina Consolidada</a>

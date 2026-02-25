@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Histórico de Pagos de Nómina</h1>
+            <p class="subtitle">Consulta o imprime las nóminas globales que ya fueron calculadas y aprobadas, separadas
+                por proyecto.</p>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 2rem;">
+        <h3 style="color: var(--text-main); margin-bottom: 1rem; font-size: 1.25rem;">Nóminas Procesadas</h3>
+
+        {% for s in semanas %}
+        <div class="hist-card">
+            <div class="info-block" style="min-width: 200px;">
+                <span
+                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Nómina
+                    Guardada</span>
+                <strong style="font-size: 1.1rem; color: var(--text-main);">Semana del {{
+                    s.fecha_inicio|fecha_es('completo')
+                    }}</strong>
+                <span style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-top: 2px;">{{
+                    s.proyectos|length }} proyecto(s)
+                    cerrados</span>
+            </div>
+
+            <div class="info-block"
+                style="flex: 1; margin: 0 1.5rem; padding-left: 1rem; border-left: 2px solid var(--border);">
+                <span
+                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-bottom: 4px;">Proyectos
+                    Consolidados</span>
+                <div
+                    style="display: flex; flex-direction: column; gap: 4px; max-height: 80px; overflow-y: auto; padding-right: 5px;">
+                    {% for rep in s.proyectos %}
+                    <div style="font-size: 0.85rem; color: var(--text-main);">
+                        <i class="fa-solid fa-folder" style="color: #6366f1; margin-right: 4px;"></i>
+                        <strong>{{ rep.proyecto.nombre }}</strong>
+                        <span style="color: var(--text-muted); margin-left: 4px;">
+                            (Coord: {{ (rep.proyecto.coordinador.full_name or rep.proyecto.coordinador.username) if
+                            rep.proyecto.coordinador else 'Sin asignar' }})
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="info-block"
+                style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
+                <span class="badge"
+                    style="background:#D1FAE5; color:#064E3B; margin-bottom: 0.5rem; display:inline-block; font-size:0.75rem; padding: 4px 10px; border-radius:12px; width: max-content; text-align: center; font-weight: 600;">Pagada
+                    / Cerrada</span>
+                <br>
+                <a href="{{ url_for('historico.detalle', fecha_str=s.fecha_str) }}" class="btn-primary"
+                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+                    Ver Desglose por Proyecto
+                </a>
+            </div>
+        </div>
+        {% else %}
+        <div class="historico-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin histórico disponible</h4>
+            <p style="margin:0;">Aún no has generado ni guardado ninguna nómina global.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

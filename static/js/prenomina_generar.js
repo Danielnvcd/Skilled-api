@@ -53,4 +53,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
         });
     }
+
+    const btnDescargasIndividuales = document.querySelectorAll('.btn-descarga-individual');
+    btnDescargasIndividuales.forEach(btn => {
+        btn.addEventListener('click', function (e) {
+            const nombre = this.getAttribute('data-nombre');
+            if (!confirm(`¿Estás seguro que deseas generar y descargar de forma individual el recibo en PDF para: ${nombre}?`)) {
+                e.preventDefault(); // Detiene la navegación si cancelan
+            }
+        });
+    });
 });

@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function () {
+(function () {
     // Colors Palette
     const colors = [
         '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444',
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 datasets: [{
                     label: 'Cantidad de Empleados',
                     data: valuesData,
-                    backgroundColor: '#3b82f6',
+                    backgroundColor: colors,
                     borderRadius: 4
                 }]
             },
@@ -75,4 +75,4 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
-});
+})();

@@ -68,10 +68,7 @@ def home():
 def credenciales():
     return render_template('credenciales.html')
 
-@bp.route('/prenomina')
-@login_required
-def prenomina():
-    return render_template('prenomina.html')
+
 
 @bp.route('/coordinadores')
 @login_required

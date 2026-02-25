@@ -55,13 +55,15 @@ def generar(fecha_str):
         
     prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj).all()
     
+    ya_guardada = len(prenominas) > 0
+
     # Si aún no hay prenominas guardadas en BBDD para esta semana consolida, generamos el preview
     if not prenominas:
         prenominas = calcular_preview_prenomina(fecha_obj, reportes)
         
     proyectos_involucrados = [r.proyecto for r in reportes]
         
-    return render_template('prenomina_generar.html', fecha_inicio=fecha_obj, fecha_fin=reportes[0].fecha_fin_semana, fecha_str=fecha_str, prenominas=prenominas, proyectos_involucrados=proyectos_involucrados)
+    return render_template('prenomina_generar.html', fecha_inicio=fecha_obj, fecha_fin=reportes[0].fecha_fin_semana, fecha_str=fecha_str, prenominas=prenominas, proyectos_involucrados=proyectos_involucrados, ya_guardada=ya_guardada)
 
 @bp.route('/imprimir/<fecha_str>', methods=['GET'])
 @login_required
@@ -86,14 +88,15 @@ def imprimir(fecha_str):
         
     from xhtml2pdf import pisa
     from io import BytesIO
-    from flask import make_response
+    from flask import make_response, current_app
+    import os
     
-    html_salida = ""
+    recibos_data = []
     reporte_ids = [r.id for r in reportes]
     # Usamos el primer reporte_id temporalmente solo para info genérica (el UI será refactorizado)
     reporte_generico = reportes[0]
     
-    for idx, p in enumerate(prenominas):
+    for p in prenominas:
         # Obtener los registros consolidados del trabajador (todos los proyectos de esta semana)
         registros_trabajador = RegistroDiarioHoras.query.filter(
             RegistroDiarioHoras.reporte_id.in_(reporte_ids), 
@@ -102,10 +105,14 @@ def imprimir(fecha_str):
         
         total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
         
-        html_salida += render_template('recibo_pdf.html', reporte=reporte_generico, p=p, 
-                                       registros_trabajador=registros_trabajador, 
-                                       total_hrs=total_hrs,
-                                       loop_last=(idx == len(prenominas) - 1))
+        recibos_data.append({
+            'p': p,
+            'registros_trabajador': registros_trabajador,
+            'total_hrs': total_hrs
+        })
+        
+    logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled_white_bg.jpg')
+    html_salida = render_template('recibo_pdf.html', reporte=reporte_generico, recibos_data=recibos_data, logo_path=logo_path)
         
     pdf = BytesIO()
     pisa_status = pisa.CreatePDF(BytesIO(html_salida.encode('utf-8')), dest=pdf)
@@ -119,6 +126,75 @@ def imprimir(fecha_str):
     response.headers['Content-Disposition'] = f'inline; filename=Prenomina_Consolidada_{fecha_obj.strftime("%d%m")}.pdf'
     return response
 
+@bp.route('/imprimir_individual/<fecha_str>/<int:trabajador_id>', methods=['GET'])
+@login_required
+def imprimir_individual(fecha_str, trabajador_id):
+    try:
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Fecha inválida", 400
+        
+    reportes = ReporteSemanal.query.filter(
+        ReporteSemanal.fecha_inicio_semana == fecha_obj,
+        ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
+    ).all()
+    
+    if not reportes:
+        flash("Solo se pueden imprimir nóminas de semanas cerradas.", "warning")
+        return redirect(url_for('prenomina.index'))
+        
+    # See if it's already saved
+    prenomina = Prenomina.query.filter_by(fecha_inicio=fecha_obj, trabajador_id=trabajador_id).first()
+    
+    # If not saved, generate it from the preview function
+    if not prenomina:
+        all_prenominas = calcular_preview_prenomina(fecha_obj, reportes)
+        prenomina = next((p for p in all_prenominas if p.trabajador_id == trabajador_id), None)
+        
+    if not prenomina:
+        return "Trabajador no encontrado en esta nómina.", 404
+        
+    from xhtml2pdf import pisa
+    from io import BytesIO
+    from flask import make_response, current_app
+    import os
+    
+    reporte_ids = [r.id for r in reportes]
+    reporte_generico = reportes[0]
+    
+    registros_trabajador = RegistroDiarioHoras.query.filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids), 
+        RegistroDiarioHoras.trabajador_id == prenomina.trabajador_id
+    ).order_by(RegistroDiarioHoras.fecha).all()
+    
+    total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
+    
+    logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled_white_bg.jpg')
+    html_salida = render_template('recibo_pdf.html', reporte=reporte_generico, p=prenomina, 
+                                   registros_trabajador=registros_trabajador, 
+                                   total_hrs=total_hrs,
+                                   loop_last=True,
+                                   logo_path=logo_path)
+                                   
+    pdf = BytesIO()
+    pisa_status = pisa.CreatePDF(BytesIO(html_salida.encode('utf-8')), dest=pdf)
+    
+    if pisa_status.err:
+        flash("Hubo un error interno al generar el PDF.", "danger")
+        return redirect(url_for('prenomina.generar', fecha_str=fecha_str))
+        
+    response = make_response(pdf.getvalue())
+    response.headers['Content-Type'] = 'application/pdf'
+    
+    # Nombre del archivo con Nombre del Trabajador, Fecha y Hora exacta de descarga
+    ahora = datetime.now()
+    nombre_limpio = prenomina.trabajador.nombre_apellidos.replace(' ', '_')
+    timestamp = ahora.strftime("%Y-%m-%d_%H-%M-%S")
+    nombre_archivo = f'Recibo_{nombre_limpio}_{timestamp}.pdf'
+    
+    response.headers['Content-Disposition'] = f'inline; filename={nombre_archivo}'
+    return response
+
 @bp.route('/guardar/<fecha_str>', methods=['POST'])
 @login_required
 def guardar(fecha_str):
@@ -126,7 +202,7 @@ def guardar(fecha_str):
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         reportes = ReporteSemanal.query.filter(
             ReporteSemanal.fecha_inicio_semana == fecha_obj,
-            ReporteSemanal.estado == 'TERMINADO'
+            ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
         ).all()
         
         if not reportes:
@@ -192,7 +268,14 @@ def calcular_preview_prenomina(fecha_obj, reportes):
             trabajador=trabajador,
             fecha_inicio=fecha_obj,
             fecha_fin=fecha_fin_semana,
-            tipo_pago=trabajador.tipo_pago or 'EFECTIVO'
+            tipo_pago=trabajador.tipo_pago or 'EFECTIVO',
+            pago_festivos=0.0,
+            depositos_otros=0.0,
+            depositos_prestamos=0.0,
+            descuentos_otros=0.0,
+            descuento_prestamos=0.0,
+            descuento_incidencias=0.0,
+            recuperacion_manual=0.0
         )
         
         tipo = trabajador.tipo_nomina or 'Semanal'
@@ -237,6 +320,8 @@ def calcular_preview_prenomina(fecha_obj, reportes):
                  
         if trabajador.viaticos:
              p.pago_viaticos = float(trabajador.viaticos) * dias_capturados
+        else:
+             p.pago_viaticos = 0.0
              
         p.total_percepciones = p.salario_base + p.pago_horas_extras + p.pago_viaticos
         p.total_deducciones = p.descuento_infonavit + p.ajuste_inbursa + float(p.descuento_incidencias or 0)

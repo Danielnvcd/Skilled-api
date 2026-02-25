@@ -21,11 +21,29 @@
                 <label>Trabajadores</label>
                 <span>{{ prenominas|length }}</span>
             </div>
+
+            <div class="info-item"
+                style="border-left: 2px solid var(--border); padding-left: 1.5rem; margin-left: 0.5rem; max-width: 350px;">
+                <label>Desglose de Proyectos</label>
+                <div
+                    style="display: flex; flex-direction: column; gap: 4px; max-height: 80px; overflow-y: auto; padding-right: 5px; margin-top: 4px;">
+                    {% for p in proyectos_involucrados %}
+                    <div style="font-size: 0.85rem; color: var(--text-main); line-height: 1.2;">
+                        <i class="fa-solid fa-folder" style="color: #6366f1; margin-right: 4px;"></i>
+                        <strong>{{ p.nombre }}</strong>
+                        <span style="color: var(--text-muted); font-size: 0.8rem;"><br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Coord: {{ (p.coordinador.full_name or p.coordinador.username)
+                            if p.coordinador else 'Sin asignar' }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
-        <div>
-            <a href="{{ url_for('prenomina.index') }}" class="btn-secondary" style="margin-right:0.5rem;">← Regresar</a>
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+            <a href="{{ url_for('prenomina.index') }}" class="btn-secondary">← Regresar</a>
             <a href="{{ url_for('prenomina.imprimir', fecha_str=fecha_str) }}" target="_blank" class="btn-secondary"
-                style="margin-right:0.5rem; color:#4F46E5; border-color:#4F46E5;">
+                style="color:#4F46E5; border-color:#4F46E5;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     style="margin-right:0.25rem;">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -36,10 +54,22 @@
                 </svg>
                 Imprimir Proyección (PDF)
             </a>
+            {% if not ya_guardada %}
             <button id="btnGuardarNominas" data-fecha-str="{{ fecha_str }}" class="btn-primary"
                 style="background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);">
                 Guardar y Cerrar Nómina Global
             </button>
+            {% else %}
+            <span class="badge"
+                style="background:#D1FAE5; color:#064E3B; padding: 0.5rem 1rem; border-radius:12px; font-weight:600; display:inline-flex; align-items:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    style="margin-right:0.5rem;">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                Nómina Guardada
+            </span>
+            {% endif %}
         </div>
     </div>
 
@@ -48,12 +78,26 @@
         <div class="recibo-card">
             <div class="recibo-header">
                 <div class="empleado-info">
-                    <span class="nombre">{{ p.trabajador.nombre_apellidos }}</span>
+                    <span class="nombre">{{ p.trabajador.nombre_completo }}</span>
                     <span class="meta">
                         Nº Emp: {{ p.trabajador.no_empleado }} |
                         Nomina: <strong>{{ p.trabajador.tipo_nomina or 'No Asignada' }}</strong> |
                         Pago: <strong>{{ p.tipo_pago }}</strong>
                     </span>
+                </div>
+                <div style="flex-shrink: 0; text-align:right;">
+                    <a href="{{ url_for('prenomina.imprimir_individual', fecha_str=fecha_str, trabajador_id=p.trabajador.id) }}"
+                        target="_blank" class="btn-secondary btn-descarga-individual"
+                        data-nombre="{{ p.trabajador.nombre_completo }}"
+                        style="font-size:0.85rem; padding:0.5rem 1rem; border-color:#4F46E5; color:#4F46E5;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" style="margin-right:0.25rem; vertical-align:middle;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Descargar Recibo
+                    </a>
                 </div>
             </div>
 

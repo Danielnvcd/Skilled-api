@@ -193,9 +193,14 @@
                 <img src="{{ url_for('static', filename='iconos/credenciales.png') }}" class="menu-icon"
                     alt="Credenciales"> Credenciales
             </a>
-            <a href="{{ url_for('main.prenomina') }}" class="{{ 'active' if request.endpoint == 'main.prenomina' }}">
+            <a href="{{ url_for('prenomina.index') }}" class="{{ 'active' if request.endpoint == 'prenomina.index' }}">
                 <img src="{{ url_for('static', filename='iconos/prenomina.png') }}" class="menu-icon" alt="Prenómina">
                 Prenómina
+            </a>
+            <a href="{{ url_for('historico.index') }}" class="{{ 'active' if request.endpoint == 'historico.index' }}">
+                <img src="{{ url_for('static', filename='iconos/nominaglobal.png') }}" class="menu-icon"
+                    alt="Nóminas Globales">
+                Histórico Nóminas
             </a>
             {% endif %}
             <a href="{{ url_for('horas.index') }}" class="{{ 'active' if request.endpoint == 'horas.index' }}">
