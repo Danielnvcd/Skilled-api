@@ -221,7 +221,7 @@ def guardar(fecha_str):
                 r.estado = 'PRENOMINA_CERRADA'
             db.session.commit()
             
-            log_action('crear_prenomina', f'Prenómina guardada y cerrada globalmente para la semana {fecha_str}')
+            log_action(f'crear_prenomina: Prenómina guardada y cerrada globalmente para la semana {fecha_str}')
             return jsonify({'success': True, 'message': 'Nómina global generada y guardada correctamente.'})
         else:
             return jsonify({'success': False, 'message': 'La prenómina para esta semana ya fue guardada anteriormente.'}), 400
