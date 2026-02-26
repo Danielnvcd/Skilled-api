@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prestamos.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Préstamos</h1>
+            <p class="subtitle">Registra, administra y da seguimiento a los préstamos otorgados a los trabajadores.</p>
+        </div>
+        <button class="btn-primary" id="btnNuevoPrestamo">
+            <i class="fa-solid fa-plus"></i> Nuevo Préstamo
+        </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="prestamos-stats">
+        <div class="stat-card">
+            <div class="stat-value" id="statActivos">{{ prestamos|selectattr('estado', 'equalto', 'ACTIVO')|list|length
+                }}</div>
+            <div class="stat-label">Préstamos Activos</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statLiquidados">{{ prestamos|selectattr('estado', 'equalto',
+                'LIQUIDADO')|list|length }}</div>
+            <div class="stat-label">Liquidados</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statMontoTotal">${{ prestamos|selectattr('estado', 'equalto',
+                'ACTIVO')|sum(attribute='monto_restante')|default(0, true) }}</div>
+            <div class="stat-label">Deuda Total Activa</div>
+        </div>
+    </div>
+
+    <!-- List -->
+    <div class="prestamos-grid">
+        {% for p in prestamos %}
+        <div class="prestamo-card" id="prestamo-{{ p.id }}">
+            <div class="prestamo-info">
+                <div class="info-col" style="min-width: 180px;">
+                    <label>Trabajador</label>
+                    <span>{{ p.trabajador.nombre_completo }}</span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">Nº Emp: {{
+                        p.trabajador.no_empleado }}</span>
+                </div>
+                <div class="info-col">
+                    <label>Monto Total</label>
+                    <span class="monto-grande">${{ "%.2f"|format(p.monto_total) }}</span>
+                </div>
+                <div class="info-col">
+                    <label>Restante</label>
+                    <span style="color: {% if p.estado == 'LIQUIDADO' %}#059669{% else %}#DC2626{% endif %};">
+                        ${{ "%.2f"|format(p.monto_restante) }}
+                    </span>
+                    <div class="progress-bar-container">
+                        {% set pagado_pct = ((p.monto_total - p.monto_restante) / p.monto_total * 100) if p.monto_total
+                        > 0 else 0 %}
+                        <div class="progress-bar-fill" style="width: {{ pagado_pct|round(1) }}%;"></div>
+                    </div>
+                </div>
+                <div class="info-col">
+                    <label>Descuento / {{ p.frecuencia or 'semanal' }}</label>
+                    <span>${{ "%.2f"|format(p.descuento_semanal) }}</span>
+                </div>
+                <div class="info-col">
+                    <label>Plazo</label>
+                    <span>{{ p.plazo_semanas }} semanas</span>
+                </div>
+                <div class="info-col">
+                    <label>Motivo</label>
+                    <span style="font-weight: 400; font-size: 0.85rem;">{{ p.motivo or 'Sin especificar' }}</span>
+                </div>
+                <div class="info-col">
+                    <label>Estado</label>
+                    {% if p.estado == 'ACTIVO' %}
+                    <span class="badge-activo">Activo</span>
+                    {% else %}
+                    <span class="badge-liquidado">Liquidado</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if p.estado == 'ACTIVO' %}
+            <div class="prestamo-actions">
+                <button class="btn-abonar" data-id="{{ p.id }}" title="Abono Extraordinario">
+                    <i class="fa-solid fa-coins"></i> Abonar
+                </button>
+                <button class="btn-editar-prestamo" data-id="{{ p.id }}" data-monto="{{ p.monto_total }}"
+                    data-plazo="{{ p.plazo_semanas }}" data-descuento="{{ p.descuento_semanal }}"
+                    data-motivo="{{ p.motivo or '' }}" data-frecuencia="{{ p.frecuencia or 'semanal' }}"
+                    data-fecha="{{ p.fecha_inicio.strftime('%Y-%m-%d') if p.fecha_inicio else '' }}" title="Editar">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn-liquidar" data-id="{{ p.id }}" title="Liquidar">
+                    <i class="fa-solid fa-check-double"></i> Liquidar
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="prestamos-empty">
+            <i class="fa-solid fa-hand-holding-dollar"
+                style="font-size: 2.5rem; color: #9CA3AF; margin-bottom: 1rem; display: block;"></i>
+            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin préstamos registrados</h4>
+            <p style="margin:0;">Aún no se ha registrado ningún préstamo. Presiona "Nuevo Préstamo" para comenzar.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal: Nuevo Préstamo -->
+<div class="modal-overlay" id="modalNuevoPrestamo">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalPrestamoTitle">Nuevo Préstamo</h3>
+            <button class="close-modal" id="closeModalPrestamo">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="prestamoEditId" value="">
+            <div class="form-group">
+                <label>Trabajador</label>
+                <select class="form-control" id="prestamoTrabajador">
+                    <option value="">Seleccionar trabajador...</option>
+                    {% for t in trabajadores %}
+                    <option value="{{ t.id }}">{{ t.nombre_completo }} (Nº {{ t.no_empleado }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label>Monto Total ($)</label>
+                    <input type="number" step="0.01" class="form-control" id="prestamoMonto" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Plazo (semanas)</label>
+                    <input type="number" class="form-control" id="prestamoPlazo" placeholder="Ej: 12">
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label>Descuento por Período ($)</label>
+                    <input type="number" step="0.01" class="form-control" id="prestamoDescuento" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Frecuencia</label>
+                    <select class="form-control" id="prestamoFrecuencia">
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label>Fecha de Inicio</label>
+                    <input type="date" class="form-control" id="prestamoFechaInicio">
+                </div>
+                <div class="form-group">
+                    <label>Motivo</label>
+                    <input type="text" class="form-control" id="prestamoMotivo" placeholder="Ej: Préstamo personal">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" id="cancelModalPrestamo">Cancelar</button>
+            <button class="btn-primary" id="btnGuardarPrestamo">Guardar Préstamo</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Abono -->
+<div class="modal-overlay" id="modalAbono">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h3>Abono Extraordinario</h3>
+            <button class="close-modal" id="closeModalAbono">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="abonoPrestamoId" value="">
+            <div class="form-group">
+                <label>Monto del Abono ($)</label>
+                <input type="number" step="0.01" class="form-control" id="abonoMonto" placeholder="0.00">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" id="cancelModalAbono">Cancelar</button>
+            <button class="btn-primary" id="btnAplicarAbono"
+                style="background: linear-gradient(135deg, #059669, #10B981);">Aplicar Abono</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/prestamos.js') }}"></script>
+{% endblock %}

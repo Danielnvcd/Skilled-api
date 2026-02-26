@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="reporte-info-bar">
+        <div class="details">
+            <div class="info-item">
+                <label>Semana</label>
+                <span>{{ fecha_inicio.strftime('%d/%m/%Y') }} - {{ fecha_fin.strftime('%d/%m/%Y') if fecha_fin else ''
+                    }}</span>
+            </div>
+            <div class="info-item">
+                <label>Trabajadores</label>
+                <span>{{ prenominas|length }}</span>
+            </div>
+            <div class="info-item">
+                <label>Estado</label>
+                {% if estado_actual == 'ABIERTA' %}
+                <span class="badge"
+                    style="background:#D1FAE5; color:#064E3B; padding: 4px 10px; border-radius:12px; font-weight:600;">🟢
+                    Abierta — Editable</span>
+                {% else %}
+                <span class="badge"
+                    style="background:#FEE2E2; color:#991B1B; padding: 4px 10px; border-radius:12px; font-weight:600;">🔴
+                    Cerrada</span>
+                {% endif %}
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <a href="{{ url_for('prenomina.generar', fecha_str=fecha_str) }}" class="btn-secondary">← Regresar a Vista
+                Previa</a>
+            {% if estado_actual == 'ABIERTA' %}
+            <button id="btnCerrarNomina" data-fecha="{{ fecha_str }}" class="btn-primary"
+                style="background: linear-gradient(135deg, #DC2626, #EF4444);">
+                <i class="fa-solid fa-lock"></i> Cerrar Nómina Global
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Worker Accordion -->
+    <div style="margin-top: 2rem;">
+        {% for p in prenominas %}
+        <div class="recibo-card" style="margin-bottom: 1.5rem;" id="worker-card-{{ p.id }}">
+            <!-- Header -->
+            <div class="recibo-header" style="cursor: pointer;" data-toggle-id="worker-body-{{ p.id }}">
+                <div class="empleado-info">
+                    <span class="nombre">{{ p.trabajador.nombre_completo }}</span>
+                    <span class="meta">
+                        Nº Emp: {{ p.trabajador.no_empleado }} |
+                        Nomina: <strong>{{ p.trabajador.tipo_nomina or 'N/A' }}</strong> |
+                        Pago: <strong>{{ p.tipo_pago }}</strong>
+                    </span>
+                </div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="text-align: right;">
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Neto
+                            a Pagar</span>
+                        <div style="font-size: 1.5rem; font-weight: 800; color: #059669;" id="neto-{{ p.id }}">
+                            ${{ "%.2f"|format(p.total_a_pagar) }}
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-down"
+                        style="color: var(--text-muted); transition: transform 0.3s;"></i>
+                </div>
+            </div>
+
+            <!-- Body (collapsible) -->
+            <div id="worker-body-{{ p.id }}" class="worker-edit-body"
+                style="display: none; padding: 1.5rem; border-top: 1px solid var(--border);">
+
+                <!-- Current Totals -->
+                <div
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; background: #F9FAFB; padding: 1rem; border-radius: 8px;">
+                    <div>
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total
+                            Percepciones</span>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: #1e40af;" id="percepciones-{{ p.id }}">
+                            ${{ "%.2f"|format(p.total_percepciones) }}</div>
+                    </div>
+                    <div>
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total
+                            Deducciones</span>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: #DC2626;" id="deducciones-{{ p.id }}">
+                            -${{ "%.2f"|format(p.total_deducciones) }}</div>
+                    </div>
+                    <div>
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Préstamos
+                            Activos</span>
+                        <div style="font-size: 1.1rem; font-weight: 700; color: #7C3AED;" id="prestamos-{{ p.id }}">-${{
+                            "%.2f"|format(p.descuento_prestamos) }}</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <!-- LEFT: Incidencias + Descuentos -->
+                    <div>
+                        <h4 style="margin: 0 0 1rem 0; color: var(--text-main);">
+                            <i class="fa-solid fa-exclamation-triangle" style="color: #F59E0B;"></i> Incidencias de la
+                            Semana
+                        </h4>
+                        {% if p.trabajador_id in incidencias_por_trabajador %}
+                        <div
+                            style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+                            {% for inc in incidencias_por_trabajador[p.trabajador_id] %}
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #FDE68A; font-size: 0.85rem;">
+                                <span><strong>{{ inc.fecha }}</strong> — {{ inc.incidencia }}</span>
+                                <button class="btn-aplicar-incidencia"
+                                    style="background: #F59E0B; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
+                                    data-prenomina-id="{{ p.id }}"
+                                    data-concepto="{{ inc.incidencia }} ({{ inc.fecha }})" data-fecha="{{ inc.fecha }}">
+                                    Descontar
+                                </button>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p style="color: var(--text-muted); font-size: 0.85rem;">Sin incidencias registradas esta
+                            semana.</p>
+                        {% endif %}
+
+                        <h4 style="margin: 1.5rem 0 0.75rem 0; color: var(--text-main);">
+                            <i class="fa-solid fa-minus-circle" style="color: #DC2626;"></i> Descuentos Aplicados
+                        </h4>
+                        <div id="descuentos-list-{{ p.id }}">
+                            {% for d in p.descuentos_detalle %}
+                            <div class="descuento-item" id="descuento-item-{{ d.id }}"
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #FEF2F2; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
+                                <span><strong>{{ d.tipo }}:</strong> {{ d.concepto }}</span>
+                                <span style="display: flex; align-items: center; gap: 8px;">
+                                    <strong style="color: #DC2626;">-${{ "%.2f"|format(d.monto) }}</strong>
+                                    {% if estado_actual == 'ABIERTA' %}
+                                    <button class="btn-eliminar-descuento" data-id="{{ d.id }}"
+                                        data-prenomina-id="{{ p.id }}"
+                                        style="background: none; border: none; color: #DC2626; cursor: pointer; font-size: 0.9rem;">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if estado_actual == 'ABIERTA' %}
+                        <div
+                            style="margin-top: 1rem; padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--border);">
+                            <span
+                                style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Agregar
+                                Descuento Manual</span>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 8px;">
+                                <input type="text" class="form-control desc-concepto" placeholder="Concepto"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="flex: 2; font-size: 0.85rem; padding: 6px 10px;">
+                                <input type="number" step="0.01" class="form-control desc-monto" placeholder="$0.00"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="flex: 1; font-size: 0.85rem; padding: 6px 10px;">
+                                <button class="btn-primary btn-agregar-descuento" data-prenomina-id="{{ p.id }}"
+                                    style="font-size: 0.8rem; padding: 6px 12px;">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- RIGHT: Depósitos -->
+                    <div>
+                        <h4 style="margin: 0 0 1rem 0; color: var(--text-main);">
+                            <i class="fa-solid fa-plus-circle" style="color: #059669;"></i> Depósitos Extras
+                        </h4>
+                        <div id="depositos-list-{{ p.id }}">
+                            {% for d in p.depositos_detalle %}
+                            <div class="deposito-item" id="deposito-item-{{ d.id }}"
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #F0FDF4; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
+                                <span>{{ d.concepto }}</span>
+                                <span style="display: flex; align-items: center; gap: 8px;">
+                                    <strong style="color: #059669;">+${{ "%.2f"|format(d.monto) }}</strong>
+                                    {% if estado_actual == 'ABIERTA' %}
+                                    <button class="btn-eliminar-deposito" data-id="{{ d.id }}"
+                                        data-prenomina-id="{{ p.id }}"
+                                        style="background: none; border: none; color: #DC2626; cursor: pointer; font-size: 0.9rem;">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if estado_actual == 'ABIERTA' %}
+                        <div
+                            style="margin-top: 1rem; padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--border);">
+                            <span
+                                style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Agregar
+                                Depósito</span>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 8px;">
+                                <input type="text" class="form-control dep-concepto" placeholder="Concepto"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="flex: 2; font-size: 0.85rem; padding: 6px 10px;">
+                                <input type="number" step="0.01" class="form-control dep-monto" placeholder="$0.00"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="flex: 1; font-size: 0.85rem; padding: 6px 10px;">
+                                <button class="btn-primary btn-agregar-deposito" data-prenomina-id="{{ p.id }}"
+                                    style="font-size: 0.8rem; padding: 6px 12px; background: linear-gradient(135deg, #059669, #10B981);">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if p.trabajador_id in prestamos_por_trabajador %}
+                        <h4 style="margin: 1.5rem 0 0.75rem 0; color: var(--text-main);">
+                            <i class="fa-solid fa-hand-holding-dollar" style="color: #7C3AED;"></i> Préstamos Activos
+                        </h4>
+                        {% for pr in prestamos_por_trabajador[p.trabajador_id] %}
+                        <div
+                            style="padding: 8px; background: #F5F3FF; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem; display: flex; justify-content: space-between;">
+                            <span>{{ pr.motivo or 'Préstamo' }} — Restante: ${{ "%.2f"|format(pr.monto_restante)
+                                }}</span>
+                            <strong style="color: #7C3AED;">-${{ "%.2f"|format(pr.descuento_semanal) }}/sem</strong>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/prenomina_editar.js') }}"></script>
+{% endblock %}

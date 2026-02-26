@@ -57,8 +57,13 @@
             {% if not ya_guardada %}
             <button id="btnGuardarNominas" data-fecha-str="{{ fecha_str }}" class="btn-primary"
                 style="background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);">
-                Guardar y Cerrar Nómina Global
+                Guardar Nómina (Abrir para Edición)
             </button>
+            {% elif estado_actual == 'ABIERTA' %}
+            <a href="{{ url_for('prenomina.editar', fecha_str=fecha_str) }}" class="btn-primary"
+                style="background: linear-gradient(135deg, #F59E0B, #FBBF24);">
+                <i class="fa-solid fa-pen-to-square"></i> Editar Prenómina
+            </a>
             {% else %}
             <span class="badge"
                 style="background:#D1FAE5; color:#064E3B; padding: 0.5rem 1rem; border-radius:12px; font-weight:600; display:inline-flex; align-items:center;">
@@ -67,7 +72,7 @@
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
-                Nómina Guardada
+                Nómina Cerrada
             </span>
             {% endif %}
         </div>

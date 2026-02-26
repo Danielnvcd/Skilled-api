@@ -263,9 +263,17 @@
         <tr>
             <td>Otros (Festivos/Depositos)</td>
             <td class="text-center"></td>
-            <td class="text-right">${{ "%.2f"|format(p.pago_festivos + p.depositos_otros + p.depositos_prestamos) }}
-            </td>
+            <td class="text-right">${{ "%.2f"|format(p.pago_festivos) }}</td>
         </tr>
+        {% if p.depositos_detalle %}
+        {% for dep in p.depositos_detalle %}
+        <tr>
+            <td style="padding-left: 15px; font-style: italic;">↳ {{ dep.concepto }}</td>
+            <td class="text-center"></td>
+            <td class="text-right">+${{ "%.2f"|format(dep.monto) }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
         <tr class="total-row">
             <td width="50%" class="text-green text-left">TOTAL PERCEPCIONES</td>
             <td width="20%"></td>
@@ -293,12 +301,29 @@
             <td></td>
             <td class="text-right">-${{ "%.2f"|format(p.descuento_incidencias) }}</td>
         </tr>
+        {% if p.descuento_prestamos > 0 %}
         <tr>
-            <td>Descuento Préstamos / Otros</td>
+            <td>Descuento Préstamo</td>
             <td></td>
-            <td class="text-right">-${{ "%.2f"|format(p.descuento_prestamos + p.descuentos_otros +
-                p.recuperacion_manual) }}</td>
+            <td class="text-right">-${{ "%.2f"|format(p.descuento_prestamos) }}</td>
         </tr>
+        {% endif %}
+        {% if p.descuentos_detalle %}
+        {% for desc in p.descuentos_detalle %}
+        <tr>
+            <td style="padding-left: 15px; font-style: italic;">↳ {{ desc.tipo }}: {{ desc.concepto }}</td>
+            <td class="text-center"></td>
+            <td class="text-right">-${{ "%.2f"|format(desc.monto) }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+        {% if p.recuperacion_manual > 0 %}
+        <tr>
+            <td>Recuperación Manual</td>
+            <td></td>
+            <td class="text-right">-${{ "%.2f"|format(p.recuperacion_manual) }}</td>
+        </tr>
+        {% endif %}
         <tr class="total-row">
             <td width="50%" class="text-red text-left">TOTAL DEDUCCIONES</td>
             <td width="20%"></td>

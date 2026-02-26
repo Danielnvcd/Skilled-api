@@ -232,16 +232,49 @@ class Prenomina(db.Model):
     
     # Metadatos de Pago
     tipo_pago = db.Column(db.String(50)) # EFECTIVO o TRANSFERENCIA
-    estado = db.Column(db.String(20), default='PENDIENTE') # 'PENDIENTE', 'APROBADO', 'PAGADO'
+    estado = db.Column(db.String(20), default='PENDIENTE') # 'PENDIENTE', 'ABIERTA', 'APROBADO'
 
 class Prestamo(db.Model):
     """Modelo para controlar los depósitos de préstamos y la programación de sus plazos/descuentos."""
     __tablename__ = "prestamos"
     id = db.Column(db.Integer, primary_key=True)
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador = db.relationship('Trabajador', backref=db.backref('prestamos', lazy=True))
     monto_total = db.Column(db.Numeric(10, 2), nullable=False)
     plazo_semanas = db.Column(db.Integer, nullable=False)
     descuento_semanal = db.Column(db.Numeric(10, 2), nullable=False)
     monto_restante = db.Column(db.Numeric(10, 2), nullable=False)
+    motivo = db.Column(db.String(250), nullable=True)
+    frecuencia = db.Column(db.String(50), default='semanal') # semanal, quincenal, mensual
+    fecha_inicio = db.Column(db.Date, nullable=True)
+    estado = db.Column(db.String(20), default='ACTIVO') # ACTIVO, LIQUIDADO
     activo = db.Column(db.Boolean, default=True)
     creado_en = db.Column(db.DateTime, default=datetime.now)
+
+class DescuentoPrenomina(db.Model):
+    """Descuentos granulares aplicados a una prenómina (incidencias, manuales, préstamos)."""
+    __tablename__ = "descuentos_prenomina"
+    id = db.Column(db.Integer, primary_key=True)
+    prenomina_id = db.Column(db.Integer, db.ForeignKey('prenominas.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False) # INCIDENCIA, MANUAL, PRESTAMO
+    concepto = db.Column(db.String(250), nullable=False)
+    monto = db.Column(db.Numeric(10, 2), nullable=False)
+    fecha_incidencia = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    
+    prenomina = db.relationship('Prenomina', backref=db.backref('descuentos_detalle', lazy=True, cascade='all, delete-orphan'))
+    trabajador = db.relationship('Trabajador')
+
+class DepositoExtra(db.Model):
+    """Depósitos adicionales aplicados a una prenómina."""
+    __tablename__ = "depositos_extra"
+    id = db.Column(db.Integer, primary_key=True)
+    prenomina_id = db.Column(db.Integer, db.ForeignKey('prenominas.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    monto = db.Column(db.Numeric(10, 2), nullable=False)
+    concepto = db.Column(db.String(250), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    
+    prenomina = db.relationship('Prenomina', backref=db.backref('depositos_detalle', lazy=True, cascade='all, delete-orphan'))
+    trabajador = db.relationship('Trabajador')

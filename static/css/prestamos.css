@@ -1,0 +1,188 @@
+/* prestamos.css - Premium UI for Préstamos Module */
+
+.prestamos-grid {
+    margin-top: 1.5rem;
+}
+
+.prestamo-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.prestamo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.prestamo-info {
+    flex: 1;
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.prestamo-info .info-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 120px;
+}
+
+.prestamo-info .info-col label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+
+.prestamo-info .info-col span {
+    font-size: 0.95rem;
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.prestamo-info .info-col .monto-grande {
+    font-size: 1.15rem;
+    color: #1e40af;
+    font-weight: 700;
+}
+
+.prestamo-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.prestamo-actions button {
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text-main);
+    transition: all 0.2s;
+}
+
+.prestamo-actions button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.prestamo-actions .btn-abonar {
+    color: #059669;
+    border-color: #059669;
+}
+
+.prestamo-actions .btn-abonar:hover {
+    background: #D1FAE5;
+}
+
+.prestamo-actions .btn-liquidar {
+    color: #DC2626;
+    border-color: #DC2626;
+}
+
+.prestamo-actions .btn-liquidar:hover {
+    background: #FEE2E2;
+}
+
+.prestamo-actions .btn-editar-prestamo {
+    color: #4F46E5;
+    border-color: #4F46E5;
+}
+
+.prestamo-actions .btn-editar-prestamo:hover {
+    background: #EEF2FF;
+}
+
+.badge-activo {
+    background: #D1FAE5;
+    color: #064E3B;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: inline-block;
+    width: max-content;
+}
+
+.badge-liquidado {
+    background: #F3F4F6;
+    color: #6B7280;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: inline-block;
+    width: max-content;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 6px;
+    background: #E5E7EB;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10B981, #34D399);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.prestamos-empty {
+    background: var(--bg-card);
+    padding: 3rem;
+    border-radius: 16px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+}
+
+.prestamos-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+    text-align: center;
+}
+
+.stat-card .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.stat-card .stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from datetime import datetime, timedelta
 import traceback
 from app.extensions import db
-from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras
+from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra
 from app.utils import login_required, log_action
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
@@ -56,6 +56,7 @@ def generar(fecha_str):
     prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj).all()
     
     ya_guardada = len(prenominas) > 0
+    estado_actual = prenominas[0].estado if ya_guardada else 'PENDIENTE'
 
     # Si aún no hay prenominas guardadas en BBDD para esta semana consolida, generamos el preview
     if not prenominas:
@@ -63,7 +64,7 @@ def generar(fecha_str):
         
     proyectos_involucrados = [r.proyecto for r in reportes]
         
-    return render_template('prenomina_generar.html', fecha_inicio=fecha_obj, fecha_fin=reportes[0].fecha_fin_semana, fecha_str=fecha_str, prenominas=prenominas, proyectos_involucrados=proyectos_involucrados, ya_guardada=ya_guardada)
+    return render_template('prenomina_generar.html', fecha_inicio=fecha_obj, fecha_fin=reportes[0].fecha_fin_semana, fecha_str=fecha_str, prenominas=prenominas, proyectos_involucrados=proyectos_involucrados, ya_guardada=ya_guardada, estado_actual=estado_actual)
 
 @bp.route('/imprimir/<fecha_str>', methods=['GET'])
 @login_required
@@ -214,7 +215,7 @@ def guardar(fecha_str):
             nuevas_prenominas = calcular_preview_prenomina(fecha_obj, reportes)
             for p in nuevas_prenominas:
                 p.reporte_semanal_id = None # Es global, no atado a un reporte individual
-                p.estado = 'APROBADO'
+                p.estado = 'ABIERTA'
                 db.session.add(p)
                 
             for r in reportes:
@@ -230,6 +231,210 @@ def guardar(fecha_str):
         db.session.rollback()
         current_app.logger.error(f"Error al guardar prenómina global: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': 'Ocurrió un error al intentar guardar la prenómina.'}), 500
+
+@bp.route('/editar/<fecha_str>')
+@login_required
+def editar(fecha_str):
+    try:
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash("Fecha inválida.", "danger")
+        return redirect(url_for('prenomina.index'))
+    
+    prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj).all()
+    if not prenominas:
+        flash("No hay prenóminas para esta fecha.", "warning")
+        return redirect(url_for('prenomina.index'))
+    
+    estado_actual = prenominas[0].estado if prenominas else 'PENDIENTE'
+    if estado_actual == 'APROBADO':
+        flash("Esta prenómina ya fue cerrada y no puede editarse.", "warning")
+        return redirect(url_for('prenomina.generar', fecha_str=fecha_str))
+    
+    # Obtener incidencias del reporte de horas para esta semana
+    reportes = ReporteSemanal.query.filter(
+        ReporteSemanal.fecha_inicio_semana == fecha_obj,
+        ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
+    ).all()
+    
+    incidencias_por_trabajador = {}
+    incidencias_descontables = ['Falta', 'Retardo', 'Falta checada de entrada', 'Falta checada de salida', 'Permiso', 'Luto', 'Casamiento']
+    for r in reportes:
+        for reg in r.registros:
+            if reg.incidencia and reg.incidencia in incidencias_descontables:
+                if reg.trabajador_id not in incidencias_por_trabajador:
+                    incidencias_por_trabajador[reg.trabajador_id] = []
+                incidencias_por_trabajador[reg.trabajador_id].append({
+                    'fecha': reg.fecha.strftime('%Y-%m-%d'),
+                    'incidencia': reg.incidencia,
+                    'horas': float(reg.horas_productivas or 0)
+                })
+    
+    # Préstamos activos por trabajador
+    prestamos_por_trabajador = {}
+    for p in prenominas:
+        prestamos_activos = Prestamo.query.filter_by(trabajador_id=p.trabajador_id, estado='ACTIVO').all()
+        if prestamos_activos:
+            prestamos_por_trabajador[p.trabajador_id] = prestamos_activos
+    
+    fecha_fin = prenominas[0].fecha_fin if prenominas else None
+    
+    return render_template('prenomina_editar.html',
+        prenominas=prenominas,
+        fecha_str=fecha_str,
+        fecha_inicio=fecha_obj,
+        fecha_fin=fecha_fin,
+        estado_actual=estado_actual,
+        incidencias_por_trabajador=incidencias_por_trabajador,
+        prestamos_por_trabajador=prestamos_por_trabajador
+    )
+
+@bp.route('/cerrar/<fecha_str>', methods=['POST'])
+@login_required
+def cerrar_prenomina(fecha_str):
+    try:
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj, estado='ABIERTA').all()
+        if not prenominas:
+            return jsonify({'success': False, 'message': 'No hay prenóminas abiertas para cerrar.'}), 400
+        
+        for p in prenominas:
+            p.estado = 'APROBADO'
+        
+        db.session.commit()
+        log_action(f'cerrar_prenomina: Nómina global cerrada para la semana {fecha_str}')
+        return jsonify({'success': True, 'message': 'Nómina cerrada exitosamente. Ya no se pueden realizar cambios.'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al cerrar prenómina: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/api/descuento', methods=['POST'])
+@login_required
+def api_agregar_descuento():
+    try:
+        data = request.get_json()
+        prenomina_id = int(data['prenomina_id'])
+        tipo = data['tipo'] # INCIDENCIA, MANUAL, PRESTAMO
+        concepto = data['concepto']
+        monto = float(data['monto'])
+        fecha_inc = data.get('fecha_incidencia')
+        
+        prenomina = Prenomina.query.get_or_404(prenomina_id)
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+        
+        desc = DescuentoPrenomina(
+            prenomina_id=prenomina_id,
+            trabajador_id=prenomina.trabajador_id,
+            tipo=tipo,
+            concepto=concepto,
+            monto=monto,
+            fecha_incidencia=datetime.strptime(fecha_inc, '%Y-%m-%d').date() if fecha_inc else None
+        )
+        db.session.add(desc)
+        db.session.commit()
+        
+        _recalcular_prenomina(prenomina)
+        
+        return jsonify({'success': True, 'message': 'Descuento agregado.', 'id': desc.id,
+            'total_deducciones': float(prenomina.total_deducciones),
+            'total_a_pagar': float(prenomina.total_a_pagar)})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al agregar descuento: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/api/descuento/<int:id>', methods=['DELETE'])
+@login_required
+def api_eliminar_descuento(id):
+    try:
+        desc = DescuentoPrenomina.query.get_or_404(id)
+        prenomina = desc.prenomina
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+        
+        db.session.delete(desc)
+        db.session.commit()
+        _recalcular_prenomina(prenomina)
+        
+        return jsonify({'success': True, 'message': 'Descuento eliminado.',
+            'total_deducciones': float(prenomina.total_deducciones),
+            'total_a_pagar': float(prenomina.total_a_pagar)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/api/deposito', methods=['POST'])
+@login_required
+def api_agregar_deposito():
+    try:
+        data = request.get_json()
+        prenomina_id = int(data['prenomina_id'])
+        monto = float(data['monto'])
+        concepto = data['concepto']
+        
+        prenomina = Prenomina.query.get_or_404(prenomina_id)
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+        
+        dep = DepositoExtra(
+            prenomina_id=prenomina_id,
+            trabajador_id=prenomina.trabajador_id,
+            monto=monto,
+            concepto=concepto
+        )
+        db.session.add(dep)
+        db.session.commit()
+        _recalcular_prenomina(prenomina)
+        
+        return jsonify({'success': True, 'message': 'Depósito agregado.', 'id': dep.id,
+            'total_percepciones': float(prenomina.total_percepciones),
+            'total_a_pagar': float(prenomina.total_a_pagar)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/api/deposito/<int:id>', methods=['DELETE'])
+@login_required
+def api_eliminar_deposito(id):
+    try:
+        dep = DepositoExtra.query.get_or_404(id)
+        prenomina = dep.prenomina
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+        
+        db.session.delete(dep)
+        db.session.commit()
+        _recalcular_prenomina(prenomina)
+        
+        return jsonify({'success': True, 'message': 'Depósito eliminado.',
+            'total_percepciones': float(prenomina.total_percepciones),
+            'total_a_pagar': float(prenomina.total_a_pagar)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+def _recalcular_prenomina(prenomina):
+    """Recalcula los totales de una prenómina individual basándose en sus descuentos y depósitos granulares."""
+    # Descuentos granulares
+    total_desc_detalle = sum(float(d.monto) for d in prenomina.descuentos_detalle) if prenomina.descuentos_detalle else 0
+    # Depósitos extras
+    total_dep_extra = sum(float(d.monto) for d in prenomina.depositos_detalle) if prenomina.depositos_detalle else 0
+    
+    # Cuotas de préstamos activos
+    prestamos_activos = Prestamo.query.filter_by(trabajador_id=prenomina.trabajador_id, estado='ACTIVO').all()
+    total_prestamos = sum(float(pr.descuento_semanal) for pr in prestamos_activos)
+    
+    prenomina.descuento_prestamos = total_prestamos
+    prenomina.depositos_otros = total_dep_extra
+    prenomina.descuentos_otros = total_desc_detalle
+    
+    prenomina.total_percepciones = float(prenomina.salario_base or 0) + float(prenomina.pago_horas_extras or 0) + float(prenomina.pago_viaticos or 0) + float(prenomina.pago_festivos or 0) + float(prenomina.depositos_otros or 0)
+    prenomina.total_deducciones = float(prenomina.descuento_infonavit or 0) + float(prenomina.ajuste_inbursa or 0) + float(prenomina.descuento_incidencias or 0) + float(prenomina.descuento_prestamos or 0) + float(prenomina.descuentos_otros or 0)
+    prenomina.total_a_pagar = prenomina.total_percepciones - prenomina.total_deducciones
+    
+    db.session.commit()
 
 def calcular_preview_prenomina(fecha_obj, reportes):
     """
