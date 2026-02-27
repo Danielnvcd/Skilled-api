@@ -87,11 +87,6 @@
 <body>
 
     <div class="header">
-        {% if logo_path %}
-        <div style="margin-bottom: 10px;">
-            <img src="{{ logo_path }}" style="width: 140px; height: auto;">
-        </div>
-        {% endif %}
         <h1>RESUMEN DE NÓMINA - PROYECTO {{ proyecto.numero_proyecto }}</h1>
         <p><strong>{{ proyecto.nombre }}</strong></p>
         <p>Semana Laborada (Pre-Nómina Global): <strong>{{ fecha_obj|fecha_es('completo') }}</strong></p>

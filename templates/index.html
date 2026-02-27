@@ -295,11 +295,11 @@
         <div class="list-container" style="max-height: 300px; overflow-y: auto;">
             {% for emp in cumpleañeros %}
             <div class="list-item">
-                <img src="{{ url_for('static', filename=emp.foto_perfil) if emp.foto_perfil else url_for('static', filename='img/default-avatar.png') }}"
+                <img src="{{ url_for('trabajadores.get_foto_perfil', id=emp.id) if emp.foto_perfil else url_for('static', filename='img/default-avatar.png') }}"
                     onerror="this.src='https://ui-avatars.com/api/?name={{ emp.nombre }}&background=random'"
                     style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 12px; border: 1px solid #e5e7eb;">
                 <div class="list-text">
-                    <h5>{{ emp.nombre }}</h5>
+                    <h5 style="text-transform: uppercase;">{{ emp.nombre }} {{ emp.nombre_apellidos }}</h5>
                     <p style="color: #10b981; font-weight: 500;">Día: {{ emp.fecha_nacimiento.day }}</p>
                 </div>
             </div>
