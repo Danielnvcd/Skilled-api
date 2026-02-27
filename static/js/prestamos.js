@@ -216,4 +216,64 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
         });
     });
+
+    // === Detalles ===
+    var modalDetalles = document.getElementById('modalDetallesPrestamo');
+    var closeDetalles = document.getElementById('closeModalDetalles');
+    var cancelDetalles = document.getElementById('cancelModalDetalles');
+
+    function closeDetallesFn() { modalDetalles.classList.remove('active'); }
+    if (closeDetalles) closeDetalles.addEventListener('click', closeDetallesFn);
+    if (cancelDetalles) cancelDetalles.addEventListener('click', closeDetallesFn);
+
+    document.querySelectorAll('.btn-detalles').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var prestamoId = this.getAttribute('data-id');
+
+            fetch('/prestamos/get/' + prestamoId, {
+                headers: getHeaders()
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        document.getElementById('detallesMontoTotal').textContent = '$' + data.monto_total.toFixed(2);
+                        document.getElementById('detallesMontoRestante').textContent = '$' + data.monto_restante.toFixed(2);
+
+                        if (data.monto_restante <= 0) {
+                            document.getElementById('detallesMontoRestante').style.color = '#059669'; // Green if paid
+                        } else {
+                            document.getElementById('detallesMontoRestante').style.color = '#DC2626'; // Red
+                        }
+
+                        var tbody = document.getElementById('listaAbonos');
+                        tbody.innerHTML = '';
+
+                        if (data.abonos && data.abonos.length > 0) {
+                            data.abonos.forEach(function (abono) {
+                                var tr = document.createElement('tr');
+                                var badgeClass = abono.tipo.toLowerCase() === 'nomina' ? 'badge-activo' : 'badge-liquidado';
+                                tr.innerHTML = `
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--border);">${abono.fecha_abono}</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--border);"><span class="${badgeClass}" style="font-size: 0.7rem; padding: 2px 6px;">${abono.tipo}</span></td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-weight: 600; color: #059669;">$${abono.monto.toFixed(2)}</td>
+                                <td style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">${abono.notas}</td>
+                            `;
+                                tbody.appendChild(tr);
+                            });
+                        } else {
+                            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 1rem; color: var(--text-muted);">No hay pagos registrados aún.</td></tr>';
+                        }
+
+                        modalDetalles.classList.add('active');
+                    } else {
+                        alert('Error al obtener detalles: ' + data.message);
+                    }
+                })
+                .catch(function (err) {
+                    console.error(err);
+                    alert('Error de red al cargar detalles.');
+                });
+        });
+    });
+
 });

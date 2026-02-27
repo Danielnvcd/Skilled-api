@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from datetime import datetime, timedelta
 import traceback
 from app.extensions import db
-from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra
+from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
 from app.utils import login_required, log_action
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
@@ -298,8 +298,31 @@ def cerrar_prenomina(fecha_str):
         if not prenominas:
             return jsonify({'success': False, 'message': 'No hay prenóminas abiertas para cerrar.'}), 400
         
+        from flask import session
         for p in prenominas:
             p.estado = 'APROBADO'
+            
+            # Aplicar descuentos de préstamos reales a la deuda
+            if p.descuento_prestamos and float(p.descuento_prestamos) > 0:
+                prestamos_activos = Prestamo.query.filter_by(trabajador_id=p.trabajador_id, estado='ACTIVO').all()
+                for prestamo in prestamos_activos:
+                    descuento = float(prestamo.descuento_semanal)
+                    if descuento > 0:
+                        abono = AbonoPrestamo(
+                            prestamo_id=prestamo.id,
+                            monto=descuento,
+                            fecha_abono=datetime.now().date(),
+                            tipo='NOMINA',
+                            registrado_por_id=session.get('user_id'),
+                            notas=f'Descuento automático por prenómina del {fecha_str}'
+                        )
+                        db.session.add(abono)
+                        
+                        prestamo.monto_restante = max(0, float(prestamo.monto_restante) - descuento)
+                        if prestamo.monto_restante <= 0:
+                            prestamo.monto_restante = 0
+                            prestamo.estado = 'LIQUIDADO'
+                            prestamo.activo = False
         
         db.session.commit()
         log_action(f'cerrar_prenomina: Nómina global cerrada para la semana {fecha_str}')
@@ -528,8 +551,12 @@ def calcular_preview_prenomina(fecha_obj, reportes):
         else:
              p.pago_viaticos = 0.0
              
+        # Add Active Loans to Deductions
+        prestamos_activos = Prestamo.query.filter_by(trabajador_id=t_id, estado='ACTIVO').all()
+        p.descuento_prestamos = sum(float(pr.descuento_semanal) for pr in prestamos_activos)
+             
         p.total_percepciones = p.salario_base + p.pago_horas_extras + p.pago_viaticos
-        p.total_deducciones = p.descuento_infonavit + p.ajuste_inbursa + float(p.descuento_incidencias or 0)
+        p.total_deducciones = p.descuento_infonavit + p.ajuste_inbursa + float(p.descuento_incidencias or 0) + float(p.descuento_prestamos or 0) + float(p.descuentos_otros or 0)
         p.total_a_pagar = p.total_percepciones - p.total_deducciones
         
         preview.append(p)

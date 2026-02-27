@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(data => {
                     if (data.success) {
                         alert('¡Éxito! ' + data.message);
-                        window.location.href = '/prenomina/';
+                        window.location.href = '/prenomina/editar/' + fechaStr;
                     } else {
                         alert('Error: ' + data.message);
                         btnGuardar.innerHTML = originalText;

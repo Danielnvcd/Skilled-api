@@ -66,7 +66,8 @@ def home():
 @bp.route('/credenciales')
 @login_required
 def credenciales():
-    return render_template('credenciales.html')
+    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.id).all()
+    return render_template('credenciales.html', trabajadores=trabajadores)
 
 
 

@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(function (data) {
                     if (data.success) {
                         alert('✅ ' + data.message);
-                        window.location.href = '/prenomina/';
+                        window.location.reload();
                     } else {
                         alert('Error: ' + data.message);
                         btnCerrar.disabled = false;

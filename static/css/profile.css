@@ -132,6 +132,12 @@
 }
 
 .role-admin {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border: 1px solid #FECACA;
+}
+
+.role-coordinador {
     background-color: #DBEAFE;
     color: #1E40AF;
     border: 1px solid #BFDBFE;

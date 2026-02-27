@@ -1,8 +1,267 @@
 {% extends "base.html" %}
-
 {% block content %}
-<div class="card">
-    <h2>Credenciales</h2>
-    <p>Módulo de gestión de credenciales en construcción.</p>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}">
+<style>
+    /* Estilos específicos si son necesarios o reutilizando trabajadores.css */
+    .table-credenciales th {
+        font-size: 0.8rem;
+        text-align: center;
+    }
+
+    .table-credenciales td {
+        font-size: 0.85rem;
+        text-align: center;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .status-true {
+        color: #10b981;
+        font-size: 1.1rem;
+        vertical-align: middle;
+    }
+
+    .status-false {
+        color: #d1d5db;
+        font-weight: 500;
+        font-size: 1rem;
+    }
+
+    .status-id {
+        font-family: monospace;
+        font-size: 0.75rem;
+        color: #374151;
+        display: inline-block;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+
+    .table-responsive-top {
+        overflow-x: auto;
+        transform: rotateX(180deg);
+    }
+
+    .table-responsive-top table {
+        transform: rotateX(180deg);
+    }
+</style>
+
+<div class="trabajadores-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Credenciales</h1>
+            <p class="subtitle">Recuento de Personal por Ubicación y Credenciales</p>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-header-ops">
+            <div class="search-box">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Buscar por nombre, empleado o planta...">
+            </div>
+            <div class="filters">
+                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ trabajadores|length }}</span>
+            </div>
+        </div>
+
+        <div class="table-responsive-top">
+            <table class="modern-table table-credenciales" id="workersTable" style="min-width: 1500px;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">No. Emp</th>
+                        <th style="text-align: left;">Nombre</th>
+                        <th style="text-align: left;">Puesto</th>
+                        <th style="text-align: left;">Area</th>
+                        <th>Tipo Pago</th>
+                        <th>Coord. a Cargo</th>
+                        <th>Ubicación Actual</th>
+                        <th>CAET</th>
+                        <th>STELLANTIS</th>
+                        <th>AUDI</th>
+                        <th>BMW</th>
+                        <th>AXALTA</th>
+                        <th>VOLVO</th>
+                        <th>DTNA</th>
+                        <th style="text-align: left;">Observaciones</th>
+                        <th>Celular</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in trabajadores %}
+                    {% set creds = {} %}
+                    {% for c in t.credenciales %}
+                    {% set _ = creds.update({c.planta: c.credencial_id}) %}
+                    {% endfor %}
+                    <tr class="worker-row" data-id="{{ t.id }}">
+                        <td style="font-weight: 600; color: var(--primary); text-align: left;">{{ t.no_empleado }}</td>
+                        <td style="text-align: left;">
+                            <div style="font-weight: 600; color: #111827;">{{ t.nombre }} {{ t.nombre_apellidos }}</div>
+                        </td>
+                        <td style="text-align: left;">{{ t.puesto or '-' }}</td>
+                        <td style="text-align: left;"><span class="badge area-default">{{ t.area or 'S/A' }}</span></td>
+                        <td>{{ t.tipo_nomina or '-' }}</td>
+                        <td>{{ t.coord_a_cargo or 'AgA' }}</td>
+                        <td>{{ t.ubicacion_actual or '-' }}</td>
+
+                        <!-- Plantas -->
+                        <td>
+                            {% if 'CAET' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['CAET'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if 'STELLANTIS' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['STELLANTIS'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if 'AUDI' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['AUDI'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if 'BMW' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['BMW'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if 'AXALTA' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['AXALTA'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if 'VOLVO' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['VOLVO'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if 'DTNA' in creds %}
+                            <i class="fas fa-check-circle status-true"></i>
+                            <span class="status-id">{{ creds['DTNA'] }}</span>
+                            {% else %}
+                            <span class="status-false">-</span>
+                            {% endif %}
+                        </td>
+
+                        <td style="text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                            title="{{ t.observaciones or '' }}">
+                            {{ t.observaciones or '-' }}
+                        </td>
+                        <td>{{ t.celular or '-' }}</td>
+                        <td>
+                            <button class="btn-icon edit-btn" data-id="{{ t.id }}" title="Editar Credenciales"
+                                style="background:none; border:none; cursor:pointer; color: #4B5563;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="17" style="text-align: center; padding: 3rem; color: #6B7280;">
+                            No hay trabajadores registrados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+
+<!-- Modal para Edición de Credenciales -->
+<div class="modal-overlay" id="credencialesModal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>Credenciales de Planta - <span id="modalWorkerName"></span></h3>
+            <button class="close-modal" id="btnCloseModalTop" type="button">&times;</button>
+        </div>
+        <form id="credencialesForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+                <div class="form-grid" style="align-items: end;">
+                    <div class="form-group" style="grid-column: span 1;">
+                        <label>Planta</label>
+                        <select id="selectPlanta" class="form-control">
+                            <option value="CAET">CAET</option>
+                            <option value="STELLANTIS">STELLANTIS</option>
+                            <option value="AUDI">AUDI</option>
+                            <option value="BMW">BMW</option>
+                            <option value="AXALTA">AXALTA</option>
+                            <option value="VOLVO">VOLVO</option>
+                            <option value="DTNA">DTNA</option>
+                            <option value="OTRA">OTRA...</option>
+                        </select>
+                        <div id="customPlantaContainer" style="display: none; margin-top: 8px;">
+                            <input type="text" id="customPlantaName" class="form-control"
+                                placeholder="Escribe la planta...">
+                        </div>
+                    </div>
+                    <div class="form-group" style="grid-column: span 1;">
+                        <label>ID de Credencial</label>
+                        <input type="text" id="credencialIdInput" class="form-control" maxlength="40"
+                            placeholder="Máx 40 chars">
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <button type="button" class="btn-secondary" id="btnAddCredential" style="width: 100%;">
+                            + Agregar Credencial
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <ul id="credentialsList"
+                        style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Dynamic credentials will appear here -->
+                    </ul>
+                </div>
+
+                <div class="form-group" style="margin-top: 20px;">
+                    <label>Observaciones Operativas</label>
+                    <textarea name="observaciones" id="observacionesInput" class="form-control" rows="2"
+                        placeholder="Notas sobre el trabajador, permisos, pendientes..."></textarea>
+                </div>
+
+                <!-- Hidden input to store JSON array of credentials for the backend -->
+                <input type="hidden" name="credenciales_json" id="credencialesJson" value="[]">
+
+                <div id="alertMessage" style="margin-top: 15px; display: none; padding: 10px; border-radius: 6px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" id="btnCloseModalBottom">Cancelar</button>
+                <button type="submit" class="btn-primary" id="btnSaveCredenciales">Guardar Credenciales</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/credenciales.js') }}?v=1"></script>
 {% endblock %}

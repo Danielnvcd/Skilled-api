@@ -35,7 +35,10 @@
                 <tr class="table-row">
                     <td class="user-id">#{{ '{:03d}'.format(user.id) }}</td>
                     <td>
-                        <div class="user-name">
+                        <div class="user-name btn-view-profile" style="cursor: pointer;" title="Ver perfil de usuario"
+                            data-id="{{ user.id }}" data-username="{{ user.username }}" data-role="{{ user.role }}"
+                            data-fullname="{{ user.full_name or '' }}" data-area="{{ user.area or '' }}"
+                            data-position="{{ user.position or '' }}" data-contact="{{ user.contact_info or '' }}">
                             <div class="avatar-initial">{{ user.username[0]|upper }}</div>
                             {{ user.username }}
                         </div>
@@ -69,6 +72,18 @@
                     </path>
                 </svg>
                 Contraseña
+            </button>
+            <button class="btn-action btn-edit btn-edit-profile" data-id="{{ user.id }}"
+                data-username="{{ user.username }}" data-fullname="{{ user.full_name or '' }}"
+                data-area="{{ user.area or '' }}" data-position="{{ user.position or '' }}"
+                data-contact="{{ user.contact_info or '' }}"
+                style="background-color: var(--primary); margin-left: -2px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Perfil
             </button>
             <form action="{{ url_for('users.delete_user', user_id=user.id) }}" method="POST" class="form-delete-user"
                 data-username="{{ user.username }}">
@@ -135,6 +150,66 @@
                 style="background: var(--warning); box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.2);">Actualizar
                 Contraseña</button>
         </form>
+    </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div id="editProfileModal" class="modal">
+    <div class="modal-content">
+        <span class="close" id="closeEditProfile">&times;</span>
+        <h3>Editar Perfil de Usuario</h3>
+        <div id="editProfileUserDisplay" class="user-display-text"></div>
+        <form id="editProfileForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" name="full_name" id="editFullName" placeholder="Ej. Juan Pérez" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Puesto</label>
+                <input type="text" name="position" id="editPosition" placeholder="Ej. Analista Contable"
+                    autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Área o Departamento</label>
+                <input type="text" name="area" id="editArea" placeholder="Ej. Finanzas" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Información de Contacto</label>
+                <input type="text" name="contact_info" id="editContact" placeholder="Teléfono o Email de oficina"
+                    autocomplete="off">
+            </div>
+            <button type="submit" class="btn-submit">Guardar Cambios</button>
+        </form>
+    </div>
+</div>
+
+<!-- View Profile Modal (Read Only) -->
+<div id="viewProfileModal" class="modal">
+    <div class="modal-content" style="max-width: 400px; padding: 0; overflow: hidden;">
+        <div class="view-profile-header">
+            <span class="close" id="closeViewProfile" style="color: white; z-index: 10;">&times;</span>
+            <div class="profile-avatar-large" id="viewProfileAvatar">A</div>
+            <h3 id="viewProfileName" style="color: white; margin-bottom: 0.25rem;">Usuario</h3>
+            <span id="viewProfileRoleBadge" class="role-badge"
+                style="background-color: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4);">
+                Rol
+            </span>
+        </div>
+        <div class="view-profile-body">
+            <div class="info-item">
+                <span class="info-label">Nombre Completo</span>
+                <span class="info-value" id="viewProfileFullName">--</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Puesto y Área</span>
+                <span class="info-value" id="viewProfilePosArea">--</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Contacto</span>
+                <span class="info-value" id="viewProfileContact">--</span>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -12,7 +12,7 @@ bp = Blueprint('proyectos', __name__, url_prefix='/proyectos')
 def index():
     proyectos = Proyecto.query.all()
     # Para el modal, necesitamos todos los trabajadores
-    trabajadores = Trabajador.query.order_by(Trabajador.nombre).all()
+    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
     coordinadores = User.query.filter(User.role.in_(['coordinador', 'admin'])).order_by(User.username).all()
     return render_template('proyectos.html', proyectos=proyectos, trabajadores=trabajadores, coordinadores=coordinadores)
 

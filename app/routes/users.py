@@ -47,6 +47,26 @@ def add_user():
 
     return redirect(url_for('users.list_users'))
 
+@bp.route('/update_profile/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def update_profile(user_id):
+    user = User.query.get_or_404(user_id)
+    
+    user.full_name = request.form.get('full_name')
+    user.position = request.form.get('position')
+    user.area = request.form.get('area')
+    user.contact_info = request.form.get('contact_info')
+    
+    try:
+        db.session.commit()
+        flash(f'Perfil actualizado para {user.username}.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al actualizar perfil: {e}', 'danger')
+
+    return redirect(url_for('users.list_users'))
+
 @bp.route('/update_password/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required

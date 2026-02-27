@@ -83,8 +83,12 @@
                     {% endif %}
                 </div>
             </div>
-            {% if p.estado == 'ACTIVO' %}
             <div class="prestamo-actions">
+                <button class="btn-detalles" data-id="{{ p.id }}" title="Ver Detalles e Historial de Pagos"
+                    style="background: var(--surface); color: var(--primary); border: 1px solid var(--border);">
+                    <i class="fa-solid fa-eye"></i> Detalles
+                </button>
+                {% if p.estado == 'ACTIVO' %}
                 <button class="btn-abonar" data-id="{{ p.id }}" title="Abono Extraordinario">
                     <i class="fa-solid fa-coins"></i> Abonar
                 </button>
@@ -97,8 +101,8 @@
                 <button class="btn-liquidar" data-id="{{ p.id }}" title="Liquidar">
                     <i class="fa-solid fa-check-double"></i> Liquidar
                 </button>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
         {% else %}
         <div class="prestamos-empty">
@@ -192,6 +196,59 @@
         </div>
     </div>
 </div>
+<!-- Modal: Detalles del Préstamo -->
+<div class="modal-overlay" id="modalDetallesPrestamo">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3>Detalles del Préstamo</h3>
+            <button class="close-modal" id="closeModalDetalles">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="detalles-resumen"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
+                <div>
+                    <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">Monto Total</span>
+                    <strong id="detallesMontoTotal" style="font-size: 1.2rem;">$0.00</strong>
+                </div>
+                <div>
+                    <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">Saldo
+                        Restante</span>
+                    <strong id="detallesMontoRestante" style="font-size: 1.2rem; color: #DC2626;">$0.00</strong>
+                </div>
+            </div>
 
-<script src="{{ url_for('static', filename='js/prestamos.js') }}"></script>
+            <h4
+                style="margin-bottom: 0.5rem; font-size: 1rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                Historial de Pagos</h4>
+            <div style="max-height: 250px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;" id="tablaAbonos">
+                    <thead>
+                        <tr>
+                            <th
+                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
+                                Fecha</th>
+                            <th
+                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
+                                Tipo</th>
+                            <th
+                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
+                                Monto</th>
+                            <th
+                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
+                                Notas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listaAbonos">
+                        <!-- Llenado dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" id="cancelModalDetalles">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/prestamos.js') }}?v=3"></script>
 {% endblock %}

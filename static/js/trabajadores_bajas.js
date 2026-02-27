@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // === EDIT / DELETE LOGIC ===
     const editBtns = document.querySelectorAll('.edit-btn');
-    const deleteBtns = document.querySelectorAll('.delete-btn');
+    const reactivarBtns = document.querySelectorAll('.reactivar-btn');
     const viewBtns = document.querySelectorAll('.view-btn');
     const profilePicPreview = document.getElementById('profilePicPreview');
     const defaultAvatarUrl = profilePicPreview ? profilePicPreview.src : '';
@@ -353,12 +353,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     document.body.appendChild(deleteForm);
 
-    deleteBtns.forEach(btn => {
+    reactivarBtns.forEach(btn => {
         btn.addEventListener('click', function (e) {
             e.stopPropagation();
             const id = this.getAttribute('data-id');
-            if (confirm('¿Estás seguro de dar de baja a este trabajador?')) {
-                deleteForm.action = `/trabajadores/eliminar/${id}`;
+            if (confirm('¿Estás seguro que deseas reactivar a este trabajador? Volverá a aparecer en la lista de activos.')) {
+                deleteForm.action = `/trabajadores/reactivar/${id}`;
                 deleteForm.submit();
             }
         });

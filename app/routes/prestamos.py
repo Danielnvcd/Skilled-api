@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 from app.extensions import db
-from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina
+from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina, AbonoPrestamo
 from app.utils import login_required, log_action
 from datetime import datetime
 import traceback
@@ -11,7 +11,7 @@ bp = Blueprint('prestamos', __name__, url_prefix='/prestamos')
 @login_required
 def index():
     prestamos = Prestamo.query.order_by(Prestamo.creado_en.desc()).all()
-    trabajadores = Trabajador.query.order_by(Trabajador.nombre).all()
+    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
     return render_template('prestamos.html', prestamos=prestamos, trabajadores=trabajadores)
 
 @bp.route('/crear', methods=['POST'])
@@ -103,6 +103,17 @@ def abonar(id):
             prestamo.estado = 'LIQUIDADO'
             prestamo.activo = False
         
+        from flask import session
+        abono = AbonoPrestamo(
+            prestamo_id=prestamo.id,
+            monto=monto_abono,
+            fecha_abono=datetime.now().date(),
+            tipo='MANUAL',
+            registrado_por_id=session.get('user_id'),
+            notas='Abono extraordinario manual'
+        )
+        db.session.add(abono)
+        
         db.session.commit()
         _recalcular_prenominas_abiertas(prestamo.trabajador_id)
         
@@ -123,6 +134,20 @@ def abonar(id):
 def liquidar(id):
     try:
         prestamo = Prestamo.query.get_or_404(id)
+        saldo_anterior = prestamo.monto_restante
+        
+        from flask import session
+        if saldo_anterior > 0:
+            abono = AbonoPrestamo(
+                prestamo_id=prestamo.id,
+                monto=saldo_anterior,
+                fecha_abono=datetime.now().date(),
+                tipo='MANUAL',
+                registrado_por_id=session.get('user_id'),
+                notas='Liquidación total manual'
+            )
+            db.session.add(abono)
+            
         prestamo.monto_restante = 0
         prestamo.estado = 'LIQUIDADO'
         prestamo.activo = False
@@ -130,12 +155,37 @@ def liquidar(id):
         
         _recalcular_prenominas_abiertas(prestamo.trabajador_id)
         
-        log_action(f'liquidar_prestamo: Préstamo #{id} liquidado manualmente')
+        log_action(f'liquidar_prestamo: Préstamo #{id} liquidado manualmente (monto liquidado: ${saldo_anterior})')
         return jsonify({'success': True, 'message': 'Préstamo marcado como liquidado.'})
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al liquidar préstamo: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@bp.route('/get/<int:id>', methods=['GET'])
+@login_required
+def get_detalles(id):
+    prestamo = Prestamo.query.get_or_404(id)
+    abonos_list = []
+    
+    for a in prestamo.abonos:
+        abonos_list.append({
+            'identificador': a.id,
+            'fecha_abono': a.fecha_abono.strftime('%d/%m/%Y'),
+            'monto': float(a.monto),
+            'tipo': a.tipo,
+            'notas': a.notas or ''
+        })
+        
+    return jsonify({
+        'success': True,
+        'monto_total': float(prestamo.monto_total),
+        'monto_restante': float(prestamo.monto_restante),
+        'plazo': prestamo.plazo_semanas,
+        'descuento': float(prestamo.descuento_semanal),
+        'estado': prestamo.estado,
+        'abonos': abonos_list
+    })
 
 
 def _recalcular_prenominas_abiertas(trabajador_id):

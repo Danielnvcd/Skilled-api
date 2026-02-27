@@ -169,6 +169,12 @@
 }
 
 .role-admin {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border: 1px solid #FECACA;
+}
+
+.role-coordinador {
     background-color: #DBEAFE;
     color: #1E40AF;
     border: 1px solid #BFDBFE;
@@ -405,5 +411,64 @@
     background: #F3F4F6;
     border-radius: 8px;
     text-align: center;
+    font-weight: 500;
+}
+
+/* View Profile Modal Styling */
+.view-profile-header {
+    background: linear-gradient(135deg, var(--primary) 0%, #818CF8 100%);
+    padding: 2.5rem 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}
+
+.profile-avatar-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: white;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    background-clip: padding-box;
+}
+
+.view-profile-body {
+    padding: 2rem;
+    background: white;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.view-profile-body .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.view-profile-body .info-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.view-profile-body .info-value {
+    font-size: 1.05rem;
+    color: var(--text-main);
     font-weight: 500;
 }

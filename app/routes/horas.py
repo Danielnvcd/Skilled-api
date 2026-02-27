@@ -39,6 +39,28 @@ def crear_reporte():
         fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
         fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
 
+        # Validación 1: ¿La semana ya fue cerrada globalmente? (Verifica si hay solapamiento de fechas)
+        semana_cerrada = ReporteSemanal.query.filter(
+            ReporteSemanal.estado == 'PRENOMINA_CERRADA',
+            ReporteSemanal.fecha_inicio_semana <= fecha_fin,
+            ReporteSemanal.fecha_fin_semana >= fecha_inicio
+        ).first()
+
+        if semana_cerrada:
+            flash(f"La prenómina de la semana del {fecha_inicio_str} al {fecha_fin_str} ya fue CERRADA. No se pueden abrir nuevos reportes.", "danger")
+            return redirect(url_for('horas.index'))
+
+        # Validación 2: ¿Este proyecto ya tiene un reporte en esa semana?
+        overlapping_report = ReporteSemanal.query.filter(
+            ReporteSemanal.proyecto_id == proyecto_id,
+            ReporteSemanal.fecha_inicio_semana <= fecha_fin,
+            ReporteSemanal.fecha_fin_semana >= fecha_inicio
+        ).first()
+
+        if overlapping_report:
+            flash(f"Este proyecto ya tiene un reporte abierto o cerrado para esta semana.", "warning")
+            return redirect(url_for('horas.index'))
+
         nuevo_reporte = ReporteSemanal(
             proyecto_id=proyecto_id,
             fecha_inicio_semana=fecha_inicio,
@@ -69,7 +91,8 @@ def capturar(reporte_id):
         flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
         return redirect(url_for('horas.index'))
         
-    trabajadores = Trabajador.query.order_by(Trabajador.nombre).all()
+    # Only load workers assigned to this project
+    trabajadores = sorted(reporte.proyecto.participantes, key=lambda t: t.nombre)
     
     # Generate 30-min intervals for dropdowns
     horas_dropdown = []

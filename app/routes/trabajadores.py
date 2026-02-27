@@ -12,8 +12,14 @@ bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
 @bp.route('/', methods=['GET'])
 @login_required
 def index():
-    trabajadores = Trabajador.query.order_by(Trabajador.id).all()
+    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.id).all()
     return render_template('trabajadores.html', trabajadores=trabajadores)
+
+@bp.route('/bajas', methods=['GET'])
+@login_required
+def bajas():
+    trabajadores = Trabajador.query.filter_by(activo=False).order_by(Trabajador.fecha_baja.desc().nulls_last(), Trabajador.id).all()
+    return render_template('trabajadores_bajas.html', trabajadores=trabajadores)
 
 @bp.route('/agregar', methods=['POST'])
 @login_required
@@ -338,23 +344,82 @@ def editar(id):
         
     return redirect(url_for('trabajadores.index'))
 
+@bp.route('/credenciales/<int:id>', methods=['POST'])
+@login_required
+def guardar_credenciales(id):
+    try:
+        t = Trabajador.query.get_or_404(id)
+        data = request.form
+        
+        # Update observaciones
+        if 'observaciones' in data:
+            t.observaciones = data.get('observaciones')
+
+        # Update credentials
+        credenciales_str = data.get('credenciales_json', '[]')
+        credenciales_data = json.loads(credenciales_str)
+        
+        # Remove old credentials
+        t.credenciales = []
+        
+        for c_data in credenciales_data:
+            nueva_credencial = CredencialPlanta(
+                planta=c_data.get('planta', '').upper(),
+                credencial_id=c_data.get('credencial_id', '')[:40]
+            )
+            t.credenciales.append(nueva_credencial)
+            
+        db.session.commit()
+        log_action(f"Actualizó las credenciales del trabajador {t.nombre} ({t.no_empleado})")
+        return jsonify({'success': True, 'message': 'Credenciales actualizadas correctamente.'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating credentials: {e}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @bp.route('/eliminar/<int:id>', methods=['POST'])
 @login_required
 def eliminar(id):
     try:
+        from datetime import date
         t = Trabajador.query.get_or_404(id)
         nombre_trabajador = t.nombre
         no_emp = t.no_empleado
-        db.session.delete(t)
+        
+        # Soft delete
+        t.activo = False
+        t.fecha_baja = date.today()
+        
         db.session.commit()
-        log_action(f"Eliminó al trabajador {nombre_trabajador} ({no_emp})")
-        flash('Trabajador eliminado exitosamente.', 'success')
+        log_action(f"Dio de baja al trabajador {nombre_trabajador} ({no_emp})")
+        flash('Trabajador dado de baja exitosamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        print(f"Error deleting worker: {e}\n{traceback.format_exc()}")
-        flash('Ocurrió un error al eliminar el trabajador.', 'danger')
+        print(f"Error inactivating worker: {e}\n{traceback.format_exc()}")
+        flash('Ocurrió un error al dar de baja el trabajador.', 'danger')
         
     return redirect(url_for('trabajadores.index'))
+
+@bp.route('/reactivar/<int:id>', methods=['POST'])
+@login_required
+def reactivar(id):
+    try:
+        t = Trabajador.query.get_or_404(id)
+        nombre_trabajador = t.nombre
+        no_emp = t.no_empleado
+        
+        t.activo = True
+        t.fecha_baja = None
+        
+        db.session.commit()
+        log_action(f"Reactivó al trabajador {nombre_trabajador} ({no_emp})")
+        flash('Trabajador reactivado exitosamente.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error reactivating worker: {e}\n{traceback.format_exc()}")
+        flash('Ocurrió un error al reactivar el trabajador.', 'danger')
+        
+    return redirect(url_for('trabajadores.bajas'))
 
 @bp.route('/<int:id>/documentos', methods=['POST'])
 @login_required
