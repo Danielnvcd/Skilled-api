@@ -101,6 +101,9 @@ def editar(id):
             flash('Error: El Número de Proyecto ya existe.', 'danger')
             return redirect(url_for('proyectos.index'))
             
+        # Guardar valor original ANTES de mutar
+        old_numero_proyecto = p.numero_proyecto
+        
         p.numero_proyecto = new_no
         p.nombre = data.get('nombre')
         p.activo = 'activo' in data
@@ -123,8 +126,8 @@ def editar(id):
             
             for past_worker in p.participantes:
                 if str(past_worker.id) not in new_participants_ids_str:
-                    # Clear previous project info if it matches this project
-                    if past_worker.no_proyecto == p.numero_proyecto:
+                    # Comparar contra el número VIEJO del proyecto
+                    if past_worker.no_proyecto == old_numero_proyecto:
                         past_worker.no_proyecto = None
                         past_worker.ubicacion_actual = None
                         past_worker.coord_a_cargo = None

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session, current_app
 from app.extensions import db
 from app.models import Proyecto, ReporteSemanal, RegistroDiarioHoras, Trabajador
 from app.utils import login_required, log_action
@@ -6,6 +6,13 @@ import traceback
 from datetime import datetime, timedelta
 
 bp = Blueprint('horas', __name__, url_prefix='/horas')
+
+def _verificar_ownership_proyecto(proyecto):
+    """Verifica que un coordinador sea dueño del proyecto. Admins pasan siempre."""
+    role = session.get('role', 'user')
+    if role == 'coordinador' and proyecto.coordinador_id != session.get('user_id'):
+        return False
+    return True
 
 @bp.route('/', methods=['GET'])
 @login_required
@@ -34,6 +41,12 @@ def crear_reporte():
         
         if not proyecto_id or not fecha_inicio_str or not fecha_fin_str:
             flash("Todos los campos son requeridos para abrir un reporte.", "warning")
+            return redirect(url_for('horas.index'))
+
+        # Validar ownership del proyecto
+        proyecto = Proyecto.query.get_or_404(proyecto_id)
+        if not _verificar_ownership_proyecto(proyecto):
+            flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
             return redirect(url_for('horas.index'))
 
         fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
@@ -74,7 +87,7 @@ def crear_reporte():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error creating report: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error creating report: {traceback.format_exc()}")
         flash('Ocurrió un error al abrir el reporte semanal.', 'danger')
         
     return redirect(url_for('horas.index'))
@@ -118,6 +131,11 @@ def capturar(reporte_id):
 @login_required
 def guardar_registro(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    
+    if not _verificar_ownership_proyecto(reporte.proyecto):
+        flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
+        return redirect(url_for('horas.index'))
+    
     if reporte.estado != 'BORRADOR':
         flash("Este reporte ya está cerrado.", "warning")
         return redirect(url_for('horas.capturar', reporte_id=reporte.id))
@@ -138,6 +156,14 @@ def guardar_registro(reporte_id):
         fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         trabajador = Trabajador.query.get(trabajador_id)
         
+        if not trabajador:
+            flash("Trabajador no encontrado.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+        
+        if trabajador not in reporte.proyecto.participantes:
+            flash("Este trabajador no está asignado al proyecto.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+        
         hora_entrada = None
         hora_salida = None
         horas_productivas = 0.0
@@ -151,8 +177,7 @@ def guardar_registro(reporte_id):
             registros_existentes = RegistroDiarioHoras.query.join(ReporteSemanal).filter(
                 RegistroDiarioHoras.trabajador_id == trabajador.id,
                 RegistroDiarioHoras.fecha == fecha,
-                ReporteSemanal.estado == 'BORRADOR', # Solo validamos contra reportes que aún se pueden editar
-                RegistroDiarioHoras.id != reporte.id # Ignorar este mismo registro si fuera edición (aunque aquí es creación nueva)
+                ReporteSemanal.estado == 'BORRADOR'
             ).all()
 
             for reg in registros_existentes:
@@ -190,7 +215,7 @@ def guardar_registro(reporte_id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error guardando registro: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error guardando registro: {traceback.format_exc()}")
         flash("Error interno al procesar registro de horas.", "danger")
 
     return redirect(url_for('horas.capturar', reporte_id=reporte.id))
@@ -200,6 +225,10 @@ def guardar_registro(reporte_id):
 def eliminar_registro(registro_id):
     registro = RegistroDiarioHoras.query.get_or_404(registro_id)
     reporte_id = registro.reporte_id
+    
+    if not _verificar_ownership_proyecto(registro.reporte.proyecto):
+        flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
+        return redirect(url_for('horas.index'))
     
     if registro.reporte.estado != 'BORRADOR':
         flash("No se pueden eliminar registros de un reporte cerrado.", "warning")
@@ -219,6 +248,11 @@ def eliminar_registro(registro_id):
 @login_required
 def cerrar_reporte(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    
+    if not _verificar_ownership_proyecto(reporte.proyecto):
+        flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
+        return redirect(url_for('horas.index'))
+    
     if reporte.estado == 'BORRADOR':
         # Validar que tenga al menos un registro de horas
         if not reporte.registros:

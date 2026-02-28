@@ -343,6 +343,9 @@ def api_agregar_descuento():
         monto = float(data['monto'])
         fecha_inc = data.get('fecha_incidencia')
         
+        if monto <= 0:
+            return jsonify({'success': False, 'message': 'El monto debe ser mayor a cero.'}), 400
+        
         prenomina = Prenomina.query.get_or_404(prenomina_id)
         if prenomina.estado != 'ABIERTA':
             return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
@@ -366,7 +369,7 @@ def api_agregar_descuento():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al agregar descuento: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Ocurrió un error al agregar el descuento.'}), 500
 
 @bp.route('/api/descuento/<int:id>', methods=['DELETE'])
 @login_required
@@ -397,6 +400,9 @@ def api_agregar_deposito():
         monto = float(data['monto'])
         concepto = data['concepto']
         
+        if monto <= 0:
+            return jsonify({'success': False, 'message': 'El monto debe ser mayor a cero.'}), 400
+        
         prenomina = Prenomina.query.get_or_404(prenomina_id)
         if prenomina.estado != 'ABIERTA':
             return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
@@ -416,7 +422,8 @@ def api_agregar_deposito():
             'total_a_pagar': float(prenomina.total_a_pagar)})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        current_app.logger.error(f"Error al agregar depósito: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al agregar el depósito.'}), 500
 
 @bp.route('/api/deposito/<int:id>', methods=['DELETE'])
 @login_required

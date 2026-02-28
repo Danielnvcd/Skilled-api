@@ -6,8 +6,18 @@ from werkzeug.utils import secure_filename
 import traceback
 import json
 import os
+from datetime import datetime as dt
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
+
+def _parse_date(value):
+    """Convierte string YYYY-MM-DD a date. Retorna None si está vacío o es inválido."""
+    if not value:
+        return None
+    try:
+        return dt.strptime(value, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
 
 @bp.route('/', methods=['GET'])
 @login_required
@@ -44,17 +54,17 @@ def agregar():
             area=data.get('area'),
             puesto=data.get('puesto'),
             tipo_jornada=data.get('tipo_jornada'),
-            fecha_ingreso=data.get('fecha_ingreso') if data.get('fecha_ingreso') else None,
+            fecha_ingreso=_parse_date(data.get('fecha_ingreso')),
             descripcion_servicio=data.get('descripcion_servicio'),
-            inicio=data.get('inicio') if data.get('inicio') else None,
-            termino_prueba=data.get('termino_prueba') if data.get('termino_prueba') else None,
-            fecha_baja=data.get('fecha_baja') if data.get('fecha_baja') else None,
+            inicio=_parse_date(data.get('inicio')),
+            termino_prueba=_parse_date(data.get('termino_prueba')),
+            fecha_baja=_parse_date(data.get('fecha_baja')),
             
             # Generales
             curp=data.get('curp'),
             rfc=data.get('rfc'),
             nss=data.get('nss'),
-            fecha_nacimiento=data.get('fecha_nacimiento') if data.get('fecha_nacimiento') else None,
+            fecha_nacimiento=_parse_date(data.get('fecha_nacimiento')),
             sexo=data.get('sexo'),
             estado_civil=data.get('estado_civil'),
             nacionalidad=data.get('nacionalidad'),
@@ -247,17 +257,17 @@ def editar(id):
         t.area = data.get('area')
         t.puesto = data.get('puesto')
         t.tipo_jornada = data.get('tipo_jornada')
-        t.fecha_ingreso = data.get('fecha_ingreso') if data.get('fecha_ingreso') else None
+        t.fecha_ingreso = _parse_date(data.get('fecha_ingreso'))
         t.descripcion_servicio = data.get('descripcion_servicio')
-        t.inicio = data.get('inicio') if data.get('inicio') else None
-        t.termino_prueba = data.get('termino_prueba') if data.get('termino_prueba') else None
-        t.fecha_baja = data.get('fecha_baja') if data.get('fecha_baja') else None
+        t.inicio = _parse_date(data.get('inicio'))
+        t.termino_prueba = _parse_date(data.get('termino_prueba'))
+        t.fecha_baja = _parse_date(data.get('fecha_baja'))
         
         # Generales
         t.curp = data.get('curp')
         t.rfc = data.get('rfc')
         t.nss = data.get('nss')
-        t.fecha_nacimiento = data.get('fecha_nacimiento') if data.get('fecha_nacimiento') else None
+        t.fecha_nacimiento = _parse_date(data.get('fecha_nacimiento'))
         t.sexo = data.get('sexo')
         t.estado_civil = data.get('estado_civil')
         t.nacionalidad = data.get('nacionalidad')

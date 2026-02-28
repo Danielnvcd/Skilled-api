@@ -19,10 +19,19 @@ def index():
 def crear():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+        
+        if not data.get('trabajador_id') or not data.get('monto_total') or not data.get('plazo_semanas') or not data.get('descuento_semanal'):
+            return jsonify({'success': False, 'message': 'Faltan campos obligatorios.'}), 400
+        
         trabajador_id = int(data['trabajador_id'])
         monto_total = float(data['monto_total'])
         plazo_semanas = int(data['plazo_semanas'])
         descuento_semanal = float(data['descuento_semanal'])
+        
+        if monto_total <= 0 or descuento_semanal <= 0 or plazo_semanas <= 0:
+            return jsonify({'success': False, 'message': 'El monto, plazo y descuento deben ser mayores a cero.'}), 400
         motivo = data.get('motivo', '')
         frecuencia = data.get('frecuencia', 'semanal')
         fecha_inicio_str = data.get('fecha_inicio')
@@ -54,23 +63,48 @@ def crear():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al crear préstamo: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Ocurrió un error al crear el préstamo.'}), 500
 
 @bp.route('/editar/<int:id>', methods=['POST'])
 @login_required
 def editar(id):
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+        
         prestamo = Prestamo.query.get_or_404(id)
         
         if prestamo.estado == 'LIQUIDADO':
             return jsonify({'success': False, 'message': 'No se puede editar un préstamo liquidado.'}), 400
         
-        prestamo.monto_total = float(data.get('monto_total', prestamo.monto_total))
-        prestamo.plazo_semanas = int(data.get('plazo_semanas', prestamo.plazo_semanas))
-        prestamo.descuento_semanal = float(data.get('descuento_semanal', prestamo.descuento_semanal))
+        nuevo_monto = float(data.get('monto_total', prestamo.monto_total))
+        nuevo_descuento = float(data.get('descuento_semanal', prestamo.descuento_semanal))
+        nuevo_plazo = int(data.get('plazo_semanas', prestamo.plazo_semanas))
+        
+        if nuevo_monto <= 0 or nuevo_descuento <= 0 or nuevo_plazo <= 0:
+            return jsonify({'success': False, 'message': 'El monto, plazo y descuento deben ser mayores a cero.'}), 400
+        
+        # Calcular lo ya abonado para validar y recalcular
+        total_abonado = sum(
+            float(a.monto) for a in AbonoPrestamo.query.filter_by(prestamo_id=id).all()
+        )
+        
+        # Impedir reducir el monto por debajo de lo ya pagado
+        if nuevo_monto < total_abonado:
+            return jsonify({
+                'success': False, 
+                'message': f'El monto total (${nuevo_monto:.2f}) no puede ser menor a lo ya abonado (${total_abonado:.2f}).'
+            }), 400
+        
+        prestamo.monto_total = nuevo_monto
+        prestamo.plazo_semanas = nuevo_plazo
+        prestamo.descuento_semanal = nuevo_descuento
         prestamo.motivo = data.get('motivo', prestamo.motivo)
         prestamo.frecuencia = data.get('frecuencia', prestamo.frecuencia)
+        
+        # Recalcular monto restante con base en lo abonado
+        prestamo.monto_restante = nuevo_monto - total_abonado
         
         if data.get('fecha_inicio'):
             prestamo.fecha_inicio = datetime.strptime(data['fecha_inicio'], '%Y-%m-%d').date()
@@ -78,19 +112,26 @@ def editar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(prestamo.trabajador_id)
         
-        log_action(f'editar_prestamo: Préstamo #{id} modificado')
+        log_action(f'editar_prestamo: Préstamo #{id} modificado. Nuevo total: ${nuevo_monto:.2f}, Restante: ${prestamo.monto_restante:.2f}')
         return jsonify({'success': True, 'message': 'Préstamo actualizado correctamente.'})
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al editar préstamo: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Ocurrió un error al editar el préstamo.'}), 500
 
 @bp.route('/abonar/<int:id>', methods=['POST'])
 @login_required
 def abonar(id):
     try:
         data = request.get_json()
+        if not data or 'monto' not in data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o monto no proporcionado.'}), 400
+        
         monto_abono = float(data['monto'])
+        
+        if monto_abono <= 0:
+            return jsonify({'success': False, 'message': 'El monto del abono debe ser mayor a cero.'}), 400
+        
         prestamo = Prestamo.query.get_or_404(id)
         
         if prestamo.estado == 'LIQUIDADO':
@@ -127,7 +168,7 @@ def abonar(id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al abonar préstamo: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Ocurrió un error al registrar el abono.'}), 500
 
 @bp.route('/liquidar/<int:id>', methods=['POST'])
 @login_required
