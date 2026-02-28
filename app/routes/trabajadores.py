@@ -68,7 +68,9 @@ def agregar():
             # Médicos
             tipo_sangre=data.get('tipo_sangre'),
             alergias=data.get('alergias'),
+            enfermedades_cronicas=data.get('enfermedades_cronicas'),
             contacto_emergencia=data.get('contacto_emergencia'),
+            parentesco_contacto=data.get('parentesco_contacto'),
             numero_contacto_emerg=data.get('numero_contacto_emerg'),
             lentes=data.get('lentes'),
             licencia_conducir=data.get('licencia_conducir'),
@@ -187,7 +189,9 @@ def get_trabajador(id):
         # Medicos
         'tipo_sangre': t.tipo_sangre or '',
         'alergias': t.alergias or '',
+        'enfermedades_cronicas': t.enfermedades_cronicas or '',
         'contacto_emergencia': t.contacto_emergencia or '',
+        'parentesco_contacto': t.parentesco_contacto or '',
         'numero_contacto_emerg': t.numero_contacto_emerg or '',
         'lentes': t.lentes or '',
         'licencia_conducir': t.licencia_conducir or '',
@@ -267,7 +271,9 @@ def editar(id):
         # Medicos
         t.tipo_sangre = data.get('tipo_sangre')
         t.alergias = data.get('alergias')
+        t.enfermedades_cronicas = data.get('enfermedades_cronicas')
         t.contacto_emergencia = data.get('contacto_emergencia')
+        t.parentesco_contacto = data.get('parentesco_contacto')
         t.numero_contacto_emerg = data.get('numero_contacto_emerg')
         t.lentes = data.get('lentes')
         t.licencia_conducir = data.get('licencia_conducir')

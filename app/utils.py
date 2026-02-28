@@ -89,9 +89,9 @@ def login_required(f):
             
         # Restricción estricta para el rol coordinador
         if session.get('role') == 'coordinador':
-            allowed_prefixes = ['horas.', 'auth.']
+            allowed_prefixes = ['horas.', 'auth.', 'ficha.']
             if request.endpoint and not any(request.endpoint.startswith(p) for p in allowed_prefixes):
-                flash('Acceso denegado. Tu rol solo permite acceder al Registro de Horas.', 'warning')
+                flash('Acceso denegado. Tu rol solo permite acceder al Registro de Horas y Ficha Técnica.', 'warning')
                 return redirect(url_for('horas.index'))
                 
         return f(*args, **kwargs)

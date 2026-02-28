@@ -457,8 +457,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     safeSetText('viewNacimiento', data.fecha_nacimiento || '---');
                     safeSetText('viewSangre', data.tipo_sangre || 'N/A');
                     safeSetText('viewAlergias', data.alergias || 'Ninguna');
+                    safeSetText('viewEnfermedades', data.enfermedades_cronicas || 'Ninguna');
 
                     safeSetText('viewContactoE', data.contacto_emergencia || 'No registrado');
+                    safeSetText('viewParentescoE', data.parentesco_contacto || 'No registrado');
                     safeSetText('viewTelefonoE', data.numero_contacto_emerg || 'No registrado');
 
                     safeSetText('viewIngreso', data.fecha_ingreso || '---');

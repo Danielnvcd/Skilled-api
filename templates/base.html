@@ -212,6 +212,13 @@
                 <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Coordinadores">
                 Reporte de Horas
             </a>
+            {% if session.get('role') == 'coordinador' %}
+            <a href="{{ url_for('ficha.index') }}" class="{{ 'active' if request.endpoint == 'ficha.index' }}">
+                <i class="fa-regular fa-address-card menu-icon"
+                    style="font-size: 18px; text-align: center; margin-right: 12px;"></i>
+                Ficha Técnica
+            </a>
+            {% endif %}
             {% if session.get('role') == 'admin' %}
             <a href="{{ url_for('users.list_users') }}"
                 class="{{ 'active' if request.endpoint == 'users.list_users' }}">
@@ -242,6 +249,8 @@
 
         {% block content %}{% endblock %}
     </div>
+
+    {% block scripts %}{% endblock %}
 </body>
 
 </html>

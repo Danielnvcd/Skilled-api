@@ -146,6 +146,23 @@ def guardar_registro(reporte_id):
             hora_entrada = datetime.strptime(hora_entrada_str, '%H:%M').time()
             hora_salida = datetime.strptime(hora_salida_str, '%H:%M').time()
             
+            # --- Validar cruce de horarios ---
+            # Buscar registros del mismo trabajador en la misma fecha (en cualquier reporte borrador)
+            registros_existentes = RegistroDiarioHoras.query.join(ReporteSemanal).filter(
+                RegistroDiarioHoras.trabajador_id == trabajador.id,
+                RegistroDiarioHoras.fecha == fecha,
+                ReporteSemanal.estado == 'BORRADOR', # Solo validamos contra reportes que aún se pueden editar
+                RegistroDiarioHoras.id != reporte.id # Ignorar este mismo registro si fuera edición (aunque aquí es creación nueva)
+            ).all()
+
+            for reg in registros_existentes:
+                if reg.hora_entrada and reg.hora_salida:
+                    # Lógica de traslape: (StartA < EndB) and (EndA > StartB)
+                    if hora_entrada < reg.hora_salida and hora_salida > reg.hora_entrada:
+                        flash(f"Error: El horario ({hora_entrada_str} a {hora_salida_str}) choca con un registro existente en el proyecto '{reg.reporte.proyecto.nombre}' ({reg.hora_entrada.strftime('%H:%M')} a {reg.hora_salida.strftime('%H:%M')}).", "danger")
+                        return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            # --- Fin validación cruce ---
+
             # Importar cálculo
             from app.utils import calcular_horas_productivas
             horas_productivas = calcular_horas_productivas(
@@ -203,6 +220,11 @@ def eliminar_registro(registro_id):
 def cerrar_reporte(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
     if reporte.estado == 'BORRADOR':
+        # Validar que tenga al menos un registro de horas
+        if not reporte.registros:
+            flash("No se puede cerrar el reporte sin horas registradas. Añade al menos un registro para cerrarlo.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            
         reporte.estado = 'TERMINADO'
         db.session.commit()
         log_action(f"Cerró reporte semanal ID: {reporte.id} Proyecto: {reporte.proyecto.numero_proyecto}")

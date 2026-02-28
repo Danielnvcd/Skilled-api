@@ -43,6 +43,7 @@ def home():
     
     # Alertas: Cumpleaños del Mes
     cumpleañeros = Trabajador.query.filter(
+        Trabajador.activo == True,
         extract('month', Trabajador.fecha_nacimiento) == current_month
     ).all()
     

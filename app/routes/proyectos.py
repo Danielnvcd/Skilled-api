@@ -38,7 +38,7 @@ def agregar():
         if nuevo_proyecto.coordinador_id:
             sup = User.query.get(nuevo_proyecto.coordinador_id)
             if sup:
-                coordinador_name = sup.full_name or sup.username
+                coordinador_name = sup.username
         
         # Checkbox is simple 'on' if checked, else omitted in form.
         nuevo_proyecto.activo = 'activo' in data
@@ -110,7 +110,7 @@ def editar(id):
         if p.coordinador_id:
             sup = User.query.get(p.coordinador_id)
             if sup:
-                coordinador_name = sup.full_name or sup.username
+                coordinador_name = sup.username
         
         # Participantes
         try:

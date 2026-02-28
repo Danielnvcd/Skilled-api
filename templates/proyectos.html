@@ -95,7 +95,7 @@
                         <span class="badge" style="background: #fee2e2; color: #991b1b;">Inactivo</span>
                         {% endif %}
                     </td>
-                    <td>{{ (p.coordinador.full_name or p.coordinador.username) if p.coordinador else 'Sin Asignar' }}
+                    <td>{{ p.coordinador.username if p.coordinador else 'Sin Asignar' }}
                     </td>
                     <td>{{ p.participantes|length }} Empleados</td>
                     <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at else '-' }}</td>
@@ -157,7 +157,7 @@
                             <select name="coordinador_id" class="form-control">
                                 <option value="">--- Sin Coordinador ---</option>
                                 {% for s in coordinadores %}
-                                <option value="{{ s.id }}">{{ s.full_name or s.username }}</option>
+                                <option value="{{ s.id }}">{{ s.username }}</option>
                                 {% endfor %}
                             </select>
                         </div>

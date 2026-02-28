@@ -82,7 +82,9 @@ class Trabajador(db.Model):
     # Datos Médicos / Emergencia
     tipo_sangre = db.Column(db.String(10))
     alergias = db.Column(db.Text)
+    enfermedades_cronicas = db.Column(db.Text)
     contacto_emergencia = db.Column(db.String(200))
+    parentesco_contacto = db.Column(db.String(100))
     numero_contacto_emerg = db.Column(db.String(20))
     lentes = db.Column(db.String(20))
     licencia_conducir = db.Column(db.String(50))
