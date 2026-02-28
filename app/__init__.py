@@ -43,7 +43,12 @@ def create_app():
         except Exception:
             return str(dt)
 
-    secret_key = os.environ.get('SECRET_KEY', 'dev_key_for_testing') # Fallback for now
+    # Intentamos obtener la clave del entorno
+    secret_key = os.environ.get('SECRET_KEY')
+    
+    # Si no existe, DETENEMOS la aplicación con un error claro
+    if not secret_key:
+        raise RuntimeError("CRÍTICO: No se encontró SECRET_KEY en las variables de entorno. La aplicación no puede arrancar de forma segura.")
     
     app.config['SECRET_KEY'] = secret_key
     app.config['BASE_DIR'] = BASE_DIR

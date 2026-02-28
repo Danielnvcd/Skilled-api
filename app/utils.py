@@ -81,19 +81,48 @@ def allowed_file(file_storage):
 
     return True
 
+# ──────────────────────────────────────────────
+# Matriz declarativa: rol → blueprints permitidos
+# '*' = acceso total.  Agregar/quitar permisos aquí.
+# ──────────────────────────────────────────────
+ROLE_PERMISSIONS = {
+    'super_admin': {
+        'allowed': '*',
+        'default_redirect': 'main.home',
+    },
+    'admin': {
+        'allowed': '*',
+        'default_redirect': 'main.home',
+    },
+    'coordinador': {
+        'allowed': ['horas.', 'auth.', 'ficha.'],
+        'default_redirect': 'horas.index',
+        'deny_message': 'Acceso denegado. Tu rol solo permite acceder al Registro de Horas y Ficha Técnica.',
+    },
+}
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('auth.login'))
-            
-        # Restricción estricta para el rol coordinador
-        if session.get('role') == 'coordinador':
-            allowed_prefixes = ['horas.', 'auth.', 'ficha.']
-            if request.endpoint and not any(request.endpoint.startswith(p) for p in allowed_prefixes):
-                flash('Acceso denegado. Tu rol solo permite acceder al Registro de Horas y Ficha Técnica.', 'warning')
-                return redirect(url_for('horas.index'))
-                
+
+        role = session.get('role', '')
+        perms = ROLE_PERMISSIONS.get(role)
+
+        # Rol desconocido → denegar por defecto
+        if not perms:
+            flash('Acceso denegado. Rol no reconocido.', 'danger')
+            return redirect(url_for('auth.login'))
+
+        allowed = perms['allowed']
+
+        # '*' = acceso total, no requiere más validación
+        if allowed != '*' and request.endpoint:
+            if not any(request.endpoint.startswith(p) for p in allowed):
+                flash(perms.get('deny_message', 'Acceso denegado.'), 'warning')
+                return redirect(url_for(perms['default_redirect']))
+
         return f(*args, **kwargs)
     return decorated_function
 
@@ -104,19 +133,6 @@ def admin_required(f):
             flash('Acceso denegado.', 'danger')
             return redirect(url_for('main.home'))
         return f(*args, **kwargs)
-    return decorated_function
-
-SUPER_ADMINS = ['Vanesa Rivera', 'Daniel']
-
-def super_admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if session.get('role') == 'super_admin' or \
-           (session.get('user') in SUPER_ADMINS):
-            return f(*args, **kwargs)
-            
-        flash('Acceso denegado. Se requieren permisos de Super Administrador.', 'danger')
-        return redirect(url_for('main.home'))
     return decorated_function
 
 from datetime import datetime, date

@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.extensions import db, limiter
+from app.extensions import db, limiter, get_redis
 from app.models import User
-from app.utils import log_action, login_required, super_admin_required
+from app.utils import log_action, login_required
 import pyotp
 import qrcode
 import io
@@ -15,6 +15,11 @@ bp = Blueprint('auth', __name__)
 @login_required
 def profile():
     user = User.query.get(session['user_id'])
+    
+    if not user:
+        session.clear()
+        flash('Tu sesión es inválida. Por favor inicia sesión de nuevo.', 'danger')
+        return redirect(url_for('auth.login'))
     
     if request.method == 'POST':
         new_password = request.form.get('new_password')
@@ -34,17 +39,39 @@ def profile():
 
 @bp.before_app_request
 def update_last_seen():
-    if 'user_id' in session:
+    if 'user_id' not in session:
+        return
+    if request.endpoint and 'static' in request.endpoint:
+        return
+
+    user_id = session['user_id']
+    r = get_redis()
+
+    if r:
+        # Si la key existe en Redis, significa que ya actualizamos hace menos de 5 min
+        cache_key = f"last_seen:{user_id}"
+        if r.get(cache_key):
+            return  # Aún no toca actualizar
+
+        # Key expiró o no existe → actualizar BD y renovar cache
         try:
-            user_id = session['user_id']
-            if request.endpoint and 'static' not in request.endpoint:
-                from datetime import datetime
-                user = User.query.get(user_id)
-                if user:
-                    user.last_seen = datetime.now()
-                    db.session.commit()
+            user = User.query.get(user_id)
+            if user:
+                user.last_seen = datetime.now()
+                db.session.commit()
+                r.setex(cache_key, 300, "1")  # TTL de 5 minutos
         except Exception as e:
-            print(f"Error updating last_seen: {e}")
+            current_app.logger.warning(f"Error updating last_seen: {e}")
+            db.session.rollback()
+    else:
+        # Fallback sin Redis: actualizar siempre (comportamiento original)
+        try:
+            user = User.query.get(user_id)
+            if user:
+                user.last_seen = datetime.now()
+                db.session.commit()
+        except Exception as e:
+            current_app.logger.warning(f"Error updating last_seen: {e}")
             db.session.rollback()
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -89,7 +116,7 @@ def verify_2fa():
         code = request.form.get('code')
         
         totp = pyotp.TOTP(user.totp_secret)
-        if totp.verify(code):
+        if totp.verify(code, valid_window=1):
             session.pop('pre_2fa_user_id', None)
             session['user_id'] = user.id
             session['user'] = user.username
@@ -101,6 +128,7 @@ def verify_2fa():
                 return redirect(url_for('horas.index'))
             return redirect(url_for('main.home'))
         else:
+            log_action(f"2FA fallido para {user.username}")
             flash('Código incorrecto.', 'danger')
             
     return render_template('verify_2fa.html')
@@ -119,7 +147,7 @@ def setup_2fa():
             return redirect(url_for('auth.setup_2fa'))
             
         totp = pyotp.TOTP(secret)
-        if totp.verify(code):
+        if totp.verify(code, valid_window=1):
             user.totp_secret = secret
             db.session.commit()
             session.pop('totp_secret_setup', None)
@@ -127,6 +155,7 @@ def setup_2fa():
             log_action(f"2FA activado para {user.username}")
             return redirect(url_for('main.home'))
         else:
+            log_action(f"2FA setup: código incorrecto para {user.username}")
             flash('Código incorrecto.', 'danger')
 
     if 'totp_secret_setup' not in session:
@@ -149,6 +178,13 @@ def setup_2fa():
 @bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
+    # Registrar actividad ANTES de limpiar sesión
+    user = User.query.get(session.get('user_id'))
+    if user:
+        user.last_seen = datetime.now()
+        db.session.commit()
+    log_action("Logout")
+    
     session.clear()
     flash('Sesión cerrada correctamente.', 'info')
     return redirect(url_for('auth.login'))

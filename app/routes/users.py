@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from werkzeug.security import generate_password_hash
 from app.models import User
 from app.extensions import db
@@ -43,7 +43,8 @@ def add_user():
         flash('Usuario creado exitosamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al crear usuario: {e}', 'danger')
+        current_app.logger.error(f'Error al crear usuario: {e}')
+        flash('Ocurrió un error al crear el usuario. Intenta de nuevo.', 'danger')
 
     return redirect(url_for('users.list_users'))
 
@@ -63,7 +64,8 @@ def update_profile(user_id):
         flash(f'Perfil actualizado para {user.username}.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al actualizar perfil: {e}', 'danger')
+        current_app.logger.error(f'Error al actualizar perfil: {e}')
+        flash('Ocurrió un error al actualizar el perfil. Intenta de nuevo.', 'danger')
 
     return redirect(url_for('users.list_users'))
 
@@ -85,7 +87,8 @@ def update_password(user_id):
         flash(f'Contraseña actualizada para {user.username}.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al actualizar contraseña: {e}', 'danger')
+        current_app.logger.error(f'Error al actualizar contraseña: {e}')
+        flash('Ocurrió un error al actualizar la contraseña. Intenta de nuevo.', 'danger')
 
     return redirect(url_for('users.list_users'))
 
@@ -93,10 +96,12 @@ def update_password(user_id):
 @login_required
 @admin_required
 def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
+    # Bloquear auto-eliminación
+    if user_id == session.get('user_id'):
+        flash('No puedes eliminar tu propia cuenta.', 'danger')
+        return redirect(url_for('users.list_users'))
     
-    # Prevent self-deletion if desired, though not explicitly requested, it's good practice.
-    # But let's stick to "eliminarlos" request.
+    user = User.query.get_or_404(user_id)
     
     try:
         db.session.delete(user)
@@ -104,6 +109,7 @@ def delete_user(user_id):
         flash('Usuario eliminado exitosamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al eliminar usuario: {e}', 'danger')
+        current_app.logger.error(f'Error al eliminar usuario: {e}')
+        flash('Ocurrió un error al eliminar el usuario. Intenta de nuevo.', 'danger')
 
     return redirect(url_for('users.list_users'))
