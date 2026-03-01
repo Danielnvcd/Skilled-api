@@ -309,7 +309,14 @@ def cerrar_prenomina(fecha_str):
                     descuento = float(prestamo.descuento_semanal)
                     restante = float(prestamo.monto_restante)
                     
-                    if descuento <= 0 or restante <= 0:
+                    # Si el saldo ya está en 0, marcar como liquidado y saltar (sin registrar abono)
+                    if restante <= 0:
+                        prestamo.monto_restante = 0
+                        prestamo.estado = 'LIQUIDADO'
+                        prestamo.activo = False
+                        continue
+                    
+                    if descuento <= 0:
                         continue
                     
                     # Abono real = lo menor entre el descuento programado y lo que falta por pagar

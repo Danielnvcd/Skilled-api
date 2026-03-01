@@ -18,7 +18,7 @@ def index():
 @login_required
 def crear():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
         if not data:
             return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
         

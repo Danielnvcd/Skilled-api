@@ -172,6 +172,10 @@ def guardar_registro(reporte_id):
             hora_entrada = datetime.strptime(hora_entrada_str, '%H:%M').time()
             hora_salida = datetime.strptime(hora_salida_str, '%H:%M').time()
             
+            if hora_entrada == hora_salida:
+                flash("La hora de salida debe ser distinta a la hora de entrada.", "danger")
+                return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            
             # --- Validar cruce de horarios ---
             # Buscar registros del mismo trabajador en la misma fecha (en cualquier reporte borrador)
             registros_existentes = RegistroDiarioHoras.query.join(ReporteSemanal).filter(
