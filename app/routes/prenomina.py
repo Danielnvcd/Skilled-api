@@ -307,22 +307,29 @@ def cerrar_prenomina(fecha_str):
                 prestamos_activos = Prestamo.query.filter_by(trabajador_id=p.trabajador_id, estado='ACTIVO').all()
                 for prestamo in prestamos_activos:
                     descuento = float(prestamo.descuento_semanal)
-                    if descuento > 0:
-                        abono = AbonoPrestamo(
-                            prestamo_id=prestamo.id,
-                            monto=descuento,
-                            fecha_abono=datetime.now().date(),
-                            tipo='NOMINA',
-                            registrado_por_id=session.get('user_id'),
-                            notas=f'Descuento automático por prenómina del {fecha_str}'
-                        )
-                        db.session.add(abono)
-                        
-                        prestamo.monto_restante = max(0, float(prestamo.monto_restante) - descuento)
-                        if prestamo.monto_restante <= 0:
-                            prestamo.monto_restante = 0
-                            prestamo.estado = 'LIQUIDADO'
-                            prestamo.activo = False
+                    restante = float(prestamo.monto_restante)
+                    
+                    if descuento <= 0 or restante <= 0:
+                        continue
+                    
+                    # Abono real = lo menor entre el descuento programado y lo que falta por pagar
+                    abono_real = min(descuento, restante)
+                    
+                    abono = AbonoPrestamo(
+                        prestamo_id=prestamo.id,
+                        monto=abono_real,
+                        fecha_abono=datetime.now().date(),
+                        tipo='NOMINA',
+                        registrado_por_id=session.get('user_id'),
+                        notas=f'Descuento automático por prenómina del {fecha_str}'
+                    )
+                    db.session.add(abono)
+                    
+                    prestamo.monto_restante = restante - abono_real
+                    if prestamo.monto_restante <= 0:
+                        prestamo.monto_restante = 0
+                        prestamo.estado = 'LIQUIDADO'
+                        prestamo.activo = False
         
         db.session.commit()
         log_action(f'cerrar_prenomina: Nómina global cerrada para la semana {fecha_str}')
@@ -330,17 +337,30 @@ def cerrar_prenomina(fecha_str):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error al cerrar prenómina: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Ocurrió un error al cerrar la prenómina.'}), 500
 
 @bp.route('/api/descuento', methods=['POST'])
 @login_required
 def api_agregar_descuento():
     try:
-        data = request.get_json()
-        prenomina_id = int(data['prenomina_id'])
-        tipo = data['tipo'] # INCIDENCIA, MANUAL, PRESTAMO
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+        
+        # Validar campos requeridos
+        campos_requeridos = ['prenomina_id', 'tipo', 'concepto', 'monto']
+        faltantes = [c for c in campos_requeridos if not data.get(c)]
+        if faltantes:
+            return jsonify({'success': False, 'message': f'Faltan campos obligatorios: {", ".join(faltantes)}'}), 400
+        
+        try:
+            prenomina_id = int(data['prenomina_id'])
+            monto = float(data['monto'])
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'prenomina_id y monto deben ser numéricos.'}), 400
+        
+        tipo = data['tipo']
         concepto = data['concepto']
-        monto = float(data['monto'])
         fecha_inc = data.get('fecha_incidencia')
         
         if monto <= 0:
@@ -395,9 +415,21 @@ def api_eliminar_descuento(id):
 @login_required
 def api_agregar_deposito():
     try:
-        data = request.get_json()
-        prenomina_id = int(data['prenomina_id'])
-        monto = float(data['monto'])
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+        
+        campos_requeridos = ['prenomina_id', 'monto', 'concepto']
+        faltantes = [c for c in campos_requeridos if not data.get(c)]
+        if faltantes:
+            return jsonify({'success': False, 'message': f'Faltan campos obligatorios: {", ".join(faltantes)}'}), 400
+        
+        try:
+            prenomina_id = int(data['prenomina_id'])
+            monto = float(data['monto'])
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'prenomina_id y monto deben ser numéricos.'}), 400
+        
         concepto = data['concepto']
         
         if monto <= 0:

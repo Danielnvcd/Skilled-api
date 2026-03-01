@@ -115,6 +115,11 @@ def verify_2fa():
         user = User.query.get(session['pre_2fa_user_id'])
         code = request.form.get('code')
         
+        if not user or not user.totp_secret:
+            session.pop('pre_2fa_user_id', None)
+            flash('Sesión inválida. Inicia sesión de nuevo.', 'danger')
+            return redirect(url_for('auth.login'))
+        
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(code, valid_window=1):
             session.pop('pre_2fa_user_id', None)

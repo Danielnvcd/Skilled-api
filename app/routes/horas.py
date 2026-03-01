@@ -182,8 +182,8 @@ def guardar_registro(reporte_id):
 
             for reg in registros_existentes:
                 if reg.hora_entrada and reg.hora_salida:
-                    # Lógica de traslape: (StartA < EndB) and (EndA > StartB)
-                    if hora_entrada < reg.hora_salida and hora_salida > reg.hora_entrada:
+                    from app.utils import turnos_se_traslapan
+                    if turnos_se_traslapan(hora_entrada, hora_salida, reg.hora_entrada, reg.hora_salida):
                         flash(f"Error: El horario ({hora_entrada_str} a {hora_salida_str}) choca con un registro existente en el proyecto '{reg.reporte.proyecto.nombre}' ({reg.hora_entrada.strftime('%H:%M')} a {reg.hora_salida.strftime('%H:%M')}).", "danger")
                         return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             # --- Fin validación cruce ---

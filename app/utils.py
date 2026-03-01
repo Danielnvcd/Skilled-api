@@ -135,7 +135,41 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+
+def _time_to_minutes(t):
+    """Convierte un time a minutos desde 00:00."""
+    return t.hour * 60 + t.minute
+
+def turnos_se_traslapan(entrada_a, salida_a, entrada_b, salida_b):
+    """
+    Detecta traslape entre dos turnos usando objetos time.
+    Maneja correctamente turnos que cruzan medianoche (ej. 22:00 → 02:00).
+    """
+    a_start = _time_to_minutes(entrada_a)
+    a_end = _time_to_minutes(salida_a)
+    b_start = _time_to_minutes(entrada_b)
+    b_end = _time_to_minutes(salida_b)
+    
+    # Si el turno cruza medianoche, extender fin +24h
+    if a_end <= a_start:
+        a_end += 1440
+    if b_end <= b_start:
+        b_end += 1440
+
+    # Chequeo directo
+    if a_start < b_end and a_end > b_start:
+        return True
+    
+    # Chequeo con turno B desplazado +24h (cubre caso donde ambos cruzan medianoche
+    # o están en "días" distintos dentro de la ventana de 48h)
+    if a_start < (b_end + 1440) and a_end > (b_start + 1440):
+        return True
+    if (a_start + 1440) < b_end and (a_end + 1440) > b_start:
+        return True
+    
+    return False
+
 
 def calcular_horas_productivas(hora_entrada, hora_salida, tipo_nomina, tomo_comida):
     """
