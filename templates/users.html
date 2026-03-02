@@ -73,11 +73,10 @@
                 </svg>
                 Contraseña
             </button>
-            <button class="btn-action btn-edit btn-edit-profile" data-id="{{ user.id }}"
+            <button class="btn-action btn-profile btn-edit-profile" data-id="{{ user.id }}"
                 data-username="{{ user.username }}" data-fullname="{{ user.full_name or '' }}"
                 data-area="{{ user.area or '' }}" data-position="{{ user.position or '' }}"
-                data-contact="{{ user.contact_info or '' }}"
-                style="background-color: var(--primary); margin-left: -2px;">
+                data-contact="{{ user.contact_info or '' }}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -146,8 +145,7 @@
                 <label>Nueva Contraseña Segura</label>
                 <input type="password" name="new_password" placeholder="" required autocomplete="new-password">
             </div>
-            <button type="submit" class="btn-submit"
-                style="background: var(--warning); box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.2);">Actualizar
+            <button type="submit" class="btn-submit">Actualizar
                 Contraseña</button>
         </form>
     </div>

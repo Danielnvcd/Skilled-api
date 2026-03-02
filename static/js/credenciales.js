@@ -21,21 +21,91 @@ document.addEventListener('DOMContentLoaded', function () {
     let currentWorkerId = null;
     let credentialsArray = [];
 
+    // === VIEW FICHA MODAL LOGIC ===
+    const viewFichaModal = document.getElementById('viewFichaModal');
+    const btnCloseFicha = document.getElementById('btnCloseFicha');
+
+    function closeFichaModal() {
+        if (viewFichaModal) viewFichaModal.classList.remove('active');
+    }
+
+    if (btnCloseFicha) btnCloseFicha.addEventListener('click', closeFichaModal);
+    if (viewFichaModal) {
+        viewFichaModal.addEventListener('click', function (e) {
+            if (e.target === viewFichaModal) closeFichaModal();
+        });
+    }
+
+    document.querySelectorAll('.btn-view-ficha').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var name = btn.getAttribute('data-name') || '-';
+            var empno = btn.getAttribute('data-empno') || '-';
+            var puesto = btn.getAttribute('data-puesto') || '-';
+            var area = btn.getAttribute('data-area') || '-';
+            var tipopago = btn.getAttribute('data-tipopago') || '-';
+            var coord = btn.getAttribute('data-coord') || '-';
+            var ubicacion = btn.getAttribute('data-ubicacion') || '-';
+            var celular = btn.getAttribute('data-celular') || '-';
+            var observaciones = btn.getAttribute('data-observaciones') || '';
+            var credIds = {};
+
+            try { credIds = JSON.parse(btn.getAttribute('data-credids') || '{}'); } catch (e) { }
+
+            // Populate modal
+            document.getElementById('fichaAvatar').textContent = name.charAt(0).toUpperCase();
+            document.getElementById('fichaName').textContent = name;
+            document.getElementById('fichaEmpNo').textContent = 'No. ' + empno;
+            document.getElementById('fichaPuesto').textContent = puesto;
+            document.getElementById('fichaArea').textContent = area;
+            document.getElementById('fichaTipoPago').textContent = tipopago;
+            document.getElementById('fichaCoord').textContent = coord;
+            document.getElementById('fichaUbicacion').textContent = ubicacion;
+            document.getElementById('fichaCelular').textContent = celular;
+
+            var obsRow = document.getElementById('fichaObsRow');
+            if (observaciones) {
+                obsRow.style.display = '';
+                document.getElementById('fichaObs').textContent = observaciones;
+            } else {
+                obsRow.style.display = 'none';
+            }
+
+            // Build credential chips
+            var chipsContainer = document.getElementById('fichaCredChips');
+            var plants = Object.keys(credIds);
+            if (plants.length > 0) {
+                chipsContainer.innerHTML = '';
+                plants.forEach(function (planta) {
+                    var chip = document.createElement('div');
+                    chip.className = 'cred-chip cred-active';
+                    chip.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981; margin-right: 4px;"></i>' +
+                        '<strong>' + planta + '</strong>' +
+                        '<span class="cred-id">' + credIds[planta] + '</span>';
+                    chipsContainer.appendChild(chip);
+                });
+            } else {
+                chipsContainer.innerHTML = '<p style="color: #9ca3af; font-size: 0.85rem; margin: 0;">Sin credenciales registradas</p>';
+            }
+
+            viewFichaModal.classList.add('active');
+        });
+    });
+
     // === SEARCH / FILTER LOGIC ===
     if (searchInput) {
         searchInput.addEventListener('keyup', function () {
-            let filter = this.value.toUpperCase();
-            let table = document.getElementById("workersTable");
-            let tr = table.getElementsByTagName("tr");
+            var filter = this.value.toUpperCase();
+            var table = document.getElementById("workersTable");
+            var rows = table.querySelectorAll('tbody tr.worker-row');
 
-            for (let i = 1; i < tr.length; i++) {
-                let txtValue = tr[i].textContent || tr[i].innerText;
+            rows.forEach(function (row) {
+                var txtValue = row.textContent || row.innerText;
                 if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                    tr[i].style.display = "";
+                    row.style.display = "";
                 } else {
-                    tr[i].style.display = "none";
+                    row.style.display = "none";
                 }
-            }
+            });
         });
     }
 
