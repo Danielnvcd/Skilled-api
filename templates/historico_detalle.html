@@ -45,33 +45,101 @@
 
         <div class="project-body">
             {% if datos.prenominas %}
-            <div style="overflow-x: auto;">
-                <table class="worker-table">
+            <div class="table-scroll-wrapper">
+                <table class="worker-table worker-table--detail">
                     <thead>
                         <tr>
-                            <th width="15%">No. Empleado</th>
-                            <th width="40%">Nombre</th>
-                            <th width="20%">Tipo Pago</th>
-                            <th width="25%" style="text-align: right;">Monto Neto Pagado</th>
+                            <th class="col-sticky col-sticky--first">No. Emp</th>
+                            <th class="col-sticky col-sticky--second">Nombre</th>
+                            <th>Tipo Jornada</th>
+                            <th class="col-money">Salario Base</th>
+                            <th class="col-money">Pago Viáticos</th>
+                            <th class="col-money">Depósitos Otros</th>
+                            <th class="col-money">Dep. Préstamos</th>
+                            <th class="col-money">INFONAVIT</th>
+                            <th class="col-money">Ajuste INBURSA</th>
+                            <th class="col-money">Desc. Otros</th>
+                            <th class="col-money">Desc. Préstamos</th>
+                            <th class="col-money">Desc. Incidencias</th>
+                            <th class="col-money">Recup. Manual</th>
+                            <th class="col-money col-total-percep">Total Percepciones</th>
+                            <th class="col-money col-total-deduc">Total Deducciones</th>
+                            <th class="col-money col-neto">Neto a Depositar</th>
+                            <th>Tipo Pago</th>
                         </tr>
                     </thead>
                     <tbody>
+                        {% set ns = namespace(
+                        sum_salario=0, sum_viaticos=0, sum_dep_otros=0, sum_dep_prest=0,
+                        sum_infonavit=0, sum_inbursa=0, sum_desc_otros=0, sum_desc_prest=0,
+                        sum_desc_inc=0, sum_recup=0, sum_percepciones=0, sum_deducciones=0, sum_neto=0
+                        ) %}
                         {% for pren in datos.prenominas %}
+                        {% set ns.sum_salario = ns.sum_salario + (pren.salario_base or 0)|float %}
+                        {% set ns.sum_viaticos = ns.sum_viaticos + (pren.pago_viaticos or 0)|float %}
+                        {% set ns.sum_dep_otros = ns.sum_dep_otros + (pren.depositos_otros or 0)|float %}
+                        {% set ns.sum_dep_prest = ns.sum_dep_prest + (pren.depositos_prestamos or 0)|float %}
+                        {% set ns.sum_infonavit = ns.sum_infonavit + (pren.descuento_infonavit or 0)|float %}
+                        {% set ns.sum_inbursa = ns.sum_inbursa + (pren.ajuste_inbursa or 0)|float %}
+                        {% set ns.sum_desc_otros = ns.sum_desc_otros + (pren.descuentos_otros or 0)|float %}
+                        {% set ns.sum_desc_prest = ns.sum_desc_prest + (pren.descuento_prestamos or 0)|float %}
+                        {% set ns.sum_desc_inc = ns.sum_desc_inc + (pren.descuento_incidencias or 0)|float %}
+                        {% set ns.sum_recup = ns.sum_recup + (pren.recuperacion_manual or 0)|float %}
+                        {% set ns.sum_percepciones = ns.sum_percepciones + (pren.total_percepciones or 0)|float %}
+                        {% set ns.sum_deducciones = ns.sum_deducciones + (pren.total_deducciones or 0)|float %}
+                        {% set ns.sum_neto = ns.sum_neto + (pren.total_a_pagar or 0)|float %}
                         <tr>
-                            <td style="font-family: monospace;">{{ pren.trabajador.no_empleado }}</td>
-                            <td style="font-weight: 500;">{{ pren.trabajador.nombre_completo }}</td>
+                            <td class="col-sticky col-sticky--first" style="font-family: monospace;">{{
+                                pren.trabajador.no_empleado }}</td>
+                            <td class="col-sticky col-sticky--second" style="font-weight:500;">{{
+                                pren.trabajador.nombre_completo }}</td>
+                            <td>{{ pren.trabajador.tipo_jornada or '—' }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.salario_base or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.pago_viaticos or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.depositos_otros or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.depositos_prestamos or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.descuento_infonavit or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.ajuste_inbursa or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.descuentos_otros or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.descuento_prestamos or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.descuento_incidencias or 0)|float) }}</td>
+                            <td class="col-money">${{ "%.2f"|format((pren.recuperacion_manual or 0)|float) }}</td>
+                            <td class="col-money col-total-percep">${{ "%.2f"|format((pren.total_percepciones or
+                                0)|float) }}</td>
+                            <td class="col-money col-total-deduc">${{ "%.2f"|format((pren.total_deducciones or 0)|float)
+                                }}</td>
+                            <td class="col-money col-neto"><strong>${{ "%.2f"|format((pren.total_a_pagar or 0)|float)
+                                    }}</strong></td>
                             <td>
                                 <span
-                                    style="background: #E0E7FF; color: #3730A3; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                    style="background: #E0E7FF; color: #3730A3; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
                                     {{ pren.tipo_pago }}
                                 </span>
-                            </td>
-                            <td style="text-align: right; font-weight: 600;">
-                                ${{ "%.2f"|format(pren.total_a_pagar) }}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
+                    <tfoot>
+                        <tr class="totals-row">
+                            <td class="col-sticky col-sticky--first" colspan="1"></td>
+                            <td class="col-sticky col-sticky--second" style="font-weight:700;">TOTALES</td>
+                            <td></td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_salario) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_viaticos) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_dep_otros) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_dep_prest) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_infonavit) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_inbursa) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_desc_otros) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_desc_prest) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_desc_inc) }}</td>
+                            <td class="col-money">${{ "%.2f"|format(ns.sum_recup) }}</td>
+                            <td class="col-money col-total-percep">${{ "%.2f"|format(ns.sum_percepciones) }}</td>
+                            <td class="col-money col-total-deduc">${{ "%.2f"|format(ns.sum_deducciones) }}</td>
+                            <td class="col-money col-neto"><strong>${{ "%.2f"|format(ns.sum_neto) }}</strong></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
 

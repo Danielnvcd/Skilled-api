@@ -101,10 +101,7 @@ def agregar():
             pagos_efectivo=data.get('pagos_efectivo') or 0,
             folio_mov_idse=data.get('folio_mov_idse'),
             
-            # Ubicación y Operación
-            ubicacion_actual=data.get('ubicacion_actual'),
-            coord_a_cargo=data.get('coord_a_cargo'),
-            no_proyecto=data.get('no_proyecto'),
+            # Ubicación y Operación (no_proyecto, ubicacion_actual, coord_a_cargo se manejan en Proyectos)
             observaciones=data.get('observaciones')
         )
         
@@ -304,10 +301,7 @@ def editar(id):
         t.pagos_efectivo = data.get('pagos_efectivo') or 0
         t.folio_mov_idse = data.get('folio_mov_idse')
         
-        # Operacion
-        t.ubicacion_actual = data.get('ubicacion_actual')
-        t.coord_a_cargo = data.get('coord_a_cargo')
-        t.no_proyecto = data.get('no_proyecto')
+        # Operacion (no_proyecto, ubicacion_actual, coord_a_cargo se manejan en Proyectos)
         t.observaciones = data.get('observaciones')
         
         # Handle Profile Picture Edit

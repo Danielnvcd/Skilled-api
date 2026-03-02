@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+<style>
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .summary-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.25rem;
+        border: 1px solid var(--border);
+        text-align: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+    }
+
+    .summary-card .label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+    }
+
+    .summary-card .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .summary-card .value.green {
+        color: #16a34a;
+    }
+
+    .summary-card .value.red {
+        color: #dc2626;
+    }
+
+    .summary-card .value.blue {
+        color: #2563eb;
+    }
+
+    .summary-card .value.indigo {
+        color: #4f46e5;
+    }
+
+    .summary-card .value.slate {
+        color: #334155;
+    }
+
+    .week-row {
+        transition: background 0.15s;
+    }
+
+    .week-row:hover {
+        background: #f0f9ff !important;
+    }
+
+    .project-toggle {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .project-toggle .chevron {
+        transition: transform 0.25s ease;
+        display: inline-block;
+    }
+
+    .project-toggle .chevron.open {
+        transform: rotate(90deg);
+    }
+
+    .project-weeks {
+        overflow: hidden;
+        transition: max-height 0.35s ease;
+    }
+
+    .grand-total-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
+        color: white;
+        font-size: 1.3rem;
+        font-weight: 700;
+        padding: 0.4rem 1.2rem;
+        border-radius: 8px;
+        margin-left: 0.75rem;
+    }
+
+    .page-summary-bar {
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #eff6ff, #e0e7ff);
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        border: 1px solid #c7d2fe;
+    }
+
+    .page-summary-bar .stat {
+        text-align: center;
+    }
+
+    .page-summary-bar .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        color: #64748b;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .page-summary-bar .stat-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1e3a5f;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="header-card" style="margin-bottom: 1.5rem;">
+        <div class="header-titulos">
+            <h1 class="main-title">Proyecto Total</h1>
+            <p class="subtitle">Resumen acumulado de nómina por proyecto, incluyendo todas las semanas procesadas.</p>
+        </div>
+    </div>
+
+    {% if proyectos_data %}
+    <!-- Global summary bar -->
+    {% set gs = namespace(proyectos=0, semanas=0, total_pagado=0) %}
+    {% for pd in proyectos_data %}
+    {% set gs.proyectos = gs.proyectos + 1 %}
+    {% set gs.semanas = gs.semanas + pd.num_semanas %}
+    {% set gs.total_pagado = gs.total_pagado + pd.grand.total_a_pagar %}
+    {% endfor %}
+    <div class="page-summary-bar">
+        <div class="stat">
+            <div class="stat-label">Proyectos</div>
+            <div class="stat-value">{{ gs.proyectos }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Semanas Totales</div>
+            <div class="stat-value">{{ gs.semanas }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Gran Total Pagado</div>
+            <div class="stat-value" style="color: #16a34a;">${{ "%.2f"|format(gs.total_pagado) }}</div>
+        </div>
+    </div>
+
+    {% for pd in proyectos_data %}
+    <div class="project-card">
+        <div class="project-header project-toggle">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span class="chevron">▶</span>
+                <div>
+                    <h3 style="margin:0; font-size:1.25rem; color:var(--text-main);">
+                        Proyecto {{ pd.proyecto.numero_proyecto }}
+                    </h3>
+                    <div style="font-size:0.9rem; color:var(--text-muted); margin-top:4px;">
+                        {{ pd.proyecto.nombre or 'Sin nombre' }}
+                        {% if pd.proyecto.coordinador %}
+                        · Coord: {{ pd.proyecto.coordinador.full_name or pd.proyecto.coordinador.username }}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <span
+                    style="font-size:0.8rem; color:var(--text-muted); background: #E0E7FF; padding: 4px 12px; border-radius: 20px; font-weight:600;">
+                    {{ pd.num_semanas }} semana{{ 's' if pd.num_semanas > 1 else '' }}
+                </span>
+                <span class="grand-total-badge">
+                    ${{ "%.2f"|format(pd.grand.total_a_pagar) }}
+                </span>
+            </div>
+        </div>
+
+        <div class="project-weeks" style="max-height: 0; overflow: hidden;">
+            <div class="project-body" style="padding: 1.5rem;">
+                <!-- Summary cards for this project -->
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <div class="label">Total Percepciones</div>
+                        <div class="value green">${{ "%.2f"|format(pd.grand.total_percepciones) }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Total Deducciones</div>
+                        <div class="value red">${{ "%.2f"|format(pd.grand.total_deducciones) }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Neto Depositado</div>
+                        <div class="value blue">${{ "%.2f"|format(pd.grand.total_a_pagar) }}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">Salarios Base</div>
+                        <div class="value slate">${{ "%.2f"|format(pd.grand.salario_base) }}</div>
+                    </div>
+                </div>
+
+                <!-- Weeks detail table -->
+                <div class="table-scroll-wrapper">
+                    <table class="worker-table worker-table--detail">
+                        <thead>
+                            <tr>
+                                <th class="col-sticky col-sticky--first" style="min-width:140px;">Semana</th>
+                                <th class="col-money">Trabajadores</th>
+                                <th class="col-money">Salario Base</th>
+                                <th class="col-money">Viáticos</th>
+                                <th class="col-money">Dep. Otros</th>
+                                <th class="col-money">Dep. Prést.</th>
+                                <th class="col-money">INFONAVIT</th>
+                                <th class="col-money">Aj. INBURSA</th>
+                                <th class="col-money">Desc. Otros</th>
+                                <th class="col-money">Desc. Prést.</th>
+                                <th class="col-money">Desc. Incid.</th>
+                                <th class="col-money">Recup. Manual</th>
+                                <th class="col-money col-total-percep">Tot. Percep.</th>
+                                <th class="col-money col-total-deduc">Tot. Deduc.</th>
+                                <th class="col-money col-neto">Neto Depositado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for w in pd.semanas %}
+                            <tr class="week-row">
+                                <td class="col-sticky col-sticky--first" style="font-weight:500;">
+                                    {{ w.fecha_inicio|fecha_es('completo') }}
+                                </td>
+                                <td class="col-money">{{ w.num_trabajadores }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.salario_base) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.pago_viaticos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.depositos_otros) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.depositos_prestamos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.descuento_infonavit) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.ajuste_inbursa) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.descuentos_otros) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.descuento_prestamos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.descuento_incidencias) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.recuperacion_manual) }}</td>
+                                <td class="col-money col-total-percep">${{ "%.2f"|format(w.total_percepciones) }}</td>
+                                <td class="col-money col-total-deduc">${{ "%.2f"|format(w.total_deducciones) }}</td>
+                                <td class="col-money col-neto"><strong>${{ "%.2f"|format(w.total_a_pagar) }}</strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="totals-row">
+                                <td class="col-sticky col-sticky--first" style="font-weight:700;">ACUMULADO</td>
+                                <td class="col-money">{{ pd.grand.trabajadores_count }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.salario_base) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.pago_viaticos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.depositos_otros) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.depositos_prestamos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.descuento_infonavit) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.ajuste_inbursa) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.descuentos_otros) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.descuento_prestamos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.descuento_incidencias) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.recuperacion_manual) }}</td>
+                                <td class="col-money col-total-percep"><strong>${{
+                                        "%.2f"|format(pd.grand.total_percepciones) }}</strong></td>
+                                <td class="col-money col-total-deduc"><strong>${{
+                                        "%.2f"|format(pd.grand.total_deducciones) }}</strong></td>
+                                <td class="col-money col-neto"><strong>${{ "%.2f"|format(pd.grand.total_a_pagar)
+                                        }}</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <div class="historico-empty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin datos disponibles</h4>
+        <p style="margin:0;">Aún no existen proyectos con nóminas procesadas y cerradas.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script src="{{ url_for('static', filename='js/proyecto_total.js') }}?v=1"></script>
+{% endblock %}

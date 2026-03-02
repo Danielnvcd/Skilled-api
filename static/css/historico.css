@@ -51,29 +51,124 @@
 }
 
 .project-body {
-    padding: 1.5rem;
+    padding: 0;
 }
 
+/* ── Scrollable table wrapper ── */
+.table-scroll-wrapper {
+    overflow-x: auto;
+    padding: 0;
+    scrollbar-width: thin;
+    scrollbar-color: #c7d2fe transparent;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar {
+    height: 8px;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+    background: #c7d2fe;
+    border-radius: 4px;
+}
+
+/* ── Detail table (Excel-like) ── */
 .worker-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.95rem;
 }
 
-.worker-table th, .worker-table td {
-    padding: 0.75rem 1rem;
+.worker-table--detail {
+    font-size: 0.8rem;
+    min-width: 1600px;
+}
+
+.worker-table th,
+.worker-table td {
+    padding: 0.6rem 0.75rem;
     text-align: left;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
 
 .worker-table th {
     background: #F1F5F9;
     font-weight: 600;
     color: var(--text-main);
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
 .worker-table tr:hover {
     background-color: #F8FAFC;
+}
+
+/* Sticky first two columns */
+.col-sticky {
+    position: sticky;
+    z-index: 2;
+    background: white;
+}
+
+.col-sticky--first {
+    left: 0;
+    min-width: 70px;
+}
+
+.col-sticky--second {
+    left: 70px;
+    min-width: 180px;
+    border-right: 2px solid #E2E8F0;
+}
+
+/* Header sticky columns need higher z-index */
+.worker-table thead .col-sticky {
+    z-index: 3;
+    background: #F1F5F9;
+}
+
+/* Money columns */
+.col-money {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Highlighted total columns */
+.col-total-percep {
+    background-color: rgba(34, 197, 94, 0.06) !important;
+    color: #166534;
+}
+
+.col-total-deduc {
+    background-color: rgba(239, 68, 68, 0.06) !important;
+    color: #991B1B;
+}
+
+.col-neto {
+    background-color: rgba(59, 130, 246, 0.06) !important;
+    color: #1e40af;
+}
+
+/* Totals footer row */
+.totals-row {
+    background: #F8FAFC !important;
+    border-top: 2px solid #CBD5E1;
+    font-weight: 700;
+}
+
+.totals-row td {
+    border-bottom: none;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+}
+
+.totals-row .col-sticky {
+    background: #F8FAFC;
 }
 
 .total-footer {

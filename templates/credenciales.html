@@ -106,7 +106,17 @@
                         <td style="text-align: left;">{{ t.puesto or '-' }}</td>
                         <td style="text-align: left;"><span class="badge area-default">{{ t.area or 'S/A' }}</span></td>
                         <td>{{ t.tipo_nomina or '-' }}</td>
-                        <td>{{ t.coord_a_cargo or 'AgA' }}</td>
+                        <td>
+                            {% set coordinadores = [] %}
+                            {% for p in t.proyectos %}
+                            {% if p.coordinador and p.activo %}
+                            {% if (p.coordinador.full_name or p.coordinador.username) not in coordinadores %}
+                            {% set _ = coordinadores.append(p.coordinador.full_name or p.coordinador.username) %}
+                            {% endif %}
+                            {% endif %}
+                            {% endfor %}
+                            {{ coordinadores|join(', ') if coordinadores else (t.coord_a_cargo or '-') }}
+                        </td>
                         <td>{{ t.ubicacion_actual or '-' }}</td>
 
                         <!-- Plantas -->
