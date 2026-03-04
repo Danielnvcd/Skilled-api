@@ -100,6 +100,7 @@ class Trabajador(db.Model):
     ajuste_inbursa = db.Column(db.Numeric(10, 2))
     caja_ahorro = db.Column(db.Numeric(10, 2))
     viaticos = db.Column(db.Numeric(10, 2))
+    pago_dia_festivo = db.Column(db.Numeric(10, 2))  # Monto por día festivo trabajado
     pagos_efectivo = db.Column(db.Numeric(10, 2))
     folio_mov_idse = db.Column(db.String(100))
     tipo_pago = db.Column(db.String(100))
@@ -185,6 +186,10 @@ class RegistroDiarioHoras(db.Model):
     
     # Comida
     tomo_comida = db.Column(db.Boolean, default=False)
+    
+    # Viáticos y Día Festivo (toggles por registro)
+    aplica_viaticos = db.Column(db.Boolean, default=False)
+    aplica_dia_festivo = db.Column(db.Boolean, default=False)
     
     # Incidencias
     incidencia = db.Column(db.String(100), nullable=True)

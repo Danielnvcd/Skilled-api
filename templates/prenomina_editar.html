@@ -54,7 +54,8 @@
                     <span class="meta">
                         Nº Emp: {{ p.trabajador.no_empleado }} |
                         Nomina: <strong>{{ p.trabajador.tipo_nomina or 'N/A' }}</strong> |
-                        Pago: <strong>{{ p.tipo_pago }}</strong>
+                        Pago: <strong>{{ p.tipo_pago }}</strong> |
+                        Hrs Laboradas: <strong>{{ "%.2f"|format(p.total_horas_calculadas or 0) }}</strong>
                     </span>
                 </div>
                 <div style="display: flex; gap: 1rem; align-items: center;">

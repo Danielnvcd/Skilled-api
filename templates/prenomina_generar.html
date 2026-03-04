@@ -87,7 +87,8 @@
                     <span class="meta">
                         Nº Emp: {{ p.trabajador.no_empleado }} |
                         Nomina: <strong>{{ p.trabajador.tipo_nomina or 'No Asignada' }}</strong> |
-                        Pago: <strong>{{ p.tipo_pago }}</strong>
+                        Pago: <strong>{{ p.tipo_pago }}</strong> |
+                        Hrs Laboradas: <strong>{{ "%.2f"|format(p.total_horas_calculadas or 0) }}</strong>
                     </span>
                 </div>
                 <div style="flex-shrink: 0; text-align:right;">
@@ -131,8 +132,12 @@
                             <span>${{ "%.2f"|format(p.pago_viaticos) }}</span>
                         </li>
                         <li class="concept-item">
-                            <span>Otros (Festivos/Depositos)</span>
-                            <span>${{ "%.2f"|format(p.pago_festivos + p.depositos_otros + p.depositos_prestamos)
+                            <span>Días Festivos</span>
+                            <span>${{ "%.2f"|format(p.pago_festivos) }}</span>
+                        </li>
+                        <li class="concept-item">
+                            <span>Otros (Depósitos)</span>
+                            <span>${{ "%.2f"|format(p.depositos_otros + p.depositos_prestamos)
                                 }}</span>
                         </li>
                         <li class="concept-item total text-success">

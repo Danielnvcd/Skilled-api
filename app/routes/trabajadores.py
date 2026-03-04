@@ -98,6 +98,7 @@ def agregar():
             ajuste_inbursa=data.get('ajuste_inbursa') or 0,
             caja_ahorro=data.get('caja_ahorro') or 0,
             viaticos=data.get('viaticos') or 0,
+            pago_dia_festivo=data.get('pago_dia_festivo') or 0,
             pagos_efectivo=data.get('pagos_efectivo') or 0,
             folio_mov_idse=data.get('folio_mov_idse'),
             
@@ -216,6 +217,7 @@ def get_trabajador(id):
         'ajuste_inbursa': str(t.ajuste_inbursa) if t.ajuste_inbursa else '',
         'caja_ahorro': str(t.caja_ahorro) if t.caja_ahorro else '',
         'viaticos': str(t.viaticos) if t.viaticos else '',
+        'pago_dia_festivo': str(t.pago_dia_festivo) if t.pago_dia_festivo else '',
         'pagos_efectivo': str(t.pagos_efectivo) if t.pagos_efectivo else '',
         'folio_mov_idse': t.folio_mov_idse or '',
         
@@ -298,6 +300,7 @@ def editar(id):
         t.ajuste_inbursa = data.get('ajuste_inbursa') or 0
         t.caja_ahorro = data.get('caja_ahorro') or 0
         t.viaticos = data.get('viaticos') or 0
+        t.pago_dia_festivo = data.get('pago_dia_festivo') or 0
         t.pagos_efectivo = data.get('pagos_efectivo') or 0
         t.folio_mov_idse = data.get('folio_mov_idse')
         

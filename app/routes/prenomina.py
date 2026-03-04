@@ -1,9 +1,16 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from datetime import datetime, timedelta
+from decimal import Decimal
 import traceback
 from app.extensions import db
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
 from app.utils import login_required, log_action
+
+def _to_dec(value):
+    """Convierte un valor a Decimal de forma segura."""
+    if value is None:
+        return Decimal('0')
+    return Decimal(str(value))
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
 
@@ -61,6 +68,16 @@ def generar(fecha_str):
     # Si aún no hay prenominas guardadas en BBDD para esta semana consolida, generamos el preview
     if not prenominas:
         prenominas = calcular_preview_prenomina(fecha_obj, reportes)
+    else:
+        # Calcular las horas dinámicamente para pasarlas a la vista si la prenómina ya se había guardado
+        reporte_ids = [r.id for r in reportes]
+        for p in prenominas:
+            registros = RegistroDiarioHoras.query.filter(
+                RegistroDiarioHoras.reporte_id.in_(reporte_ids),
+                RegistroDiarioHoras.trabajador_id == p.trabajador_id
+            ).all()
+            total_horas = sum(r.horas_productivas or 0 for r in registros)
+            p.total_horas_calculadas = _to_dec(total_horas)
         
     proyectos_involucrados = [r.proyecto for r in reportes]
         
@@ -257,6 +274,16 @@ def editar(fecha_str):
         ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
     ).all()
     
+    # Reconstruir las horas trabajadas visualmente para la UI
+    reporte_ids = [r.id for r in reportes]
+    for p in prenominas:
+        registros = RegistroDiarioHoras.query.filter(
+            RegistroDiarioHoras.reporte_id.in_(reporte_ids),
+            RegistroDiarioHoras.trabajador_id == p.trabajador_id
+        ).all()
+        total_horas = sum(r.horas_productivas or 0 for r in registros)
+        p.total_horas_calculadas = _to_dec(total_horas)
+    
     incidencias_por_trabajador = {}
     incidencias_descontables = ['Falta', 'Retardo', 'Falta checada de entrada', 'Falta checada de salida', 'Permiso', 'Luto', 'Casamiento']
     for r in reportes:
@@ -267,7 +294,7 @@ def editar(fecha_str):
                 incidencias_por_trabajador[reg.trabajador_id].append({
                     'fecha': reg.fecha.strftime('%Y-%m-%d'),
                     'incidencia': reg.incidencia,
-                    'horas': float(reg.horas_productivas or 0)
+                    'horas': float(reg.horas_productivas or 0)  # horas no es monetario
                 })
     
     # Préstamos activos por trabajador
@@ -303,11 +330,11 @@ def cerrar_prenomina(fecha_str):
             p.estado = 'APROBADO'
             
             # Aplicar descuentos de préstamos reales a la deuda
-            if p.descuento_prestamos and float(p.descuento_prestamos) > 0:
+            if p.descuento_prestamos and _to_dec(p.descuento_prestamos) > Decimal('0'):
                 prestamos_activos = Prestamo.query.filter_by(trabajador_id=p.trabajador_id, estado='ACTIVO').all()
                 for prestamo in prestamos_activos:
-                    descuento = float(prestamo.descuento_semanal)
-                    restante = float(prestamo.monto_restante)
+                    descuento = _to_dec(prestamo.descuento_semanal)
+                    restante = _to_dec(prestamo.monto_restante)
                     
                     # Si el saldo ya está en 0, marcar como liquidado y saltar (sin registrar abono)
                     if restante <= 0:
@@ -362,7 +389,7 @@ def api_agregar_descuento():
         
         try:
             prenomina_id = int(data['prenomina_id'])
-            monto = float(data['monto'])
+            monto = Decimal(str(data['monto']))
         except (ValueError, TypeError):
             return jsonify({'success': False, 'message': 'prenomina_id y monto deben ser numéricos.'}), 400
         
@@ -433,7 +460,7 @@ def api_agregar_deposito():
         
         try:
             prenomina_id = int(data['prenomina_id'])
-            monto = float(data['monto'])
+            monto = Decimal(str(data['monto']))
         except (ValueError, TypeError):
             return jsonify({'success': False, 'message': 'prenomina_id y monto deben ser numéricos.'}), 400
         
@@ -487,20 +514,20 @@ def api_eliminar_deposito(id):
 def _recalcular_prenomina(prenomina):
     """Recalcula los totales de una prenómina individual basándose en sus descuentos y depósitos granulares."""
     # Descuentos granulares
-    total_desc_detalle = sum(float(d.monto) for d in prenomina.descuentos_detalle) if prenomina.descuentos_detalle else 0
+    total_desc_detalle = sum((_to_dec(d.monto) for d in prenomina.descuentos_detalle), Decimal('0')) if prenomina.descuentos_detalle else Decimal('0')
     # Depósitos extras
-    total_dep_extra = sum(float(d.monto) for d in prenomina.depositos_detalle) if prenomina.depositos_detalle else 0
+    total_dep_extra = sum((_to_dec(d.monto) for d in prenomina.depositos_detalle), Decimal('0')) if prenomina.depositos_detalle else Decimal('0')
     
     # Cuotas de préstamos activos
     prestamos_activos = Prestamo.query.filter_by(trabajador_id=prenomina.trabajador_id, estado='ACTIVO').all()
-    total_prestamos = sum(float(pr.descuento_semanal) for pr in prestamos_activos)
+    total_prestamos = sum((_to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
     
     prenomina.descuento_prestamos = total_prestamos
     prenomina.depositos_otros = total_dep_extra
     prenomina.descuentos_otros = total_desc_detalle
     
-    prenomina.total_percepciones = float(prenomina.salario_base or 0) + float(prenomina.pago_horas_extras or 0) + float(prenomina.pago_viaticos or 0) + float(prenomina.pago_festivos or 0) + float(prenomina.depositos_otros or 0)
-    prenomina.total_deducciones = float(prenomina.descuento_infonavit or 0) + float(prenomina.ajuste_inbursa or 0) + float(prenomina.descuento_incidencias or 0) + float(prenomina.descuento_prestamos or 0) + float(prenomina.descuentos_otros or 0)
+    prenomina.total_percepciones = _to_dec(prenomina.salario_base) + _to_dec(prenomina.pago_horas_extras) + _to_dec(prenomina.pago_viaticos) + _to_dec(prenomina.pago_festivos) + _to_dec(prenomina.depositos_otros)
+    prenomina.total_deducciones = _to_dec(prenomina.descuento_infonavit) + _to_dec(prenomina.ajuste_inbursa) + _to_dec(prenomina.descuento_incidencias) + _to_dec(prenomina.descuento_prestamos) + _to_dec(prenomina.descuentos_otros)
     prenomina.total_a_pagar = prenomina.total_percepciones - prenomina.total_deducciones
     
     db.session.commit()
@@ -543,40 +570,43 @@ def calcular_preview_prenomina(fecha_obj, reportes):
             fecha_inicio=fecha_obj,
             fecha_fin=fecha_fin_semana,
             tipo_pago=trabajador.tipo_pago or 'EFECTIVO',
-            pago_festivos=0.0,
-            depositos_otros=0.0,
-            depositos_prestamos=0.0,
-            descuentos_otros=0.0,
-            descuento_prestamos=0.0,
-            descuento_incidencias=0.0,
-            recuperacion_manual=0.0
+            pago_festivos=Decimal('0'),
+            depositos_otros=Decimal('0'),
+            depositos_prestamos=Decimal('0'),
+            descuentos_otros=Decimal('0'),
+            descuento_prestamos=Decimal('0'),
+            descuento_incidencias=Decimal('0'),
+            recuperacion_manual=Decimal('0')
         )
         
-        tipo = trabajador.tipo_nomina or 'Semanal'
-        p.salario_base = 0.0
-        p.pago_horas_extras = 0.0
+        # Guardar para visualización temporal en pantalla
+        p.total_horas_calculadas = _to_dec(total_horas)
         
-        salario_pactado = float(trabajador.salario_real_pactado_x_sem or 0)
+        tipo = trabajador.tipo_nomina or 'Semanal'
+        p.salario_base = Decimal('0')
+        p.pago_horas_extras = Decimal('0')
+        
+        salario_pactado = _to_dec(trabajador.salario_real_pactado_x_sem)
         
         if tipo == 'Por hora':
-            p.salario_base = float(total_horas) * salario_pactado
+            p.salario_base = _to_dec(total_horas) * salario_pactado
         elif tipo == 'Cuadrado':
             p.salario_base = salario_pactado
         else: # Semanal
             p.salario_base = salario_pactado
             if total_horas > 50:
-                horas_extras = float(total_horas) - 50.0
-                costo_hr_extra = float(trabajador.hr_extra or 0)
+                horas_extras = _to_dec(total_horas) - Decimal('50')
+                costo_hr_extra = _to_dec(trabajador.hr_extra)
                 p.pago_horas_extras = horas_extras * costo_hr_extra
         
         # Deducciones maestras
-        p.descuento_infonavit = float(trabajador.infonavit or 0)
-        p.ajuste_inbursa = float(trabajador.ajuste_inbursa or 0)
+        p.descuento_infonavit = _to_dec(trabajador.infonavit)
+        p.ajuste_inbursa = _to_dec(trabajador.ajuste_inbursa)
         
         # Cálculo de Incidencias Consolidadas
-        total_descuento_incidencias = 0.0
+        total_descuento_incidencias = Decimal('0')
         if tipo in ['Semanal', 'Cuadrado']:
-            horas_ausentes_incidencia = 0.0
+            horas_ausentes_incidencia = Decimal('0')
             incidencias_descontables = ['Falta', 'Retardo', 'Falta checada de entrada', 'Falta checada de salida', 'Permiso', 'Luto', 'Casamiento']
             
             for reg in registros_trabajador:
@@ -585,24 +615,32 @@ def calcular_preview_prenomina(fecha_obj, reportes):
                     # es más seguro calcular 10hrs por día que se declaró una falta (pero podría no ser exacto en combinaciones).
                     # De momento mantenemos el sumatorio de incidencias tal cual:
                     if not reg.horas_productivas or reg.horas_productivas == 0:
-                        horas_ausentes_incidencia += 10.0
+                        horas_ausentes_incidencia += Decimal('10')
                         
             if horas_ausentes_incidencia > 0:
-                 costo_hora_ord = salario_pactado / 50.0
+                 costo_hora_ord = salario_pactado / Decimal('50')
                  total_descuento_incidencias = horas_ausentes_incidencia * costo_hora_ord
                  p.descuento_incidencias = total_descuento_incidencias
                  
         if trabajador.viaticos:
-             p.pago_viaticos = float(trabajador.viaticos) * dias_capturados
+            dias_con_viaticos = sum(1 for reg in registros_trabajador if reg.aplica_viaticos)
+            p.pago_viaticos = _to_dec(trabajador.viaticos) * Decimal(str(dias_con_viaticos))
         else:
-             p.pago_viaticos = 0.0
-             
+             p.pago_viaticos = Decimal('0')
+        
+        # Pago por Días Festivos (toggle por registro)
+        if trabajador.pago_dia_festivo:
+            dias_festivos = sum(1 for reg in registros_trabajador if reg.aplica_dia_festivo)
+            p.pago_festivos = _to_dec(trabajador.pago_dia_festivo) * Decimal(str(dias_festivos))
+        else:
+            p.pago_festivos = Decimal('0')
+              
         # Add Active Loans to Deductions
         prestamos_activos = Prestamo.query.filter_by(trabajador_id=t_id, estado='ACTIVO').all()
-        p.descuento_prestamos = sum(float(pr.descuento_semanal) for pr in prestamos_activos)
+        p.descuento_prestamos = sum((_to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
              
-        p.total_percepciones = p.salario_base + p.pago_horas_extras + p.pago_viaticos
-        p.total_deducciones = p.descuento_infonavit + p.ajuste_inbursa + float(p.descuento_incidencias or 0) + float(p.descuento_prestamos or 0) + float(p.descuentos_otros or 0)
+        p.total_percepciones = _to_dec(p.salario_base) + _to_dec(p.pago_horas_extras) + _to_dec(p.pago_viaticos) + _to_dec(p.pago_festivos)
+        p.total_deducciones = _to_dec(p.descuento_infonavit) + _to_dec(p.ajuste_inbursa) + _to_dec(p.descuento_incidencias) + _to_dec(p.descuento_prestamos) + _to_dec(p.descuentos_otros)
         p.total_a_pagar = p.total_percepciones - p.total_deducciones
         
         preview.append(p)

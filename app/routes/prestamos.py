@@ -3,7 +3,14 @@ from app.extensions import db
 from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina, AbonoPrestamo
 from app.utils import login_required, log_action
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 import traceback
+
+def _to_dec(value):
+    """Convierte un valor a Decimal de forma segura."""
+    if value is None:
+        return Decimal('0')
+    return Decimal(str(value))
 
 bp = Blueprint('prestamos', __name__, url_prefix='/prestamos')
 
@@ -26,9 +33,9 @@ def crear():
             return jsonify({'success': False, 'message': 'Faltan campos obligatorios.'}), 400
         
         trabajador_id = int(data['trabajador_id'])
-        monto_total = float(data['monto_total'])
+        monto_total = Decimal(str(data['monto_total']))
         plazo_semanas = int(data['plazo_semanas'])
-        descuento_semanal = float(data['descuento_semanal'])
+        descuento_semanal = Decimal(str(data['descuento_semanal']))
         
         if monto_total <= 0 or descuento_semanal <= 0 or plazo_semanas <= 0:
             return jsonify({'success': False, 'message': 'El monto, plazo y descuento deben ser mayores a cero.'}), 400
@@ -78,8 +85,8 @@ def editar(id):
         if prestamo.estado == 'LIQUIDADO':
             return jsonify({'success': False, 'message': 'No se puede editar un préstamo liquidado.'}), 400
         
-        nuevo_monto = float(data.get('monto_total', prestamo.monto_total))
-        nuevo_descuento = float(data.get('descuento_semanal', prestamo.descuento_semanal))
+        nuevo_monto = _to_dec(data.get('monto_total', prestamo.monto_total))
+        nuevo_descuento = _to_dec(data.get('descuento_semanal', prestamo.descuento_semanal))
         nuevo_plazo = int(data.get('plazo_semanas', prestamo.plazo_semanas))
         
         if nuevo_monto <= 0 or nuevo_descuento <= 0 or nuevo_plazo <= 0:
@@ -87,7 +94,8 @@ def editar(id):
         
         # Calcular lo ya abonado para validar y recalcular
         total_abonado = sum(
-            float(a.monto) for a in AbonoPrestamo.query.filter_by(prestamo_id=id).all()
+            (_to_dec(a.monto) for a in AbonoPrestamo.query.filter_by(prestamo_id=id).all()),
+            Decimal('0')
         )
         
         # Impedir reducir el monto por debajo de lo ya pagado
@@ -127,7 +135,7 @@ def abonar(id):
         if not data or 'monto' not in data:
             return jsonify({'success': False, 'message': 'Datos inválidos o monto no proporcionado.'}), 400
         
-        monto_abono = float(data['monto'])
+        monto_abono = Decimal(str(data['monto']))
         
         if monto_abono <= 0:
             return jsonify({'success': False, 'message': 'El monto del abono debe ser mayor a cero.'}), 400
@@ -137,7 +145,7 @@ def abonar(id):
         if prestamo.estado == 'LIQUIDADO':
             return jsonify({'success': False, 'message': 'Préstamo ya liquidado.'}), 400
         
-        prestamo.monto_restante = max(0, float(prestamo.monto_restante) - monto_abono)
+        prestamo.monto_restante = max(Decimal('0'), _to_dec(prestamo.monto_restante) - monto_abono)
         
         if prestamo.monto_restante <= 0:
             prestamo.monto_restante = 0
@@ -238,20 +246,20 @@ def _recalcular_prenominas_abiertas(trabajador_id):
     
     for p in prenominas_abiertas:
         # Sumar descuentos granulares
-        total_desc_detalle = sum(float(d.monto) for d in p.descuentos_detalle) if p.descuentos_detalle else 0
+        total_desc_detalle = sum((_to_dec(d.monto) for d in p.descuentos_detalle), Decimal('0')) if p.descuentos_detalle else Decimal('0')
         # Sumar depósitos extras
-        total_dep_extra = sum(float(d.monto) for d in p.depositos_detalle) if p.depositos_detalle else 0
+        total_dep_extra = sum((_to_dec(d.monto) for d in p.depositos_detalle), Decimal('0')) if p.depositos_detalle else Decimal('0')
         
         # Cuotas de préstamos activos
         prestamos_activos = Prestamo.query.filter_by(trabajador_id=trabajador_id, estado='ACTIVO').all()
-        total_prestamos = sum(float(pr.descuento_semanal) for pr in prestamos_activos)
+        total_prestamos = sum((_to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
         
         p.descuento_prestamos = total_prestamos
         p.depositos_otros = total_dep_extra
         p.descuentos_otros = total_desc_detalle
         
-        p.total_percepciones = float(p.salario_base or 0) + float(p.pago_horas_extras or 0) + float(p.pago_viaticos or 0) + float(p.pago_festivos or 0) + float(p.depositos_otros or 0)
-        p.total_deducciones = float(p.descuento_infonavit or 0) + float(p.ajuste_inbursa or 0) + float(p.descuento_incidencias or 0) + float(p.descuento_prestamos or 0) + float(p.descuentos_otros or 0)
+        p.total_percepciones = _to_dec(p.salario_base) + _to_dec(p.pago_horas_extras) + _to_dec(p.pago_viaticos) + _to_dec(p.pago_festivos) + _to_dec(p.depositos_otros)
+        p.total_deducciones = _to_dec(p.descuento_infonavit) + _to_dec(p.ajuste_inbursa) + _to_dec(p.descuento_incidencias) + _to_dec(p.descuento_prestamos) + _to_dec(p.descuentos_otros)
         p.total_a_pagar = p.total_percepciones - p.total_deducciones
     
     db.session.commit()

@@ -147,6 +147,8 @@ def guardar_registro(reporte_id):
         hora_entrada_str = data.get('hora_entrada')
         hora_salida_str = data.get('hora_salida')
         tomo_comida = bool(data.get('tomo_comida'))
+        aplica_viaticos = bool(data.get('aplica_viaticos'))
+        aplica_dia_festivo = bool(data.get('aplica_dia_festivo'))
         incidencia = data.get('incidencia')
         
         if not trabajador_id or not fecha_str:
@@ -162,6 +164,15 @@ def guardar_registro(reporte_id):
         
         if trabajador not in reporte.proyecto.participantes:
             flash("Este trabajador no está asignado al proyecto.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            
+        # Validar si se seleccionó viáticos/festivos que el trabajador los tenga capturados en su perfil
+        if aplica_viaticos and (trabajador.viaticos is None or trabajador.viaticos <= 0):
+            flash(f"Error: No se pueden habilitar viáticos para {trabajador.nombre}. Su perfil tiene $0.00 asignados de viáticos.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            
+        if aplica_dia_festivo and (trabajador.pago_dia_festivo is None or trabajador.pago_dia_festivo <= 0):
+            flash(f"Error: No se puede habilitar pago por día festivo para {trabajador.nombre}. Su perfil tiene $0.00 asignados de día festivo.", "danger")
             return redirect(url_for('horas.capturar', reporte_id=reporte.id))
         
         hora_entrada = None
@@ -208,6 +219,8 @@ def guardar_registro(reporte_id):
             hora_entrada=hora_entrada,
             hora_salida=hora_salida,
             tomo_comida=tomo_comida,
+            aplica_viaticos=aplica_viaticos,
+            aplica_dia_festivo=aplica_dia_festivo,
             incidencia=incidencia if incidencia else None,
             tipo_nomina=trabajador.tipo_nomina or 'Semanal',
             horas_productivas=horas_productivas

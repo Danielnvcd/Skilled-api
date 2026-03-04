@@ -221,6 +221,7 @@
                                 <th class="col-money">Trabajadores</th>
                                 <th class="col-money">Salario Base</th>
                                 <th class="col-money">Viáticos</th>
+                                <th class="col-money">Festivos</th>
                                 <th class="col-money">Dep. Otros</th>
                                 <th class="col-money">Dep. Prést.</th>
                                 <th class="col-money">INFONAVIT</th>
@@ -243,6 +244,7 @@
                                 <td class="col-money">{{ w.num_trabajadores }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.salario_base) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.pago_viaticos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(w.pago_festivos) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.depositos_otros) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.depositos_prestamos) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.descuento_infonavit) }}</td>
@@ -264,6 +266,7 @@
                                 <td class="col-money">{{ pd.grand.trabajadores_count }}</td>
                                 <td class="col-money">${{ "%.2f"|format(pd.grand.salario_base) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(pd.grand.pago_viaticos) }}</td>
+                                <td class="col-money">${{ "%.2f"|format(pd.grand.pago_festivos) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(pd.grand.depositos_otros) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(pd.grand.depositos_prestamos) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(pd.grand.descuento_infonavit) }}</td>

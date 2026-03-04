@@ -1,10 +1,24 @@
 from flask import Blueprint, render_template
+from decimal import Decimal
 from app.utils import login_required
 from app.extensions import db
 from app.models import Proyecto, Prenomina, ReporteSemanal, RegistroDiarioHoras
 from sqlalchemy import func
 
+def _to_dec(value):
+    """Convierte un valor a Decimal de forma segura."""
+    if value is None:
+        return Decimal('0')
+    return Decimal(str(value))
+
 bp = Blueprint('proyecto_total', __name__, url_prefix='/proyecto-total')
+
+_MONEY_KEYS = [
+    'salario_base', 'pago_viaticos', 'pago_festivos', 'depositos_otros', 'depositos_prestamos',
+    'descuento_infonavit', 'ajuste_inbursa', 'descuentos_otros', 'descuento_prestamos',
+    'descuento_incidencias', 'recuperacion_manual', 'total_percepciones',
+    'total_deducciones', 'total_a_pagar'
+]
 
 @bp.route('/')
 @login_required
@@ -29,14 +43,9 @@ def index():
             continue  # Skip projects with no closed payrolls
         
         semanas = []
-        # Grand totals for the project
-        grand = {
-            'salario_base': 0, 'pago_viaticos': 0, 'depositos_otros': 0,
-            'depositos_prestamos': 0, 'descuento_infonavit': 0, 'ajuste_inbursa': 0,
-            'descuentos_otros': 0, 'descuento_prestamos': 0, 'descuento_incidencias': 0,
-            'recuperacion_manual': 0, 'total_percepciones': 0, 'total_deducciones': 0,
-            'total_a_pagar': 0, 'trabajadores_count': 0
-        }
+        # Grand totals for the project (Decimal precision)
+        grand = {k: Decimal('0') for k in _MONEY_KEYS}
+        grand['trabajadores_count'] = 0
         
         for reporte in reportes:
             fecha_inicio = reporte.fecha_inicio_semana
@@ -60,42 +69,38 @@ def index():
             if not prenominas:
                 continue  # Skip weeks where no workers had approved prenominas
             
-            # Weekly sums
+            # Weekly sums using Decimal
+            week_dec = {}
+            for key in _MONEY_KEYS:
+                week_dec[key] = sum((_to_dec(getattr(p, key)) for p in prenominas), Decimal('0'))
+            
+            # Convert to float for Jinja template rendering
             week = {
                 'fecha_inicio': fecha_inicio,
                 'fecha_fin': reporte.fecha_fin_semana,
                 'num_trabajadores': len(prenominas),
-                'salario_base': sum(float(p.salario_base or 0) for p in prenominas),
-                'pago_viaticos': sum(float(p.pago_viaticos or 0) for p in prenominas),
-                'depositos_otros': sum(float(p.depositos_otros or 0) for p in prenominas),
-                'depositos_prestamos': sum(float(p.depositos_prestamos or 0) for p in prenominas),
-                'descuento_infonavit': sum(float(p.descuento_infonavit or 0) for p in prenominas),
-                'ajuste_inbursa': sum(float(p.ajuste_inbursa or 0) for p in prenominas),
-                'descuentos_otros': sum(float(p.descuentos_otros or 0) for p in prenominas),
-                'descuento_prestamos': sum(float(p.descuento_prestamos or 0) for p in prenominas),
-                'descuento_incidencias': sum(float(p.descuento_incidencias or 0) for p in prenominas),
-                'recuperacion_manual': sum(float(p.recuperacion_manual or 0) for p in prenominas),
-                'total_percepciones': sum(float(p.total_percepciones or 0) for p in prenominas),
-                'total_deducciones': sum(float(p.total_deducciones or 0) for p in prenominas),
-                'total_a_pagar': sum(float(p.total_a_pagar or 0) for p in prenominas),
             }
+            for key in _MONEY_KEYS:
+                week[key] = float(week_dec[key])
+            
             semanas.append(week)
             
-            # Accumulate grand totals
-            for key in grand:
-                if key == 'trabajadores_count':
-                    grand[key] += week['num_trabajadores']
-                else:
-                    grand[key] += week.get(key, 0)
+            # Accumulate grand totals (in Decimal)
+            for key in _MONEY_KEYS:
+                grand[key] += week_dec[key]
+            grand['trabajadores_count'] += week['num_trabajadores']
         
         if not semanas:
             continue  # All weeks had zero prenominas, skip this project
+        
+        # Convert grand totals to float for template
+        grand_float = {k: float(v) if isinstance(v, Decimal) else v for k, v in grand.items()}
         
         proyectos_data.append({
             'proyecto': proyecto,
             'semanas': semanas,
             'num_semanas': len(semanas),
-            'grand': grand
+            'grand': grand_float
         })
     
     return render_template('proyecto_total.html', proyectos_data=proyectos_data)

@@ -198,3 +198,109 @@ class TestCerrarPrenomina:
         # No debe haber abonos (saldo ya era 0)
         abonos = AbonoPrestamo.query.filter_by(prestamo_id=prestamo.id).all()
         assert len(abonos) == 0
+
+class TestCalcularPreviewPrenominaFestivos:
+    """Tests para la función calcular_preview_prenomina y los toggles de viáticos / festivos."""
+
+    def test_calcular_viaticos_y_festivos_individuales(self, db, trabajador, proyecto):
+        from app.routes.prenomina import calcular_preview_prenomina
+        from app.models import ReporteSemanal, RegistroDiarioHoras
+        from datetime import date, time
+
+        # Setup trabajador rates
+        trabajador.viaticos = 50
+        trabajador.pago_dia_festivo = 200
+        db.session.commit()
+
+        # Create Reporte Semanal
+        reporte = ReporteSemanal(
+            proyecto_id=proyecto.id,
+            fecha_inicio_semana=date(2025, 5, 1),
+            fecha_fin_semana=date(2025, 5, 7),
+            estado='TERMINADO'
+        )
+        db.session.add(reporte)
+        db.session.commit()
+
+        # Registro 1: Viáticos (Sí) / Festivo (Sí)
+        reg1 = RegistroDiarioHoras(
+            reporte_id=reporte.id,
+            trabajador_id=trabajador.id,
+            fecha=date(2025, 5, 1), # Jueves
+            hora_entrada=time(8, 0),
+            hora_salida=time(18, 0),
+            tomo_comida=True,
+            aplica_viaticos=True,
+            aplica_dia_festivo=True,
+            horas_productivas=9.5
+        )
+        # Registro 2: Viáticos (No) / Festivo (No)
+        reg2 = RegistroDiarioHoras(
+            reporte_id=reporte.id,
+            trabajador_id=trabajador.id,
+            fecha=date(2025, 5, 2), # Viernes
+            hora_entrada=time(8, 0),
+            hora_salida=time(18, 0),
+            tomo_comida=True,
+            aplica_viaticos=False,
+            aplica_dia_festivo=False,
+            horas_productivas=9.5
+        )
+        db.session.add_all([reg1, reg2])
+        db.session.commit()
+
+        # Execute
+        preview = calcular_preview_prenomina(date(2025, 5, 1), [reporte])
+
+        # Assertions
+        assert len(preview) == 1
+        p = preview[0]
+        
+        # 1 día de viáticos = 50
+        assert float(p.pago_viaticos) == 50.0
+        
+        # 1 día festivo = 200
+        assert float(p.pago_festivos) == 200.0
+
+    def test_calcular_sin_toggles(self, db, trabajador, proyecto):
+        from app.routes.prenomina import calcular_preview_prenomina
+        from app.models import ReporteSemanal, RegistroDiarioHoras
+        from datetime import date, time
+
+        # Setup trabajador rates
+        trabajador.viaticos = 50
+        trabajador.pago_dia_festivo = 200
+        db.session.commit()
+
+        reporte = ReporteSemanal(
+            proyecto_id=proyecto.id,
+            fecha_inicio_semana=date(2025, 5, 1),
+            fecha_fin_semana=date(2025, 5, 7),
+            estado='TERMINADO'
+        )
+        db.session.add(reporte)
+        db.session.commit()
+
+        # 3 registros sin viaticos ni festivos
+        for day in range(1, 4):
+            reg = RegistroDiarioHoras(
+                reporte_id=reporte.id,
+                trabajador_id=trabajador.id,
+                fecha=date(2025, 5, day),
+                hora_entrada=time(8, 0),
+                hora_salida=time(18, 0),
+                tomo_comida=True,
+                aplica_viaticos=False,
+                aplica_dia_festivo=False,
+                horas_productivas=9.5
+            )
+            db.session.add(reg)
+        db.session.commit()
+
+        preview = calcular_preview_prenomina(date(2025, 5, 1), [reporte])
+
+        assert len(preview) == 1
+        p = preview[0]
+        
+        assert float(p.pago_viaticos) == 0.0
+        assert float(p.pago_festivos) == 0.0
