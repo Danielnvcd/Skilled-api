@@ -103,6 +103,7 @@ def agregar():
             folio_mov_idse=data.get('folio_mov_idse'),
             
             # Ubicación y Operación (no_proyecto, ubicacion_actual, coord_a_cargo se manejan en Proyectos)
+            ubicacion_estado=data.get('ubicacion_estado'),
             observaciones=data.get('observaciones')
         )
         
@@ -130,7 +131,7 @@ def agregar():
                 )
                 nuevo_trabajador.credenciales.append(nueva_credencial)
         except Exception as json_err:
-            print(f"Error parsing credentials: {json_err}")
+            current_app.logger.error(f"Error parsing credentials: {json_err}")
             # we continue even if credentials fail parsing, though we can flash a warning
             flash('Hubo un problema guardando algunas credenciales de planta.', 'warning')
         
@@ -141,7 +142,7 @@ def agregar():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error saving worker: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error saving worker: {e}\n{traceback.format_exc()}")
         flash('Ocurrió un error al guardar el trabajador. Verifica los datos.', 'danger')
         
     return redirect(url_for('trabajadores.index'))
@@ -223,6 +224,7 @@ def get_trabajador(id):
         
         # Operacion
         'ubicacion_actual': t.ubicacion_actual or '',
+        'ubicacion_estado': t.ubicacion_estado or '',
         'coordinadores_actuales': coordinadores_asignados,
         'no_proyecto': t.no_proyecto or '',
         'observaciones': t.observaciones or '',
@@ -305,6 +307,7 @@ def editar(id):
         t.folio_mov_idse = data.get('folio_mov_idse')
         
         # Operacion (no_proyecto, ubicacion_actual, coord_a_cargo se manejan en Proyectos)
+        t.ubicacion_estado = data.get('ubicacion_estado')
         t.observaciones = data.get('observaciones')
         
         # Handle Profile Picture Edit
@@ -318,7 +321,7 @@ def editar(id):
                         if os.path.exists(old_pp_path):
                             os.remove(old_pp_path)
                     except Exception as e:
-                        print(f"Error deleting old profile pic: {e}")
+                        current_app.logger.error(f"Error deleting old profile pic: {e}")
                 
                 filename = secure_filename(file.filename)
                 import time
@@ -343,7 +346,7 @@ def editar(id):
                 )
                 t.credenciales.append(nueva_credencial)
         except Exception as json_err:
-            print(f"Error parsing credentials on edit: {json_err}")
+            current_app.logger.error(f"Error parsing credentials on edit: {json_err}")
             flash('Hubo un problema actualizando algunas credenciales.', 'warning')
             
         db.session.commit()
@@ -352,7 +355,7 @@ def editar(id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error updating worker: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error updating worker: {e}\n{traceback.format_exc()}")
         flash('Ocurrió un error al actualizar el trabajador.', 'danger')
         
     return redirect(url_for('trabajadores.index'))
@@ -387,8 +390,8 @@ def guardar_credenciales(id):
         return jsonify({'success': True, 'message': 'Credenciales actualizadas correctamente.'})
     except Exception as e:
         db.session.rollback()
-        print(f"Error updating credentials: {e}\n{traceback.format_exc()}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        current_app.logger.error(f"Error updating credentials: {e}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'error': 'Ocurrió un error al actualizar las credenciales.'}), 500
 
 @bp.route('/eliminar/<int:id>', methods=['POST'])
 @login_required
@@ -408,7 +411,7 @@ def eliminar(id):
         flash('Trabajador dado de baja exitosamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        print(f"Error inactivating worker: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error inactivating worker: {e}\n{traceback.format_exc()}")
         flash('Ocurrió un error al dar de baja el trabajador.', 'danger')
         
     return redirect(url_for('trabajadores.index'))
@@ -429,7 +432,7 @@ def reactivar(id):
         flash('Trabajador reactivado exitosamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        print(f"Error reactivating worker: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error reactivating worker: {e}\n{traceback.format_exc()}")
         flash('Ocurrió un error al reactivar el trabajador.', 'danger')
         
     return redirect(url_for('trabajadores.bajas'))
@@ -497,7 +500,7 @@ def delete_documento(doc_id):
         if os.path.exists(file_path):
             os.remove(file_path)
     except Exception as e:
-        print(f"Error physically deleting file {file_path}: {e}")
+        current_app.logger.error(f"Error physically deleting file {file_path}: {e}")
         
     log_action(f"Eliminó documento {doc.nombre_archivo} del trabajador ID {doc.trabajador_id}")
     db.session.delete(doc)

@@ -64,12 +64,18 @@ def update_last_seen():
             current_app.logger.warning(f"Error updating last_seen: {e}")
             db.session.rollback()
     else:
-        # Fallback sin Redis: actualizar siempre (comportamiento original)
+        # Fallback sin Redis: throttle via session (cada 5 min)
+        import time
+        now = time.time()
+        last_update = session.get('_last_seen_ts', 0)
+        if now - last_update < 300:  # 5 minutos
+            return
         try:
             user = User.query.get(user_id)
             if user:
                 user.last_seen = datetime.now()
                 db.session.commit()
+                session['_last_seen_ts'] = now
         except Exception as e:
             current_app.logger.warning(f"Error updating last_seen: {e}")
             db.session.rollback()

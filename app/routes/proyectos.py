@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from app.extensions import db
 from app.models import Proyecto, Trabajador, User
 from app.utils import login_required, log_action
@@ -57,7 +57,7 @@ def agregar():
                     if coordinador_name:
                         trabajador.coord_a_cargo = coordinador_name
         except Exception as e:
-            print(f"Error parseando participantes: {e}")
+            current_app.logger.error(f"Error parseando participantes: {e}")
             flash('Advertencia: Hubo problemas al agregar algunos participantes.', 'warning')
             
         db.session.add(nuevo_proyecto)
@@ -67,7 +67,7 @@ def agregar():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error creando proyecto: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error creando proyecto: {e}\n{traceback.format_exc()}")
         flash('Ocurrió un error al crear el proyecto.', 'danger')
         
     return redirect(url_for('proyectos.index'))
@@ -145,7 +145,7 @@ def editar(id):
                         trabajador.coord_a_cargo = coordinador_name
                     
         except Exception as e:
-            print(f"Error parseando participantes (edicion): {e}")
+            current_app.logger.error(f"Error parseando participantes (edicion): {e}")
             flash('Advertencia: Hubo un problema al actualizar los participantes.', 'warning')
             
         db.session.commit()
@@ -154,7 +154,7 @@ def editar(id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error actualizando proyecto: {e}\n{traceback.format_exc()}")
+        current_app.logger.error(f"Error actualizando proyecto: {e}\n{traceback.format_exc()}")
         flash('Falló la modificación del proyecto.', 'danger')
         
     return redirect(url_for('proyectos.index'))

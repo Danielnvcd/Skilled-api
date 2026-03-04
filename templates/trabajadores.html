@@ -391,6 +391,11 @@
                         planta y observaciones operativas.</p>
                     <div class="form-grid">
                         <div class="form-group" style="grid-column: span 2;">
+                            <label>Ubicación (Estado)</label>
+                            <input type="text" name="ubicacion_estado" class="form-control"
+                                placeholder="Ej: Puebla, Tlaxcala, etc.">
+                        </div>
+                        <div class="form-group" style="grid-column: span 2;">
                             <label>Observaciones Operativas</label>
                             <textarea name="observaciones" class="form-control" rows="2"></textarea>
                         </div>
@@ -496,10 +501,9 @@
             <!-- Header section with Profile Pic and Core Info -->
             <div
                 style="display: flex; gap: 24px; margin-bottom: 30px; border-bottom: 1px solid #e5e7eb; padding-bottom: 24px; align-items: center;">
-                <div>
-                    <img id="viewProfilePic" src="{{ url_for('static', filename='img/default-avatar.png') }}"
-                        onerror="this.src='https://ui-avatars.com/api/?name=User&background=random'"
-                        style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                <div id="viewAvatarContainer"
+                    style="width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: bold; color: white; background: var(--primary-color); border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden;">
+                    <span id="viewAvatarInitial">...</span>
                 </div>
                 <div style="flex: 1;">
                     <h2 id="viewNombreCompleto" style="margin: 0 0 8px 0; color: #111827; font-size: 1.5rem;">
@@ -562,6 +566,7 @@
                         <li><strong>Tipo Nómina:</strong> <span id="viewNomina">---</span></li>
                         <li><strong>Salario Pactado:</strong> $<span id="viewSalario">0.00</span></li>
                         <li><strong>Ubicación Act.:</strong> <span id="viewUbicacion">---</span></li>
+                        <li><strong>Estado (Ubic):</strong> <span id="viewEstado">---</span></li>
                         <li><strong>Coodinador:</strong> <span id="viewCoodinador">---</span></li>
                     </ul>
 

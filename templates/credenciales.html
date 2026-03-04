@@ -76,22 +76,29 @@
 
     .ficha-field {
         display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        padding: 0.35rem 0;
+        gap: 1.5rem;
+        padding: 0.45rem 0;
+        border-bottom: 1px dashed #e5e7eb;
     }
 
     .ficha-label {
         font-size: 0.8rem;
         color: #6b7280;
         font-weight: 500;
+        width: 120px;
+        flex-shrink: 0;
     }
 
     .ficha-value {
         font-size: 0.85rem;
         color: #111827;
         font-weight: 600;
-        text-align: right;
+        text-align: left;
+        flex-grow: 1;
+    }
+
+    .ficha-field:last-child {
+        border-bottom: none;
     }
 
     /* Credential chips */
@@ -169,7 +176,7 @@
                         <div style="font-size: 0.8rem; color: #6B7280;">{{ t.puesto or '' }}</div>
                     </td>
                     <td style="text-align: left;"><span class="badge area-default">{{ t.area or 'S/A' }}</span></td>
-                    <td style="text-align: left;">{{ t.ubicacion_actual or '-' }}</td>
+                    <td style="text-align: left;">{{ t.ubicacion_estado or '-' }}</td>
                     <td style="text-align: center;">
                         <div style="display: flex; gap: 6px; justify-content: center;">
                             {% set coordinadores = [] %}
@@ -180,13 +187,21 @@
                             {% endif %}
                             {% endif %}
                             {% endfor %}
+                            {% set proyectos_activos = [] %}
+                            {% for p in t.proyectos %}
+                            {% if p.activo %}
+                            {% set _ = proyectos_activos.append(p.nombre) %}
+                            {% endif %}
+                            {% endfor %}
                             <button type="button" class="btn-view-ficha"
                                 data-name="{{ t.nombre }} {{ t.nombre_apellidos }}" data-empno="{{ t.no_empleado }}"
                                 data-puesto="{{ t.puesto or '-' }}" data-area="{{ t.area or '-' }}"
                                 data-tipopago="{{ t.tipo_nomina or '-' }}"
                                 data-coord="{{ coordinadores|join(', ') if coordinadores else (t.coord_a_cargo or '-') }}"
-                                data-ubicacion="{{ t.ubicacion_actual or '-' }}" data-celular="{{ t.celular or '-' }}"
+                                data-ubicacion="{{ proyectos_activos|join(', ') if proyectos_activos else (t.ubicacion_actual or '-') }}"
+                                data-estado="{{ t.ubicacion_estado or '-' }}" data-celular="{{ t.celular or '-' }}"
                                 data-observaciones="{{ t.observaciones or '' }}"
+                                data-foto="{{ url_for('trabajadores.get_foto_perfil', id=t.id) if t.foto_perfil else '' }}"
                                 data-creds='{{ t.credenciales|map(attribute="planta")|list|tojson }}'
                                 data-credids='{{ creds|tojson }}'
                                 style="background: #eef2ff; color: #3b5998; border: 1px solid #c7d2fe; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s;">
@@ -236,8 +251,10 @@
                         id="fichaTipoPago">-</span></div>
                 <div class="ficha-field"><span class="ficha-label">Coord. a Cargo</span><span class="ficha-value"
                         id="fichaCoord">-</span></div>
-                <div class="ficha-field"><span class="ficha-label">Ubicación</span><span class="ficha-value"
+                <div class="ficha-field"><span class="ficha-label">Ubicación Proy.</span><span class="ficha-value"
                         id="fichaUbicacion">-</span></div>
+                <div class="ficha-field"><span class="ficha-label">Estado</span><span class="ficha-value"
+                        id="fichaEstado">-</span></div>
                 <div class="ficha-field"><span class="ficha-label">Celular</span><span class="ficha-value"
                         id="fichaCelular">-</span></div>
                 <div class="ficha-field" id="fichaObsRow" style="display:none;"><span

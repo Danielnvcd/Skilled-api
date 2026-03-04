@@ -4,13 +4,7 @@ from decimal import Decimal
 import traceback
 from app.extensions import db
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
-from app.utils import login_required, log_action
-
-def _to_dec(value):
-    """Convierte un valor a Decimal de forma segura."""
-    if value is None:
-        return Decimal('0')
-    return Decimal(str(value))
+from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
 
@@ -35,8 +29,8 @@ def index():
         if r.estado != 'PRENOMINA_CERRADA':
             semanas[fecha_str]['estado'] = 'TERMINADO'
             
-    # Prenóminas ya procesadas (solo extraemos las fechas de inicio que ya están en DB)
-    prenominas_fechas = { p.fecha_inicio.strftime('%Y-%m-%d') for p in Prenomina.query.all() }
+    # Prenóminas ya procesadas (solo extraemos las fechas distintas, sin cargar todas las filas)
+    prenominas_fechas = { f[0].strftime('%Y-%m-%d') for f in db.session.query(Prenomina.fecha_inicio).distinct().all() }
     
     semanas_list = sorted(semanas.values(), key=lambda x: x['fecha_inicio_semana'], reverse=True)
     
@@ -69,15 +63,19 @@ def generar(fecha_str):
     if not prenominas:
         prenominas = calcular_preview_prenomina(fecha_obj, reportes)
     else:
-        # Calcular las horas dinámicamente para pasarlas a la vista si la prenómina ya se había guardado
+        # Calcular las horas dinámicamente en batch (un solo query para todos los trabajadores)
         reporte_ids = [r.id for r in reportes]
+        todos_registros = RegistroDiarioHoras.query.filter(
+            RegistroDiarioHoras.reporte_id.in_(reporte_ids)
+        ).all()
+        # Agrupar por trabajador
+        registros_por_trabajador = {}
+        for reg in todos_registros:
+            registros_por_trabajador.setdefault(reg.trabajador_id, []).append(reg)
         for p in prenominas:
-            registros = RegistroDiarioHoras.query.filter(
-                RegistroDiarioHoras.reporte_id.in_(reporte_ids),
-                RegistroDiarioHoras.trabajador_id == p.trabajador_id
-            ).all()
-            total_horas = sum(r.horas_productivas or 0 for r in registros)
-            p.total_horas_calculadas = _to_dec(total_horas)
+            regs = registros_por_trabajador.get(p.trabajador_id, [])
+            total_horas = sum(r.horas_productivas or 0 for r in regs)
+            p.total_horas_calculadas = to_dec(total_horas)
         
     proyectos_involucrados = [r.proyecto for r in reportes]
         
@@ -274,15 +272,18 @@ def editar(fecha_str):
         ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
     ).all()
     
-    # Reconstruir las horas trabajadas visualmente para la UI
+    # Reconstruir las horas trabajadas en batch (un solo query para todos los trabajadores)
     reporte_ids = [r.id for r in reportes]
+    todos_registros = RegistroDiarioHoras.query.filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids)
+    ).all()
+    registros_por_trabajador = {}
+    for reg in todos_registros:
+        registros_por_trabajador.setdefault(reg.trabajador_id, []).append(reg)
     for p in prenominas:
-        registros = RegistroDiarioHoras.query.filter(
-            RegistroDiarioHoras.reporte_id.in_(reporte_ids),
-            RegistroDiarioHoras.trabajador_id == p.trabajador_id
-        ).all()
-        total_horas = sum(r.horas_productivas or 0 for r in registros)
-        p.total_horas_calculadas = _to_dec(total_horas)
+        regs = registros_por_trabajador.get(p.trabajador_id, [])
+        total_horas = sum(r.horas_productivas or 0 for r in regs)
+        p.total_horas_calculadas = to_dec(total_horas)
     
     incidencias_por_trabajador = {}
     incidencias_descontables = ['Falta', 'Retardo', 'Falta checada de entrada', 'Falta checada de salida', 'Permiso', 'Luto', 'Casamiento']
@@ -330,11 +331,11 @@ def cerrar_prenomina(fecha_str):
             p.estado = 'APROBADO'
             
             # Aplicar descuentos de préstamos reales a la deuda
-            if p.descuento_prestamos and _to_dec(p.descuento_prestamos) > Decimal('0'):
+            if p.descuento_prestamos and to_dec(p.descuento_prestamos) > Decimal('0'):
                 prestamos_activos = Prestamo.query.filter_by(trabajador_id=p.trabajador_id, estado='ACTIVO').all()
                 for prestamo in prestamos_activos:
-                    descuento = _to_dec(prestamo.descuento_semanal)
-                    restante = _to_dec(prestamo.monto_restante)
+                    descuento = to_dec(prestamo.descuento_semanal)
+                    restante = to_dec(prestamo.monto_restante)
                     
                     # Si el saldo ya está en 0, marcar como liquidado y saltar (sin registrar abono)
                     if restante <= 0:
@@ -415,7 +416,7 @@ def api_agregar_descuento():
         db.session.add(desc)
         db.session.commit()
         
-        _recalcular_prenomina(prenomina)
+        recalcular_totales_prenomina(prenomina)
         
         return jsonify({'success': True, 'message': 'Descuento agregado.', 'id': desc.id,
             'total_deducciones': float(prenomina.total_deducciones),
@@ -436,14 +437,15 @@ def api_eliminar_descuento(id):
         
         db.session.delete(desc)
         db.session.commit()
-        _recalcular_prenomina(prenomina)
+        recalcular_totales_prenomina(prenomina)
         
         return jsonify({'success': True, 'message': 'Descuento eliminado.',
             'total_deducciones': float(prenomina.total_deducciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        current_app.logger.error(f"Error al eliminar descuento: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al eliminar el descuento.'}), 500
 
 @bp.route('/api/deposito', methods=['POST'])
 @login_required
@@ -481,7 +483,7 @@ def api_agregar_deposito():
         )
         db.session.add(dep)
         db.session.commit()
-        _recalcular_prenomina(prenomina)
+        recalcular_totales_prenomina(prenomina)
         
         return jsonify({'success': True, 'message': 'Depósito agregado.', 'id': dep.id,
             'total_percepciones': float(prenomina.total_percepciones),
@@ -502,35 +504,17 @@ def api_eliminar_deposito(id):
         
         db.session.delete(dep)
         db.session.commit()
-        _recalcular_prenomina(prenomina)
+        recalcular_totales_prenomina(prenomina)
         
         return jsonify({'success': True, 'message': 'Depósito eliminado.',
             'total_percepciones': float(prenomina.total_percepciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        current_app.logger.error(f"Error al eliminar depósito: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al eliminar el depósito.'}), 500
 
-def _recalcular_prenomina(prenomina):
-    """Recalcula los totales de una prenómina individual basándose en sus descuentos y depósitos granulares."""
-    # Descuentos granulares
-    total_desc_detalle = sum((_to_dec(d.monto) for d in prenomina.descuentos_detalle), Decimal('0')) if prenomina.descuentos_detalle else Decimal('0')
-    # Depósitos extras
-    total_dep_extra = sum((_to_dec(d.monto) for d in prenomina.depositos_detalle), Decimal('0')) if prenomina.depositos_detalle else Decimal('0')
-    
-    # Cuotas de préstamos activos
-    prestamos_activos = Prestamo.query.filter_by(trabajador_id=prenomina.trabajador_id, estado='ACTIVO').all()
-    total_prestamos = sum((_to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
-    
-    prenomina.descuento_prestamos = total_prestamos
-    prenomina.depositos_otros = total_dep_extra
-    prenomina.descuentos_otros = total_desc_detalle
-    
-    prenomina.total_percepciones = _to_dec(prenomina.salario_base) + _to_dec(prenomina.pago_horas_extras) + _to_dec(prenomina.pago_viaticos) + _to_dec(prenomina.pago_festivos) + _to_dec(prenomina.depositos_otros)
-    prenomina.total_deducciones = _to_dec(prenomina.descuento_infonavit) + _to_dec(prenomina.ajuste_inbursa) + _to_dec(prenomina.descuento_incidencias) + _to_dec(prenomina.descuento_prestamos) + _to_dec(prenomina.descuentos_otros)
-    prenomina.total_a_pagar = prenomina.total_percepciones - prenomina.total_deducciones
-    
-    db.session.commit()
+# _recalcular_prenomina removida — usar recalcular_totales_prenomina() desde utils.py
 
 def calcular_preview_prenomina(fecha_obj, reportes):
     """
@@ -542,26 +526,43 @@ def calcular_preview_prenomina(fecha_obj, reportes):
     
     # Obtenemos ids únicos de los trabajadores involucrados en esta semana
     trabajadores_ids = set()
+    all_registros = []  # Recopilar todos los registros una sola vez
     for r in reportes:
         for reg in r.registros:
             trabajadores_ids.add(reg.trabajador_id)
+            all_registros.append(reg)
             
+    if not trabajadores_ids:
+        return preview
+    
     fecha_fin_semana = reportes[0].fecha_fin_semana if reportes else None
     
+    # Batch-load: un solo query para todos los trabajadores en vez de N queries individuales
+    trabajadores_map = {t.id: t for t in Trabajador.query.filter(Trabajador.id.in_(trabajadores_ids)).all()}
+    
+    # Batch-load: un solo query para todos los préstamos activos de estos trabajadores
+    todos_prestamos = Prestamo.query.filter(
+        Prestamo.trabajador_id.in_(trabajadores_ids),
+        Prestamo.estado == 'ACTIVO'
+    ).all()
+    prestamos_por_trabajador = {}
+    for pr in todos_prestamos:
+        prestamos_por_trabajador.setdefault(pr.trabajador_id, []).append(pr)
+    
+    # Agrupar registros por trabajador (sin queries adicionales)
+    registros_por_trabajador = {}
+    for reg in all_registros:
+        registros_por_trabajador.setdefault(reg.trabajador_id, []).append(reg)
+    
     for t_id in trabajadores_ids:
-        trabajador = Trabajador.query.get(t_id)
+        trabajador = trabajadores_map.get(t_id)
+        if not trabajador:
+            continue
         
-        # Juntar todos los registros del trabajador en los múltiples reportes
-        registros_trabajador = []
-        for r in reportes:
-            registros_trabajador.extend([reg for reg in r.registros if reg.trabajador_id == t_id])
+        registros_trabajador = registros_por_trabajador.get(t_id, [])
         
         # 1. Totalizar horas productivas consolidando proyectos
         total_horas = sum(r.horas_productivas or 0 for r in registros_trabajador)
-        
-        # Viáticos: asumiremos que cada día laborado con cualquier proyecto cuenta como 1 día (fechas únicas)
-        fechas_laboradas = set(r.fecha for r in registros_trabajador if r.horas_productivas and r.horas_productivas > 0)
-        dias_capturados = len(fechas_laboradas)
         
         p = Prenomina(
             reporte_semanal_id=None,
@@ -580,28 +581,28 @@ def calcular_preview_prenomina(fecha_obj, reportes):
         )
         
         # Guardar para visualización temporal en pantalla
-        p.total_horas_calculadas = _to_dec(total_horas)
+        p.total_horas_calculadas = to_dec(total_horas)
         
         tipo = trabajador.tipo_nomina or 'Semanal'
         p.salario_base = Decimal('0')
         p.pago_horas_extras = Decimal('0')
         
-        salario_pactado = _to_dec(trabajador.salario_real_pactado_x_sem)
+        salario_pactado = to_dec(trabajador.salario_real_pactado_x_sem)
         
         if tipo == 'Por hora':
-            p.salario_base = _to_dec(total_horas) * salario_pactado
+            p.salario_base = to_dec(total_horas) * salario_pactado
         elif tipo == 'Cuadrado':
             p.salario_base = salario_pactado
         else: # Semanal
             p.salario_base = salario_pactado
             if total_horas > 50:
-                horas_extras = _to_dec(total_horas) - Decimal('50')
-                costo_hr_extra = _to_dec(trabajador.hr_extra)
+                horas_extras = to_dec(total_horas) - Decimal('50')
+                costo_hr_extra = to_dec(trabajador.hr_extra)
                 p.pago_horas_extras = horas_extras * costo_hr_extra
         
         # Deducciones maestras
-        p.descuento_infonavit = _to_dec(trabajador.infonavit)
-        p.ajuste_inbursa = _to_dec(trabajador.ajuste_inbursa)
+        p.descuento_infonavit = to_dec(trabajador.infonavit)
+        p.ajuste_inbursa = to_dec(trabajador.ajuste_inbursa)
         
         # Cálculo de Incidencias Consolidadas
         total_descuento_incidencias = Decimal('0')
@@ -611,9 +612,6 @@ def calcular_preview_prenomina(fecha_obj, reportes):
             
             for reg in registros_trabajador:
                 if reg.incidencia in incidencias_descontables:
-                    # En lugar de castigar doble si el empleado faltó por error a 2 proyectos en el mismo día
-                    # es más seguro calcular 10hrs por día que se declaró una falta (pero podría no ser exacto en combinaciones).
-                    # De momento mantenemos el sumatorio de incidencias tal cual:
                     if not reg.horas_productivas or reg.horas_productivas == 0:
                         horas_ausentes_incidencia += Decimal('10')
                         
@@ -624,23 +622,23 @@ def calcular_preview_prenomina(fecha_obj, reportes):
                  
         if trabajador.viaticos:
             dias_con_viaticos = sum(1 for reg in registros_trabajador if reg.aplica_viaticos)
-            p.pago_viaticos = _to_dec(trabajador.viaticos) * Decimal(str(dias_con_viaticos))
+            p.pago_viaticos = to_dec(trabajador.viaticos) * Decimal(str(dias_con_viaticos))
         else:
              p.pago_viaticos = Decimal('0')
         
         # Pago por Días Festivos (toggle por registro)
         if trabajador.pago_dia_festivo:
             dias_festivos = sum(1 for reg in registros_trabajador if reg.aplica_dia_festivo)
-            p.pago_festivos = _to_dec(trabajador.pago_dia_festivo) * Decimal(str(dias_festivos))
+            p.pago_festivos = to_dec(trabajador.pago_dia_festivo) * Decimal(str(dias_festivos))
         else:
             p.pago_festivos = Decimal('0')
               
-        # Add Active Loans to Deductions
-        prestamos_activos = Prestamo.query.filter_by(trabajador_id=t_id, estado='ACTIVO').all()
-        p.descuento_prestamos = sum((_to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
+        # Préstamos activos (desde el batch pre-cargado, sin query adicional)
+        prestamos_activos = prestamos_por_trabajador.get(t_id, [])
+        p.descuento_prestamos = sum((to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
              
-        p.total_percepciones = _to_dec(p.salario_base) + _to_dec(p.pago_horas_extras) + _to_dec(p.pago_viaticos) + _to_dec(p.pago_festivos)
-        p.total_deducciones = _to_dec(p.descuento_infonavit) + _to_dec(p.ajuste_inbursa) + _to_dec(p.descuento_incidencias) + _to_dec(p.descuento_prestamos) + _to_dec(p.descuentos_otros)
+        p.total_percepciones = to_dec(p.salario_base) + to_dec(p.pago_horas_extras) + to_dec(p.pago_viaticos) + to_dec(p.pago_festivos)
+        p.total_deducciones = to_dec(p.descuento_infonavit) + to_dec(p.ajuste_inbursa) + to_dec(p.descuento_incidencias) + to_dec(p.descuento_prestamos) + to_dec(p.descuentos_otros)
         p.total_a_pagar = p.total_percepciones - p.total_deducciones
         
         preview.append(p)

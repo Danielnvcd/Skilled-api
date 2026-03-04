@@ -185,10 +185,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const credId = credencialIdInput.value.trim();
-            if (!credId) {
-                alert('Por favor ingresa un ID de credencial.');
-                return;
-            }
 
             // Check max limits just in case
             if (credId.length > 40) {
@@ -465,6 +461,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     safeSetText('viewNomina', data.tipo_nomina || data.tipo_pago || '---');
                     safeSetText('viewSalario', data.salario_real_pactado_x_sem || '0.00');
                     safeSetText('viewUbicacion', data.ubicacion_actual || '---');
+                    safeSetText('viewEstado', data.ubicacion_estado || '---');
                     safeSetText('viewCoodinador', data.coordinadores_actuales || '---');
                 } else {
                     console.warn("viewWorkerModal not found in DOM.");
@@ -473,9 +470,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 // Picture
-                const picElem = document.getElementById('viewProfilePic');
-                if (picElem) {
-                    picElem.src = data.foto_perfil ? `/trabajadores/foto/${id}` : defaultAvatarUrl;
+                const avatarContainer = document.getElementById('viewAvatarContainer');
+                if (avatarContainer) {
+                    if (data.foto_perfil) {
+                        avatarContainer.innerHTML = `<img src="/trabajadores/foto/${id}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                        avatarContainer.style.background = 'transparent';
+                    } else {
+                        const initial = data.nombre ? data.nombre.charAt(0).toUpperCase() : 'U';
+                        avatarContainer.innerHTML = `<span id="viewAvatarInitial">${initial}</span>`;
+                        avatarContainer.style.background = 'var(--primary-color)';
+                    }
                 }
 
                 // Credentials

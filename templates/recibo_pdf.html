@@ -193,8 +193,13 @@
                 <!-- Logo removido por solicitud -->
             </td>
             <td width="70%" style="padding-left: 20px;">
+                {% if p.estado == 'APROBADO' %}
+                <div class="header-title">NÓMINA APROBADA</div>
+                <div class="header-subtitle">Documento oficial de nómina procesada</div>
+                {% else %}
                 <div class="header-title">PROYECCIÓN DE NÓMINA - EN REVISIÓN</div>
                 <div class="header-subtitle">Documento de circulación interna pre-autorización</div>
+                {% endif %}
             </td>
         </tr>
     </table>
@@ -205,9 +210,9 @@
     <table class="info-table">
         <tr>
             <td width="15%"><strong>Proyecto:</strong></td>
-            <td width="35%">Consolidada Global</td>
+            <td width="35%">{{ reporte.proyecto.nombre if reporte.proyecto else 'Sin asignar' }}</td>
             <td width="15%" class="text-right"><strong>Trabajador:</strong></td>
-            <td width="35%" class="text-right">{{ p.trabajador.no_empleado }} - {{ p.trabajador.nombre_apellidos }}</td>
+            <td width="35%" class="text-right">{{ p.trabajador.no_empleado }} - {{ p.trabajador.nombre_completo }}</td>
         </tr>
         <tr>
             <td><strong>Período Reportado:</strong></td>

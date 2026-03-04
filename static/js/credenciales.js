@@ -46,13 +46,25 @@ document.addEventListener('DOMContentLoaded', function () {
             var coord = btn.getAttribute('data-coord') || '-';
             var ubicacion = btn.getAttribute('data-ubicacion') || '-';
             var celular = btn.getAttribute('data-celular') || '-';
+            var estado = btn.getAttribute('data-estado') || '-';
             var observaciones = btn.getAttribute('data-observaciones') || '';
+            var foto = btn.getAttribute('data-foto') || '';
             var credIds = {};
 
             try { credIds = JSON.parse(btn.getAttribute('data-credids') || '{}'); } catch (e) { }
 
             // Populate modal
-            document.getElementById('fichaAvatar').textContent = name.charAt(0).toUpperCase();
+            var avatarDiv = document.getElementById('fichaAvatar');
+            if (foto) {
+                avatarDiv.innerHTML = '<img src="' + foto + '" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">';
+                avatarDiv.style.background = 'transparent';
+                avatarDiv.style.border = '3px solid rgba(255, 255, 255, 0.3)';
+            } else {
+                avatarDiv.innerHTML = '';
+                avatarDiv.textContent = name.charAt(0).toUpperCase();
+                avatarDiv.style.background = 'white';
+            }
+
             document.getElementById('fichaName').textContent = name;
             document.getElementById('fichaEmpNo').textContent = 'No. ' + empno;
             document.getElementById('fichaPuesto').textContent = puesto;
@@ -60,6 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('fichaTipoPago').textContent = tipopago;
             document.getElementById('fichaCoord').textContent = coord;
             document.getElementById('fichaUbicacion').textContent = ubicacion;
+            document.getElementById('fichaEstado').textContent = estado;
             document.getElementById('fichaCelular').textContent = celular;
 
             var obsRow = document.getElementById('fichaObsRow');
@@ -180,10 +193,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const credId = credencialIdInput.value.trim();
-            if (!credId) {
-                alert('Por favor ingresa un ID de credencial.');
-                return;
-            }
 
             if (credId.length > 40) {
                 alert('El ID de la credencial no puede superar los 40 caracteres.');

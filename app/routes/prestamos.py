@@ -1,16 +1,10 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 from app.extensions import db
 from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina, AbonoPrestamo
-from app.utils import login_required, log_action
+from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 import traceback
-
-def _to_dec(value):
-    """Convierte un valor a Decimal de forma segura."""
-    if value is None:
-        return Decimal('0')
-    return Decimal(str(value))
 
 bp = Blueprint('prestamos', __name__, url_prefix='/prestamos')
 
@@ -85,8 +79,8 @@ def editar(id):
         if prestamo.estado == 'LIQUIDADO':
             return jsonify({'success': False, 'message': 'No se puede editar un préstamo liquidado.'}), 400
         
-        nuevo_monto = _to_dec(data.get('monto_total', prestamo.monto_total))
-        nuevo_descuento = _to_dec(data.get('descuento_semanal', prestamo.descuento_semanal))
+        nuevo_monto = to_dec(data.get('monto_total', prestamo.monto_total))
+        nuevo_descuento = to_dec(data.get('descuento_semanal', prestamo.descuento_semanal))
         nuevo_plazo = int(data.get('plazo_semanas', prestamo.plazo_semanas))
         
         if nuevo_monto <= 0 or nuevo_descuento <= 0 or nuevo_plazo <= 0:
@@ -94,7 +88,7 @@ def editar(id):
         
         # Calcular lo ya abonado para validar y recalcular
         total_abonado = sum(
-            (_to_dec(a.monto) for a in AbonoPrestamo.query.filter_by(prestamo_id=id).all()),
+            (to_dec(a.monto) for a in AbonoPrestamo.query.filter_by(prestamo_id=id).all()),
             Decimal('0')
         )
         
@@ -145,7 +139,7 @@ def abonar(id):
         if prestamo.estado == 'LIQUIDADO':
             return jsonify({'success': False, 'message': 'Préstamo ya liquidado.'}), 400
         
-        prestamo.monto_restante = max(Decimal('0'), _to_dec(prestamo.monto_restante) - monto_abono)
+        prestamo.monto_restante = max(Decimal('0'), to_dec(prestamo.monto_restante) - monto_abono)
         
         if prestamo.monto_restante <= 0:
             prestamo.monto_restante = 0
@@ -238,28 +232,11 @@ def get_detalles(id):
 
 
 def _recalcular_prenominas_abiertas(trabajador_id):
-    """Recalcula todas las prenóminas ABIERTAS de un trabajador."""
+    """Recalcula todas las prenóminas ABIERTAS de un trabajador usando la lógica compartida."""
     prenominas_abiertas = Prenomina.query.filter_by(
         trabajador_id=trabajador_id, 
         estado='ABIERTA'
     ).all()
     
     for p in prenominas_abiertas:
-        # Sumar descuentos granulares
-        total_desc_detalle = sum((_to_dec(d.monto) for d in p.descuentos_detalle), Decimal('0')) if p.descuentos_detalle else Decimal('0')
-        # Sumar depósitos extras
-        total_dep_extra = sum((_to_dec(d.monto) for d in p.depositos_detalle), Decimal('0')) if p.depositos_detalle else Decimal('0')
-        
-        # Cuotas de préstamos activos
-        prestamos_activos = Prestamo.query.filter_by(trabajador_id=trabajador_id, estado='ACTIVO').all()
-        total_prestamos = sum((_to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
-        
-        p.descuento_prestamos = total_prestamos
-        p.depositos_otros = total_dep_extra
-        p.descuentos_otros = total_desc_detalle
-        
-        p.total_percepciones = _to_dec(p.salario_base) + _to_dec(p.pago_horas_extras) + _to_dec(p.pago_viaticos) + _to_dec(p.pago_festivos) + _to_dec(p.depositos_otros)
-        p.total_deducciones = _to_dec(p.descuento_infonavit) + _to_dec(p.ajuste_inbursa) + _to_dec(p.descuento_incidencias) + _to_dec(p.descuento_prestamos) + _to_dec(p.descuentos_otros)
-        p.total_a_pagar = p.total_percepciones - p.total_deducciones
-    
-    db.session.commit()
+        recalcular_totales_prenomina(p)

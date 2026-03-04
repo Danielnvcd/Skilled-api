@@ -110,6 +110,7 @@ class Trabajador(db.Model):
     no_proyecto = db.Column(db.String(100))
     coord_a_cargo = db.Column(db.String(150))
     ubicacion_actual = db.Column(db.String(150))
+    ubicacion_estado = db.Column(db.String(100))
     observaciones = db.Column(db.Text)
 
 class CredencialPlanta(db.Model):
@@ -164,21 +165,21 @@ class ReporteSemanal(db.Model):
     __tablename__ = "reportes_semanales"
     id = db.Column(db.Integer, primary_key=True)
     # Por regla: Inicia martes, termina lunes. Se guarda la fecha de inicio.
-    fecha_inicio_semana = db.Column(db.Date, nullable=False)
+    fecha_inicio_semana = db.Column(db.Date, nullable=False, index=True)
     fecha_fin_semana = db.Column(db.Date, nullable=False)
     proyecto_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=False)
     proyecto = db.relationship('Proyecto')
-    estado = db.Column(db.String(20), default='BORRADOR') # 'BORRADOR' o 'TERMINADO'
+    estado = db.Column(db.String(20), default='BORRADOR', index=True) # 'BORRADOR' o 'TERMINADO'
     creado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.now)
 
 class RegistroDiarioHoras(db.Model):
     __tablename__ = "registros_diarios_horas"
     id = db.Column(db.Integer, primary_key=True)
-    reporte_id = db.Column(db.Integer, db.ForeignKey('reportes_semanales.id'), nullable=False)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    reporte_id = db.Column(db.Integer, db.ForeignKey('reportes_semanales.id'), nullable=False, index=True)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     
-    fecha = db.Column(db.Date, nullable=False)
+    fecha = db.Column(db.Date, nullable=False, index=True)
     
     # Horarios
     hora_entrada = db.Column(db.Time, nullable=True)
@@ -208,11 +209,11 @@ class Prenomina(db.Model):
     __tablename__ = "prenominas"
     id = db.Column(db.Integer, primary_key=True)
     reporte_semanal_id = db.Column(db.Integer, db.ForeignKey('reportes_semanales.id'), nullable=True) # Ligado a horas
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     trabajador = db.relationship('Trabajador')
     
     # Identificación Semanal
-    fecha_inicio = db.Column(db.Date, nullable=False)
+    fecha_inicio = db.Column(db.Date, nullable=False, index=True)
     fecha_fin = db.Column(db.Date, nullable=False)
     
     # PERCEPCIONES
@@ -240,13 +241,13 @@ class Prenomina(db.Model):
     
     # Metadatos de Pago
     tipo_pago = db.Column(db.String(50)) # EFECTIVO o TRANSFERENCIA
-    estado = db.Column(db.String(20), default='PENDIENTE') # 'PENDIENTE', 'ABIERTA', 'APROBADO'
+    estado = db.Column(db.String(20), default='PENDIENTE', index=True) # 'PENDIENTE', 'ABIERTA', 'APROBADO'
 
 class Prestamo(db.Model):
     """Modelo para controlar los depósitos de préstamos y la programación de sus plazos/descuentos."""
     __tablename__ = "prestamos"
     id = db.Column(db.Integer, primary_key=True)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     trabajador = db.relationship('Trabajador', backref=db.backref('prestamos', lazy=True))
     monto_total = db.Column(db.Numeric(10, 2), nullable=False)
     plazo_semanas = db.Column(db.Integer, nullable=False)
@@ -255,7 +256,7 @@ class Prestamo(db.Model):
     motivo = db.Column(db.String(250), nullable=True)
     frecuencia = db.Column(db.String(50), default='semanal') # semanal, quincenal, mensual
     fecha_inicio = db.Column(db.Date, nullable=True)
-    estado = db.Column(db.String(20), default='ACTIVO') # ACTIVO, LIQUIDADO
+    estado = db.Column(db.String(20), default='ACTIVO', index=True) # ACTIVO, LIQUIDADO
     activo = db.Column(db.Boolean, default=True)
     creado_en = db.Column(db.DateTime, default=datetime.now)
 

@@ -1,15 +1,9 @@
 from flask import Blueprint, render_template
 from decimal import Decimal
-from app.utils import login_required
+from app.utils import login_required, to_dec
 from app.extensions import db
 from app.models import Proyecto, Prenomina, ReporteSemanal, RegistroDiarioHoras
 from sqlalchemy import func
-
-def _to_dec(value):
-    """Convierte un valor a Decimal de forma segura."""
-    if value is None:
-        return Decimal('0')
-    return Decimal(str(value))
 
 bp = Blueprint('proyecto_total', __name__, url_prefix='/proyecto-total')
 
@@ -72,7 +66,7 @@ def index():
             # Weekly sums using Decimal
             week_dec = {}
             for key in _MONEY_KEYS:
-                week_dec[key] = sum((_to_dec(getattr(p, key)) for p in prenominas), Decimal('0'))
+                week_dec[key] = sum((to_dec(getattr(p, key)) for p in prenominas), Decimal('0'))
             
             # Convert to float for Jinja template rendering
             week = {
