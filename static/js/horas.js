@@ -16,4 +16,23 @@ document.addEventListener('DOMContentLoaded', function () {
             if (e.target === this) closeModal();
         });
     }
+
+    // Date Validation on form submit
+    const reporteForm = document.getElementById('reporteForm');
+    if (reporteForm) {
+        reporteForm.addEventListener('submit', function (e) {
+            const startDateStr = document.querySelector('input[name="fecha_inicio_semana"]').value;
+            const endDateStr = document.querySelector('input[name="fecha_fin_semana"]').value;
+
+            if (startDateStr && endDateStr) {
+                const startDate = new Date(startDateStr);
+                const endDate = new Date(endDateStr);
+
+                if (startDate >= endDate) {
+                    e.preventDefault();
+                    alert("La Fecha de Inicio debe ser mayor a la Fecha de Fin.");
+                }
+            }
+        });
+    }
 });

@@ -83,6 +83,27 @@
                     Teléfono:</span>
                 <span class="ficha-value">{{ t.numero_contacto_emerg if t.numero_contacto_emerg else 'No' }}</span>
             </p>
+            <hr style="border:0; border-top: 1px dashed #e2e8f0; margin: 15px 0;">
+            <p style="margin-bottom: 8px;">
+                <span class="ficha-label"><i class="fa-solid fa-folder-open" style="color:#f59e0b; width: 16px;"></i>
+                    Documentos ({{ t.documentos|length }}):</span>
+            </p>
+            {% if t.documentos %}
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                {% for doc in t.documentos %}
+                <a href="{{ url_for('trabajadores.get_documento', doc_id=doc.id) }}" target="_blank"
+                    style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #334155; font-size: 0.85rem; transition: background 0.2s;">
+                    <i class="fa-solid fa-file-pdf" style="color: #ef4444; font-size: 1.1rem;"></i>
+                    <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
+                        doc.nombre_archivo }}</span>
+                    <i class="fa-solid fa-download" style="color: #94a3b8;"></i>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <span class="ficha-value" style="font-style: italic; color: #94a3b8; font-size: 0.85rem;">Ningún documento
+                subido en el expediente.</span>
+            {% endif %}
         </div>
     </div>
     {% endfor %}

@@ -51,6 +51,10 @@ def crear_reporte():
 
         fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
         fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
+        
+        if fecha_inicio >= fecha_fin:
+            flash("Error: La fecha de inicio debe ser anterior a la fecha de fin.", "danger")
+            return redirect(url_for('horas.index'))
 
         # Validación 1: ¿La semana ya fue cerrada globalmente? (Verifica si hay solapamiento de fechas)
         semana_cerrada = ReporteSemanal.query.filter(

@@ -188,11 +188,7 @@
                 <img src="{{ url_for('static', filename='iconos/proyectos.png') }}" class="menu-icon" alt="Proyectos">
                 Proyectos
             </a>
-            <a href="{{ url_for('main.credenciales') }}"
-                class="{{ 'active' if request.endpoint == 'main.credenciales' }}">
-                <img src="{{ url_for('static', filename='iconos/credenciales.png') }}" class="menu-icon"
-                    alt="Credenciales"> Credenciales
-            </a>
+
             <a href="{{ url_for('prenomina.index') }}" class="{{ 'active' if request.endpoint == 'prenomina.index' }}">
                 <img src="{{ url_for('static', filename='iconos/prenomina.png') }}" class="menu-icon" alt="Prenómina">
                 Prenómina
@@ -214,6 +210,11 @@
                 Préstamos
             </a>
             {% endif %}
+            <a href="{{ url_for('main.credenciales') }}"
+                class="{{ 'active' if request.endpoint == 'main.credenciales' }}">
+                <img src="{{ url_for('static', filename='iconos/credenciales.png') }}" class="menu-icon"
+                    alt="Credenciales"> Credenciales
+            </a>
             <a href="{{ url_for('horas.index') }}" class="{{ 'active' if request.endpoint == 'horas.index' }}">
                 <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Coordinadores">
                 Reporte de Horas

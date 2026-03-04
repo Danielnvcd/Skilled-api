@@ -207,6 +207,7 @@
                                 style="background: #eef2ff; color: #3b5998; border: 1px solid #c7d2fe; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s;">
                                 <i class="fas fa-id-card" style="margin-right: 4px;"></i> Ver Ficha
                             </button>
+                            {% if session.get('role') in ['admin', 'super_admin'] %}
                             <button class="btn-icon edit-btn" data-id="{{ t.id }}" title="Editar Credenciales"
                                 style="background:none; border:none; cursor:pointer; color: #4B5563;">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -215,6 +216,7 @@
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                 </svg>
                             </button>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/info.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="info-wrapper">
+    <!-- Encabezado Principal -->
+    <div class="info-header-card">
+        <h1>Arquitectura del Sistema</h1>
+        <p>Conoce las tecnologías que le dan vida a esta plataforma.
+        </p>
+    </div>
+
+    <!-- Grid de Tecnologías -->
+    <div class="tech-grid">
+        {% for tech in tecnologias %}
+        <div class="tech-card">
+            <div class="tech-icon-container" style="color: {{ tech.color }};">
+                <i class="{{ tech.logo }}"></i>
+            </div>
+            <h3 class="tech-title">{{ tech.nombre }}</h3>
+            <p class="tech-description">{{ tech.descripcion }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Sección de Seguridad -->
+    <div class="security-section">
+        <div class="security-header">
+            <i class="fa-solid fa-shield-halved"></i>
+            <h2>Defensa en Profundidad y Cumplimiento</h2>
+        </div>
+        <p class="security-intro">
+            La plataforma implementa una estrategia de "Defense-in-Depth" (Defensa en Profundidad), asegurando que si
+            una capa llega a ser comprometida, los asaltantes encontrarán docenas de contramedidas independientes
+            bloqueando su progreso.
+        </p>
+        <div class="security-grid">
+            <div class="security-card">
+                <div class="sec-icon"><i class="fa-solid fa-lock"></i></div>
+                <h4>Cifrado AES-256 e Integidad Criptográfica</h4>
+                <p>Las contraseñas de todos los coordinadores no se guardan en texto plano, sino que pasan por un hash
+                    <strong>Werkzeug pbkdf2:sha256</strong> con salting generada criptográficamente (Cryptographically
+                    Secure Pseudo-Random Number Generator). Todo el tráfico en tránsito está blindado con protocolos
+                    <strong>TLS 1.3</strong> evitando la inyección de paquetes y ataques Man-in-the-Middle.
+                </p>
+            </div>
+            <div class="security-card">
+                <div class="sec-icon"><i class="fa-solid fa-user-shield"></i></div>
+                <h4>Protección Anti-Spoofing y Anti-CSRF</h4>
+                <p>Cada vez que un formulario de nómina es abierto, Flask inyecta un token <strong>CSRF</strong>
+                    (Cross-Site Request Forgery) efímero ligado directamente a la cookie de sesión cifrada HTTPOnly.
+                    Ningún script malicioso o navegador tercero puede engañar al servidor para robar el payload de la
+                    nómina.</p>
+            </div>
+            <div class="security-card">
+                <div class="sec-icon"><i class="fa-solid fa-fire-burner"></i></div>
+                <h4>Validación Algorítmica de Endpoints</h4>
+                <p>Los algoritmos en Python validan que ninguna entrada de horas tenga parámetros inyectados de bases de
+                    datos. Gunicorn filtra payloads sobredimensionados, anulando instantáneamente los intentos directos
+                    de un buffer-overflow o una falla masiva de memoria (OOM).</p>
+            </div>
+            <div class="security-card">
+                <div class="sec-icon"><i class="fa-solid fa-stopwatch"></i></div>
+                <h4>Mitigación Rate-Limiting mediante Redis</h4>
+                <p>Si un usuario malintencionado intenta un ataque de fuerza bruta con diccionarios de contraseñas,
+                    nuestra integración nativa con el motor Redis bloquea y añade al atacante a una lista negra luego de
+                    sobrepasar los límites establecidos de la API, enfriando el Endpoint milisegundo a milisegundo.</p>
+            </div>
+            <div class="security-card">
+                <div class="sec-icon"><i class="fa-solid fa-file-signature"></i></div>
+                <h4>Auditoría Forense Inmutable WORM</h4>
+                <p>Implementación de bitácoras Write-Once Read-Many en la base de datos estructural. Ningún
+                    administrador puede borrar o modificar su rastro de forma clandestina. Cada acción sensible de
+                    creación o edición de reportes genera un "Fingerprint" criptográfico asociando la Identidad y
+                    Dirección IP del emisor a la marca temporal irreversible.</p>
+            </div>
+            <div class="security-card">
+                <div class="sec-icon"><i class="fa-solid fa-key"></i></div>
+                <h4>Aislamiento Criptográfico de Sesión Strict</h4>
+                <p>Las credenciales generadas durante el Login no residen en el navegador, operan mediante Cookies de
+                    Sesión <strong>HttpOnly, Secure y SameSite=Lax</strong>. Esto imposibilita que un software espía lea
+                    la clave de acceso a través de inyecciones XSS (Cross-Site Scripting), al estar blindadas
+                    criptográficamente y expirar al detectar anomalías en la red.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

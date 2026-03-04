@@ -274,7 +274,7 @@
                 </div>
                 <div class="list-text" style="flex:1;">
                     <h5>{{ log.action }}</h5>
-                    <p>Realizado por {{ log.user }}</p>
+                    <p>Realizado por {{ log.user or 'Sistema' }}</p>
                 </div>
                 <div style="font-size: 0.8rem; color: #9ca3af;">
                     {{ log.created_at.strftime('%d/%m/%Y %I:%M %p') }}
@@ -284,8 +284,9 @@
             <p style="color: #6b7280; font-style: italic;">No hay actividad reciente registrada.</p>
             {% endfor %}
         </div>
-        <div style="margin-top: 15px; text-align: center;">
-            <a href="#" style="color: #3b82f6; text-decoration: none; font-size: 0.9rem; font-weight: 500;">Ver Bitácora
+        <div style="text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+            <a href="{{ url_for('bitacora.index') }}"
+                style="color: #3b82f6; text-decoration: none; font-size: 0.9rem; font-weight: 500;">Ver Bitácora
                 Completa</a>
         </div>
     </div>
@@ -311,6 +312,16 @@
             {% endfor %}
         </div>
     </div>
+</div>
+
+<!-- Footer Info Link -->
+<div
+    style="text-align: center; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: #6b7280; font-size: 0.9rem;">
+    Skilled &copy; 2026.
+    <a href="{{ url_for('info.index') }}"
+        style="color: #1548b4; text-decoration: none; font-weight: 500; margin-left: 10px;">
+        <i class="fa-solid fa-circle-info"></i> Información del Sistema
+    </a>
 </div>
 
 <!-- Scripts for Charts -->

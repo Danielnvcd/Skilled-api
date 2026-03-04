@@ -95,9 +95,9 @@ ROLE_PERMISSIONS = {
         'default_redirect': 'main.home',
     },
     'coordinador': {
-        'allowed': ['horas.', 'auth.', 'ficha.'],
+        'allowed': ['horas.', 'auth.', 'ficha.', 'trabajadores.', 'main.credenciales'],
         'default_redirect': 'horas.index',
-        'deny_message': 'Acceso denegado. Tu rol solo permite acceder al Registro de Horas y Ficha Técnica.',
+        'deny_message': 'Acceso denegado. Tu rol solo permite acceder a Horas, Ficha Técnica y Credenciales.',
     },
 }
 

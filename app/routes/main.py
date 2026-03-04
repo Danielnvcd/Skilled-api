@@ -67,7 +67,21 @@ def home():
 @bp.route('/credenciales')
 @login_required
 def credenciales():
-    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.id).all()
+    from flask import session
+    user_id = session.get('user_id')
+    user_role = session.get('role', 'user')
+
+    if user_role == 'coordinador':
+        proyectos = Proyecto.query.filter_by(coordinador_id=user_id).all()
+        trabajadores_set = set()
+        for p in proyectos:
+            for t in p.participantes:
+                if t.activo:
+                    trabajadores_set.add(t)
+        trabajadores = sorted(list(trabajadores_set), key=lambda x: x.nombre)
+    else:
+        trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.id).all()
+
     return render_template('credenciales.html', trabajadores=trabajadores)
 
 

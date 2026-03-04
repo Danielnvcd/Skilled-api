@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory
+from sqlalchemy import or_
 from app.extensions import db
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
-from app.utils import login_required, log_action
+from app.utils import login_required, log_action, admin_required
 from werkzeug.utils import secure_filename
 import traceback
 import json
@@ -362,6 +363,7 @@ def editar(id):
 
 @bp.route('/credenciales/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def guardar_credenciales(id):
     try:
         t = Trabajador.query.get_or_404(id)
