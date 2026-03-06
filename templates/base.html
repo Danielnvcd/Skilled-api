@@ -209,6 +209,11 @@
                     style="font-size: 18px; width: 20px; text-align: center; margin-right: 12px;"></i>
                 Préstamos
             </a>
+            <a href="{{ url_for('ajustes.index') }}" class="{{ 'active' if request.endpoint == 'ajustes.index' }}">
+                <i class="fa-solid fa-sliders menu-icon"
+                    style="font-size: 18px; width: 20px; text-align: center; margin-right: 12px;"></i>
+                Ajuste
+            </a>
             {% endif %}
             <a href="{{ url_for('main.credenciales') }}"
                 class="{{ 'active' if request.endpoint == 'main.credenciales' }}">

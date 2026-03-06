@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="reporte-info-bar">
+        <div class="details">
+            <div class="info-item">
+                <label>Periodo</label>
+                <span>{{ periodo.nombre }}</span>
+            </div>
+            <div class="info-item">
+                <label>Rango</label>
+                <span>{{ periodo.fecha_inicio.strftime('%d/%m/%Y') }} — {{ periodo.fecha_fin.strftime('%d/%m/%Y')
+                    }}</span>
+            </div>
+            <div class="info-item">
+                <label>Estatus</label>
+                <span class="badge {{ periodo.estado|lower }}" style="font-size:0.85rem; padding:2px 8px;">{{
+                    periodo.estado }}</span>
+            </div>
+            <div class="info-item">
+                <label>Meta Total</label>
+                <span style="color:#4F46E5; font-weight:800;">${{ "%.2f"|format(total_meta_global|float) }}</span>
+            </div>
+            <div class="info-item">
+                <label>Descontado</label>
+                <span style="color:#EF4444; font-weight:800;">${{ "%.2f"|format(total_descontado_global|float) }}</span>
+            </div>
+            <div class="info-item">
+                <label>Restante</label>
+                <span style="color:#059669; font-weight:800;">${{ "%.2f"|format((total_meta_global -
+                    total_descontado_global)|float) }}</span>
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+            <a href="{{ url_for('ajustes.index') }}" class="btn-secondary">← Regresar</a>
+            {% if periodo.estado == 'ABIERTO' %}
+            <form action="{{ url_for('ajustes.cerrar_periodo', periodo_id=periodo.id) }}" method="POST"
+                style="display:inline;" id="formCerrarPeriodo">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-primary"
+                    style="background: linear-gradient(135deg, #EF4444, #F87171);">
+                    Cerrar Periodo
+                </button>
+            </form>
+            {% else %}
+            <span class="badge"
+                style="background:#D1FAE5; color:#064E3B; padding:0.5rem 1rem; border-radius:12px; font-weight:600;">
+                Periodo Cerrado
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Progreso por trabajador -->
+    <div class="captura-form-bg" style="margin-top:1.5rem;">
+        <h3 style="margin-top:0; color:var(--text-main);">Progreso de Recuperación</h3>
+
+        {% if periodo.trabajadores_periodo %}
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Trabajador</th>
+                    <th style="text-align:right;">Meta (Depósito)</th>
+                    <th style="text-align:right;">Descontado</th>
+                    <th style="text-align:right;">Restante</th>
+                    <th style="text-align:center; width:180px;">Progreso</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tp in periodo.trabajadores_periodo %}
+                {% set prog = progreso.get(tp.trabajador_id, {'meta': 0, 'descontado': 0, 'restante': 0, 'porcentaje':
+                0}) %}
+                <tr>
+                    <td style="font-weight:600;">
+                        <span style="font-family:monospace; color:var(--text-muted); margin-right:0.5rem;">{{
+                            tp.trabajador.no_empleado }}</span>
+                        {{ tp.trabajador.nombre_completo }}
+                    </td>
+                    <td style="text-align:right; color:#4F46E5; font-weight:600;">${{ "%.2f"|format(prog.meta|float) }}
+                    </td>
+                    <td style="text-align:right; color:#EF4444; font-weight:600;">${{
+                        "%.2f"|format(prog.descontado|float) }}</td>
+                    <td style="text-align:right; color:#059669; font-weight:600;">${{ "%.2f"|format(prog.restante|float)
+                        }}</td>
+                    <td style="text-align:center;">
+                        <div class="progress-bar-wrap">
+                            <div class="progress-bar-fill"
+                                style="width:{{ prog.porcentaje }}%;
+                                background: {{ '#10B981' if prog.porcentaje >= 100 else '#F59E0B' if prog.porcentaje >= 50 else '#EF4444' }};">
+                            </div>
+                        </div>
+                        <span style="font-size:0.8rem; font-weight:600;">{{ prog.porcentaje }}%</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="text-align:center; color:var(--text-muted); padding:1rem;">No hay trabajadores asignados a este
+            periodo.</p>
+        {% endif %}
+    </div>
+
+    <!-- Formulario para agregar descuento -->
+    {% if periodo.estado == 'ABIERTO' and periodo.trabajadores_periodo %}
+    <div class="captura-form-bg" style="margin-top:1.5rem;">
+        <h3 style="margin-top:0; color:var(--text-main); margin-bottom:1rem;">Agregar Descuento</h3>
+        <form action="{{ url_for('ajustes.agregar_descuento', periodo_id=periodo.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div style="display:flex; gap:1rem; align-items:end; flex-wrap:wrap;">
+                <div class="form-group" style="margin-bottom:0; flex:3 1 250px;">
+                    <label>Trabajador *</label>
+                    <select name="trabajador_id" id="trabajadorSelectAjuste" class="form-control" required
+                        style="width:100%;">
+                        <option value=""></option>
+                        {% for tp in periodo.trabajadores_periodo %}
+                        <option value="{{ tp.trabajador.id }}">{{ tp.trabajador.no_empleado }} - {{
+                            tp.trabajador.nombre_completo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1 1 130px;">
+                    <label>Monto *</label>
+                    <input type="number" step="0.01" min="0.01" name="monto" class="form-control" placeholder="$0.00"
+                        required>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1 1 150px;">
+                    <label>Fecha Descuento *</label>
+                    <input type="date" name="fecha_descuento" class="form-control"
+                        min="{{ periodo.fecha_inicio.strftime('%Y-%m-%d') }}"
+                        max="{{ periodo.fecha_fin.strftime('%Y-%m-%d') }}" required>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1 1 150px;">
+                    <label>Notas</label>
+                    <input type="text" name="notas" class="form-control" placeholder="Opcional...">
+                </div>
+                <button type="submit" class="btn-primary" style="height:42px; padding:0 1.5rem;">Agregar</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Tabla pivoteada de descuentos -->
+    {% if periodo.descuentos %}
+    <div class="captura-form-bg" style="margin-top:1.5rem;">
+        <h3 style="margin-top:0; color:var(--text-main);">Detalle de Descuentos</h3>
+        <div style="overflow-x:auto;">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Trabajador</th>
+                        {% for f in fechas_unicas %}
+                        <th style="text-align:center; min-width:110px;">{{ f|fecha_es('dia_corto') }}</th>
+                        {% endfor %}
+                        <th style="text-align:right; color:#EF4444; font-weight:700;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tp in periodo.trabajadores_periodo %}
+                    {% set t_id = tp.trabajador_id %}
+                    {% set descs = descuentos_por_trabajador.get(t_id, []) %}
+                    {% if descs %}
+                    <tr>
+                        <td style="font-weight:600; white-space:nowrap;">
+                            <span style="font-family:monospace; color:var(--text-muted); margin-right:0.5rem;">{{
+                                tp.trabajador.no_empleado }}</span>
+                            {{ tp.trabajador.nombre_completo }}
+                        </td>
+                        {% for f in fechas_unicas %}
+                        <td style="text-align:center;">
+                            {% set monto_dia = namespace(val=0) %}
+                            {% for d in descs if d.fecha_descuento == f %}
+                            {% set monto_dia.val = monto_dia.val + d.monto|float %}
+                            {% endfor %}
+                            {% if monto_dia.val > 0 %}
+                            <span style="color:#EF4444; font-weight:600;">${{ "%.2f"|format(monto_dia.val) }}</span>
+                            {% else %}
+                            <span style="color:var(--text-muted);">-</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        <td style="text-align:right; font-weight:700; color:#EF4444;">
+                            ${{ "%.2f"|format(progreso[t_id].descontado|float) }}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Registros individuales para eliminar -->
+        {% if periodo.estado == 'ABIERTO' %}
+        <h4 style="margin-top:2rem; color:var(--text-main);">Registros Individuales ({{ periodo.descuentos|length }})
+        </h4>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Trabajador</th>
+                    <th>Monto</th>
+                    <th>Notas</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in periodo.descuentos|sort(attribute='fecha_descuento') %}
+                <tr>
+                    <td style="font-weight:600;">{{ d.fecha_descuento|fecha_es('dia_corto') }}</td>
+                    <td>{{ d.trabajador.nombre_completo }}</td>
+                    <td style="color:#EF4444; font-weight:600;">${{ "%.2f"|format(d.monto|float) }}</td>
+                    <td style="color:var(--text-muted);">{{ d.notas or '-' }}</td>
+                    <td>
+                        <form action="{{ url_for('ajustes.eliminar_descuento', descuento_id=d.id) }}" method="POST"
+                            style="margin:0;" id="formEliminarDesc{{ d.id }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="delete-btn" title="Eliminar">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                    </path>
+                                </svg>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+<script src="{{ url_for('static', filename='js/ajuste_detalle.js') }}"></script>
+{% endblock %}

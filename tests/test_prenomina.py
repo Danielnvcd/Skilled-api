@@ -304,3 +304,83 @@ class TestCalcularPreviewPrenominaFestivos:
         
         assert float(p.pago_viaticos) == 0.0
         assert float(p.pago_festivos) == 0.0
+
+    def test_calcular_viaticos_monto_manual(self, db, trabajador, proyecto):
+        """Viáticos con monto manual: usa el monto del registro en vez del perfil."""
+        from app.routes.prenomina import calcular_preview_prenomina
+        from app.models import ReporteSemanal, RegistroDiarioHoras
+        from datetime import date, time
+
+        trabajador.viaticos = 50  # Este monto debe ser ignorado
+        db.session.commit()
+
+        reporte = ReporteSemanal(
+            proyecto_id=proyecto.id,
+            fecha_inicio_semana=date(2025, 6, 1),
+            fecha_fin_semana=date(2025, 6, 7),
+            estado='TERMINADO'
+        )
+        db.session.add(reporte)
+        db.session.commit()
+
+        # 2 registros con monto manual de viáticos
+        reg1 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 6, 1), hora_entrada=time(8, 0), hora_salida=time(18, 0),
+            tomo_comida=True, aplica_viaticos=True, monto_viaticos_manual=150,
+            horas_productivas=9.5
+        )
+        reg2 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 6, 2), hora_entrada=time(8, 0), hora_salida=time(18, 0),
+            tomo_comida=True, aplica_viaticos=True, monto_viaticos_manual=200,
+            horas_productivas=9.5
+        )
+        db.session.add_all([reg1, reg2])
+        db.session.commit()
+
+        preview = calcular_preview_prenomina(date(2025, 6, 1), [reporte])
+        assert len(preview) == 1
+        # Debe usar los montos manuales: 150 + 200 = 350 (NO 50+50=100)
+        assert float(preview[0].pago_viaticos) == 350.0
+
+    def test_calcular_viaticos_mixto(self, db, trabajador, proyecto):
+        """Viáticos mixto: un día con monto manual, otro con monto del perfil."""
+        from app.routes.prenomina import calcular_preview_prenomina
+        from app.models import ReporteSemanal, RegistroDiarioHoras
+        from datetime import date, time
+
+        trabajador.viaticos = 50
+        db.session.commit()
+
+        reporte = ReporteSemanal(
+            proyecto_id=proyecto.id,
+            fecha_inicio_semana=date(2025, 7, 1),
+            fecha_fin_semana=date(2025, 7, 7),
+            estado='TERMINADO'
+        )
+        db.session.add(reporte)
+        db.session.commit()
+
+        # Día 1: Viáticos con monto manual
+        reg1 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 7, 1), hora_entrada=time(8, 0), hora_salida=time(18, 0),
+            tomo_comida=True, aplica_viaticos=True, monto_viaticos_manual=120,
+            horas_productivas=9.5
+        )
+        # Día 2: Viáticos desde perfil (sin monto manual)
+        reg2 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 7, 2), hora_entrada=time(8, 0), hora_salida=time(18, 0),
+            tomo_comida=True, aplica_viaticos=True, monto_viaticos_manual=None,
+            horas_productivas=9.5
+        )
+        db.session.add_all([reg1, reg2])
+        db.session.commit()
+
+        preview = calcular_preview_prenomina(date(2025, 7, 1), [reporte])
+        assert len(preview) == 1
+        # manual 120 + perfil 50 = 170
+        assert float(preview[0].pago_viaticos) == 170.0
+

@@ -152,11 +152,18 @@ def guardar_registro(reporte_id):
         hora_salida_str = data.get('hora_salida')
         tomo_comida = bool(data.get('tomo_comida'))
         aplica_viaticos = bool(data.get('aplica_viaticos'))
+        viaticos_modo = data.get('viaticos_modo', 'perfil')  # 'perfil' o 'manual'
+        monto_viaticos_manual_str = data.get('monto_viaticos_manual', '').strip()
         aplica_dia_festivo = bool(data.get('aplica_dia_festivo'))
         incidencia = data.get('incidencia')
         
         if not trabajador_id or not fecha_str:
             flash("Faltan datos obligatorios.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+        
+        # Validar que se registren horas (entrada y salida) a menos que sea una incidencia
+        if (not hora_entrada_str or not hora_salida_str) and not incidencia:
+            flash("Debes registrar hora de entrada y salida, o seleccionar una incidencia.", "danger")
             return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             
         fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -170,10 +177,22 @@ def guardar_registro(reporte_id):
             flash("Este trabajador no está asignado al proyecto.", "danger")
             return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             
-        # Validar si se seleccionó viáticos/festivos que el trabajador los tenga capturados en su perfil
-        if aplica_viaticos and (trabajador.viaticos is None or trabajador.viaticos <= 0):
-            flash(f"Error: No se pueden habilitar viáticos para {trabajador.nombre}. Su perfil tiene $0.00 asignados de viáticos.", "danger")
-            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+        # Validar viáticos según el modo seleccionado
+        monto_viaticos_manual = None
+        if aplica_viaticos:
+            if viaticos_modo == 'manual':
+                try:
+                    monto_viaticos_manual = float(monto_viaticos_manual_str) if monto_viaticos_manual_str else 0
+                except (ValueError, TypeError):
+                    monto_viaticos_manual = 0
+                if monto_viaticos_manual <= 0:
+                    flash(f"Error: El monto manual de viáticos debe ser mayor a $0.00.", "danger")
+                    return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            else:
+                # Modo perfil: validar que el trabajador tenga viáticos en su perfil
+                if trabajador.viaticos is None or trabajador.viaticos <= 0:
+                    flash(f"Error: No se pueden habilitar viáticos para {trabajador.nombre}. Su perfil tiene $0.00 asignados de viáticos.", "danger")
+                    return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             
         if aplica_dia_festivo and (trabajador.pago_dia_festivo is None or trabajador.pago_dia_festivo <= 0):
             flash(f"Error: No se puede habilitar pago por día festivo para {trabajador.nombre}. Su perfil tiene $0.00 asignados de día festivo.", "danger")
@@ -224,6 +243,7 @@ def guardar_registro(reporte_id):
             hora_salida=hora_salida,
             tomo_comida=tomo_comida,
             aplica_viaticos=aplica_viaticos,
+            monto_viaticos_manual=monto_viaticos_manual,
             aplica_dia_festivo=aplica_dia_festivo,
             incidencia=incidencia if incidencia else None,
             tipo_nomina=trabajador.tipo_nomina or 'Semanal',

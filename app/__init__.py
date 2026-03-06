@@ -64,10 +64,31 @@ def create_app():
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
     app.config['SESSION_COOKIE_SECURE'] = True # Set to True in Prod
 
-    app.config['RATELIMIT_STORAGE_URI'] = os.environ.get('REDIS_URL', 'memory://')
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    redis_url = os.environ.get('REDIS_URL')
+    if redis_url and not redis_url.startswith('memory://'):
+        import redis
+        import time
+        max_retries = 30
+        retries = 0
+        logging.info(f"Intentando conectar a Redis en: {redis_url}")
+        while retries < max_retries:
+            try:
+                client = redis.from_url(redis_url)
+                if client.ping():
+                    logging.info("Conexión a Redis exitosa.")
+                    break
+            except redis.RedisError as e:
+                retries += 1
+                logging.warning(f"Esperando a que Redis inicie... (Intento {retries}/{max_retries}). Error: {e}")
+                time.sleep(2)
+        if retries == max_retries:
+            raise RuntimeError("CRÍTICO: No se pudo conectar a Redis. La aplicación no puede arrancar.")
+            
+    app.config['RATELIMIT_STORAGE_URI'] = redis_url or 'memory://'
 
     db.init_app(app)
     limiter.init_app(app)
@@ -86,7 +107,7 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
@@ -100,6 +121,7 @@ def create_app():
     app.register_blueprint(proyecto_total.bp)
     app.register_blueprint(bitacora.bp)
     app.register_blueprint(info.bp)
+    app.register_blueprint(ajustes.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title">Ajuste Inbursa</h1>
+            <p class="subtitle">Control de recuperación de depósitos adelantados</p>
+        </div>
+    </div>
+
+    <!-- Crear Nuevo Periodo -->
+    <div class="captura-form-bg" style="margin-bottom: 2rem;">
+        <h3 style="margin-top:0; color:var(--text-main); margin-bottom:1rem;">
+            <i class="fa-solid fa-plus" style="color:#4F46E5;"></i> Crear Nuevo Periodo
+        </h3>
+        <form action="{{ url_for('ajustes.crear_periodo') }}" method="POST" id="formCrearPeriodo">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div style="display:flex; gap:1rem; align-items:end; flex-wrap:wrap; margin-bottom:1.5rem;">
+                <div class="form-group" style="margin-bottom:0; flex:2 1 200px;">
+                    <label>Nombre del Periodo *</label>
+                    <input type="text" name="nombre" class="form-control" placeholder="Ej. Febrero 2026" required>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1 1 150px;">
+                    <label>Fecha Inicio *</label>
+                    <input type="date" name="fecha_inicio" class="form-control" required>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1 1 150px;">
+                    <label>Fecha Fin *</label>
+                    <input type="date" name="fecha_fin" class="form-control" required>
+                </div>
+            </div>
+
+            <!-- Selección de Trabajadores -->
+            <h4 style="margin-bottom:0.75rem; color:var(--text-main);">Trabajadores y Meta de Descuento</h4>
+            <div style="margin-bottom:1rem; display:flex; gap:0.75rem; align-items:end; flex-wrap:wrap;">
+                <div class="form-group" style="margin-bottom:0; flex:3 1 250px;">
+                    <label>Agregar Trabajador</label>
+                    <select id="selectorTrabajador" class="form-control" style="width:100%;">
+                        <option value=""></option>
+                        {% for t in trabajadores %}
+                        <option value="{{ t.id }}" data-nombre="{{ t.nombre_completo }}"
+                            data-noemp="{{ t.no_empleado }}">
+                            {{ t.no_empleado }} - {{ t.nombre_completo }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1 1 130px;">
+                    <label>Meta (Depósito) $</label>
+                    <input type="number" step="0.01" min="0.01" id="inputMetaTrabajador" class="form-control"
+                        placeholder="$0.00">
+                </div>
+                <button type="button" id="btnAgregarTrabajador" class="btn-primary"
+                    style="height:42px; padding:0 1.5rem;">
+                    + Agregar
+                </button>
+            </div>
+
+            <!-- Tabla de trabajadores seleccionados -->
+            <div id="tablaTrabajadoresWrapper" style="display:none;">
+                <table class="history-table" style="margin-bottom:1rem;">
+                    <thead>
+                        <tr>
+                            <th>No. Emp</th>
+                            <th>Nombre</th>
+                            <th style="text-align:right;">Meta (Depósito)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaTrabajadores"></tbody>
+                    <tfoot>
+                        <tr style="font-weight:700; background:#F9FAFB;">
+                            <td colspan="2">TOTAL</td>
+                            <td style="text-align:right; color:#4F46E5;" id="totalMeta">$0.00</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <button type="submit" class="btn-primary" style="padding:0.6rem 2rem;">
+                Crear Periodo
+            </button>
+        </form>
+    </div>
+
+    <!-- Lista de Periodos -->
+    <div class="captura-form-bg">
+        <h3 style="margin-top:0; color:var(--text-main);">Periodos de Ajuste ({{ periodos|length }})</h3>
+
+        {% if periodos %}
+        <div class="periodos-grid">
+            {% for p in periodos %}
+            <a href="{{ url_for('ajustes.detalle', periodo_id=p.id) }}" class="periodo-card {{ p.estado|lower }}">
+                <div class="periodo-header">
+                    <h4>{{ p.nombre }}</h4>
+                    <span class="badge {{ p.estado|lower }}">{{ p.estado }}</span>
+                </div>
+                <div class="periodo-dates">
+                    {{ p.fecha_inicio.strftime('%d/%m/%Y') }} — {{ p.fecha_fin.strftime('%d/%m/%Y') }}
+                </div>
+                <div class="periodo-meta">
+                    <span>{{ p.num_trabajadores }} trabajador(es)</span>
+                    <span style="color:#4F46E5; font-weight:600;">Meta: ${{ "%.2f"|format(p.total_meta|float) }}</span>
+                    <span style="color:#EF4444; font-weight:600;">Descontado: ${{
+                        "%.2f"|format(p.total_descontado|float) }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="text-align:center; color:var(--text-muted); padding:2rem;">No hay periodos de ajuste creados.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+<script src="{{ url_for('static', filename='js/ajustes.js') }}"></script>
+{% endblock %}

@@ -602,7 +602,20 @@ def calcular_preview_prenomina(fecha_obj, reportes):
         
         # Deducciones maestras
         p.descuento_infonavit = to_dec(trabajador.infonavit)
-        p.ajuste_inbursa = to_dec(trabajador.ajuste_inbursa)
+        # Ajuste Inbursa: sumar descuentos dinámicos del módulo de ajustes
+        # Busca descuentos cuya fecha caiga dentro de la semana de prenómina
+        from app.models import AjusteDescuento
+        import logging
+        ajuste_descuentos = AjusteDescuento.query.filter(
+            AjusteDescuento.trabajador_id == trabajador.id,
+            AjusteDescuento.fecha_descuento >= fecha_obj,
+            AjusteDescuento.fecha_descuento <= fecha_fin_semana
+        ).all()
+        logging.info(f"Ajuste Inbursa para {trabajador.nombre_apellidos}: semana {fecha_obj}-{fecha_fin_semana}, descuentos encontrados: {len(ajuste_descuentos)}, montos: {[float(d.monto) for d in ajuste_descuentos]}")
+        if ajuste_descuentos:
+            p.ajuste_inbursa = sum(to_dec(d.monto) for d in ajuste_descuentos)
+        else:
+            p.ajuste_inbursa = to_dec(trabajador.ajuste_inbursa)
         
         # Cálculo de Incidencias Consolidadas
         total_descuento_incidencias = Decimal('0')
@@ -620,11 +633,15 @@ def calcular_preview_prenomina(fecha_obj, reportes):
                  total_descuento_incidencias = horas_ausentes_incidencia * costo_hora_ord
                  p.descuento_incidencias = total_descuento_incidencias
                  
-        if trabajador.viaticos:
-            dias_con_viaticos = sum(1 for reg in registros_trabajador if reg.aplica_viaticos)
-            p.pago_viaticos = to_dec(trabajador.viaticos) * Decimal(str(dias_con_viaticos))
-        else:
-             p.pago_viaticos = Decimal('0')
+        # Viáticos: sumar por día usando monto manual o del perfil
+        total_viaticos = Decimal('0')
+        for reg in registros_trabajador:
+            if reg.aplica_viaticos:
+                if reg.monto_viaticos_manual is not None:
+                    total_viaticos += to_dec(reg.monto_viaticos_manual)
+                elif trabajador.viaticos:
+                    total_viaticos += to_dec(trabajador.viaticos)
+        p.pago_viaticos = total_viaticos
         
         # Pago por Días Festivos (toggle por registro)
         if trabajador.pago_dia_festivo:
