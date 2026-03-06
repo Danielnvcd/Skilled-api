@@ -15,4 +15,24 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+
+    // Filtro de proyectos
+    const buscador = document.getElementById('buscadorProyectos');
+    if (buscador) {
+        buscador.addEventListener('input', function () {
+            const term = this.value.toLowerCase().trim();
+            const cards = document.querySelectorAll('.project-card');
+
+            cards.forEach(card => {
+                // Obtenemos el texto del nombre del proyecto (incluye el número, nombre y coordinador)
+                const headerText = card.querySelector('.project-header').textContent.toLowerCase();
+
+                if (term === '' || headerText.includes(term)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    }
 });

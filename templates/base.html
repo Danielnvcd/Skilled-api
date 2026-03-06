@@ -200,18 +200,16 @@
             </a>
             <a href="{{ url_for('proyecto_total.index') }}"
                 class="{{ 'active' if request.endpoint == 'proyecto_total.index' }}">
-                <i class="fa-solid fa-chart-pie menu-icon"
-                    style="font-size: 18px; width: 20px; text-align: center; margin-right: 12px;"></i>
+                <img src="{{ url_for('static', filename='iconos/proyecto total.png') }}" class="menu-icon"
+                    alt="Proyecto Total">
                 Proyecto Total
             </a>
             <a href="{{ url_for('prestamos.index') }}" class="{{ 'active' if request.endpoint == 'prestamos.index' }}">
-                <i class="fa-solid fa-hand-holding-dollar menu-icon"
-                    style="font-size: 18px; width: 20px; text-align: center; margin-right: 12px;"></i>
+                <img src="{{ url_for('static', filename='iconos/prestamos.png') }}" class="menu-icon" alt="Préstamos">
                 Préstamos
             </a>
             <a href="{{ url_for('ajustes.index') }}" class="{{ 'active' if request.endpoint == 'ajustes.index' }}">
-                <i class="fa-solid fa-sliders menu-icon"
-                    style="font-size: 18px; width: 20px; text-align: center; margin-right: 12px;"></i>
+                <img src="{{ url_for('static', filename='iconos/ajuste.png') }}" class="menu-icon" alt="Ajuste">
                 Ajuste
             </a>
             {% endif %}
@@ -226,8 +224,8 @@
             </a>
             {% if session.get('role') == 'coordinador' %}
             <a href="{{ url_for('ficha.index') }}" class="{{ 'active' if request.endpoint == 'ficha.index' }}">
-                <i class="fa-regular fa-address-card menu-icon"
-                    style="font-size: 18px; text-align: center; margin-right: 12px;"></i>
+                <img src="{{ url_for('static', filename='iconos/ficha tecnica.png') }}" class="menu-icon"
+                    alt="Ficha Técnica">
                 Ficha Técnica
             </a>
             {% endif %}

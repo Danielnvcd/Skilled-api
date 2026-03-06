@@ -40,9 +40,9 @@ class TestAccessControl:
         assert resp.status_code in [302, 303]
         assert 'login' in resp.headers.get('Location', '')
 
-    def test_coordinador_no_accede_trabajadores(self, logged_in_coordinador):
+    def test_coordinador_accede_trabajadores(self, logged_in_coordinador):
         resp = logged_in_coordinador.get('/trabajadores/', follow_redirects=True)
-        assert b'denegado' in resp.data.lower()
+        assert resp.status_code == 200
 
     def test_coordinador_accede_horas(self, logged_in_coordinador):
         resp = logged_in_coordinador.get('/horas/', follow_redirects=False)

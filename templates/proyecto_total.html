@@ -132,35 +132,25 @@
 
 {% block content %}
 <div class="horas-wrapper">
-    <div class="header-card" style="margin-bottom: 1.5rem;">
+    <div class="header-card"
+        style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div class="header-titulos">
             <h1 class="main-title">Proyecto Total</h1>
             <p class="subtitle">Resumen acumulado de nómina por proyecto, incluyendo todas las semanas procesadas.</p>
         </div>
+
+        <div class="search-container" style="position: relative; min-width: 250px;">
+            <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #94a3b8;"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <input type="text" id="buscadorProyectos" placeholder="Buscar proyecto o coordinador..."
+                style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
+        </div>
     </div>
 
     {% if proyectos_data %}
-    <!-- Global summary bar -->
-    {% set gs = namespace(proyectos=0, semanas=0, total_pagado=0) %}
-    {% for pd in proyectos_data %}
-    {% set gs.proyectos = gs.proyectos + 1 %}
-    {% set gs.semanas = gs.semanas + pd.num_semanas %}
-    {% set gs.total_pagado = gs.total_pagado + pd.grand.total_a_pagar %}
-    {% endfor %}
-    <div class="page-summary-bar">
-        <div class="stat">
-            <div class="stat-label">Proyectos</div>
-            <div class="stat-value">{{ gs.proyectos }}</div>
-        </div>
-        <div class="stat">
-            <div class="stat-label">Semanas Totales</div>
-            <div class="stat-value">{{ gs.semanas }}</div>
-        </div>
-        <div class="stat">
-            <div class="stat-label">Gran Total Pagado</div>
-            <div class="stat-value" style="color: #16a34a;">${{ "%.2f"|format(gs.total_pagado) }}</div>
-        </div>
-    </div>
 
     {% for pd in proyectos_data %}
     <div class="project-card">
