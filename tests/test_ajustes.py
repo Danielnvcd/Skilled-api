@@ -173,6 +173,21 @@ class TestAjusteDescuentoCRUD:
         logged_in_admin.post(f'/ajustes/eliminar_descuento/{d.id}', follow_redirects=True)
         assert AjusteDescuento.query.count() == 1
 
+    def test_eliminar_descuento_cobrado(self, logged_in_admin, db, trabajador, periodo_con_trabajador):
+        d = AjusteDescuento(
+            periodo_id=periodo_con_trabajador.id, 
+            trabajador_id=trabajador.id,
+            monto=Decimal('3000'), 
+            fecha_descuento=date(2026, 3, 10),
+            cobrado=True
+        )
+        db.session.add(d)
+        db.session.commit()
+        resp = logged_in_admin.post(f'/ajustes/eliminar_descuento/{d.id}', follow_redirects=True)
+        html = resp.data.decode('utf-8').lower()
+        assert 'cobrado' in html and 'prenómina' in html
+        assert AjusteDescuento.query.count() == 1
+
 
 class TestAjusteInbursaEnPrenomina:
 

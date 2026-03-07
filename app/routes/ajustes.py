@@ -196,6 +196,10 @@ def eliminar_descuento(descuento_id):
     if descuento.periodo.estado != 'ABIERTO':
         flash("No se pueden eliminar descuentos de un periodo cerrado.", "warning")
         return redirect(url_for('ajustes.detalle', periodo_id=periodo_id))
+        
+    if getattr(descuento, 'cobrado', False):
+        flash("Este descuento ya fue cobrado en la prenómina y no puede eliminarse.", "warning")
+        return redirect(url_for('ajustes.detalle', periodo_id=periodo_id))
 
     try:
         db.session.delete(descuento)

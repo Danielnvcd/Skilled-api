@@ -341,6 +341,7 @@ class AjusteDescuento(db.Model):
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     fecha_descuento = db.Column(db.Date, nullable=False)
     notas = db.Column(db.String(250), nullable=True)
+    cobrado = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     periodo = db.relationship('AjustePeriodo', backref=db.backref('descuentos', lazy=True, cascade='all, delete-orphan'))

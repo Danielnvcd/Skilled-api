@@ -330,6 +330,17 @@ def cerrar_prenomina(fecha_str):
         for p in prenominas:
             p.estado = 'APROBADO'
             
+            # Marcar Ajustes Inbursa como COBRADOS
+            from app.models import AjusteDescuento
+            ajustes_inbursa = AjusteDescuento.query.filter(
+                AjusteDescuento.trabajador_id == p.trabajador_id,
+                AjusteDescuento.fecha_descuento >= p.fecha_inicio,
+                AjusteDescuento.fecha_descuento <= p.fecha_fin,
+                AjusteDescuento.cobrado == False
+            ).all()
+            for ajuste in ajustes_inbursa:
+                ajuste.cobrado = True
+            
             # Aplicar descuentos de préstamos reales a la deuda
             if p.descuento_prestamos and to_dec(p.descuento_prestamos) > Decimal('0'):
                 prestamos_activos = Prestamo.query.filter_by(trabajador_id=p.trabajador_id, estado='ACTIVO').all()

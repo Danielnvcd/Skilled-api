@@ -218,6 +218,12 @@
                     <td style="color:#EF4444; font-weight:600;">${{ "%.2f"|format(d.monto|float) }}</td>
                     <td style="color:var(--text-muted);">{{ d.notas or '-' }}</td>
                     <td>
+                        {% if d.cobrado %}
+                        <span class="badge"
+                            style="background:#D1FAE5; color:#064E3B; padding:0.25rem 0.5rem; font-size: 0.8rem;">
+                            ✔ Cobrado
+                        </span>
+                        {% else %}
                         <form action="{{ url_for('ajustes.eliminar_descuento', descuento_id=d.id) }}" method="POST"
                             style="margin:0;" id="formEliminarDesc{{ d.id }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -231,6 +237,7 @@
                                 </svg>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
