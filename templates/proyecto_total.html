@@ -127,6 +127,33 @@
         font-weight: 700;
         color: #1e3a5f;
     }
+
+    .btn-excel-body {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white !important;
+        text-decoration: none !important;
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2), 0 2px 4px -1px rgba(16, 185, 129, 0.1);
+        cursor: pointer;
+    }
+
+    .btn-excel-body:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3), 0 4px 6px -2px rgba(16, 185, 129, 0.15);
+        filter: brightness(1.05);
+    }
+
+    .btn-excel-body i {
+        font-size: 1.15rem;
+    }
 </style>
 {% endblock %}
 
@@ -203,10 +230,9 @@
                 </div>
 
                 {% if session.get('role') == 'admin' %}
-                <div style="margin-top: 1rem; text-align: right;">
+                <div style="margin-top: 1rem; text-align: right; margin-bottom: 1rem;">
                     <a href="{{ url_for('reportes.excel_proyecto_total', proyecto_id=pd.proyecto.id) }}"
-                        class="btn-primary"
-                        style="background: #10b981; font-size: 0.9rem; padding: 0.6rem 1.2rem; display: inline-flex; align-items: center; gap: 0.6rem;">
+                        class="btn-excel-body">
                         <i class="fa-solid fa-file-excel"></i> Exportar este Proyecto (Cerrado)
                     </a>
                 </div>

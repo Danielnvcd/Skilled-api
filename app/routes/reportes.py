@@ -15,25 +15,63 @@ from app.utils import login_required, admin_required, log_action
 
 bp = Blueprint('reportes', __name__, url_prefix='/reportes')
 
-@bp.route('/excel_global', methods=['GET'])
-@login_required
-@admin_required
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
 def _aplicar_estilos_y_retornar(writer, output, filename):
-    """Aplica el diseño base azul y retorna la respuesta de Flask para descargar el Excel."""
-    header_fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+    """Aplica un diseño premium y retorna la respuesta de Flask para descargar el Excel."""
+    # Estilos Premium
+    header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid") # Dark Blue
     header_font = Font(name="Calibri", bold=True, color="FFFFFF")
     align_center = Alignment(horizontal="center", vertical="center")
+    
+    zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid") # Very light slate
+    
+    total_fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid") # Light Blue
+    total_font = Font(name="Calibri", bold=True, color="1E3A8A")
+    top_border = Border(top=Side(style='medium', color="1E3A8A"))
 
     workbook = writer.book
     for sheet_name in workbook.sheetnames:
         worksheet = workbook[sheet_name]
         
-        # Formato de Headers
-        for col in range(1, worksheet.max_column + 1):
-            cell = worksheet.cell(row=1, column=col)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = align_center
+        # Congelar la primera fila
+        worksheet.freeze_panes = 'A2'
+        
+        # Encontrar la última fila
+        max_row = worksheet.max_row
+        
+        # Iterar sobre las filas para aplicar estilos
+        for row in range(1, max_row + 1):
+            is_header = (row == 1)
+            is_total = False
+            
+            # Verificar si es la fila de TOTAL
+            first_cell = worksheet.cell(row=row, column=1)
+            if first_cell.value and str(first_cell.value).upper() == 'TOTAL':
+                is_total = True
+
+            for col in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row, column=col)
+                
+                if is_header:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = align_center
+                else:
+                    # Zebra striping (excepto la fila de total)
+                    if not is_total and row % 2 == 0:
+                        cell.fill = zebra_fill
+                    
+                    # Estilo fila TOTAL
+                    if is_total:
+                        cell.fill = total_fill
+                        cell.font = total_font
+                        cell.border = top_border
+                    
+                    # Formato de Moneda para valores numéricos grandes (heurística simple)
+                    if isinstance(cell.value, (int, float)):
+                        # Formato: $ 1,234.56
+                        cell.number_format = '"$"#,##0.00'
 
         # Auto-Ajuste de columnas
         for col in worksheet.columns:
@@ -114,6 +152,32 @@ def excel_prenomina(fecha_str):
                 'TOTAL A PAGAR': float(p.total_a_pagar or 0),
                 'Método de Pago': p.tipo_pago or ''
             })
+            
+        if data:
+            total_row = {
+                'Semana Inicio': 'TOTAL',
+                'Semana Fin': '',
+                'No. Empleado': '',
+                'Nombre del Empleado': '',
+                'Estado': '',
+                'Salario Base': sum(d['Salario Base'] for d in data),
+                'Pago Horas Extras': sum(d['Pago Horas Extras'] for d in data),
+                'Pago Viáticos': sum(d['Pago Viáticos'] for d in data),
+                'Pago Festivos': sum(d['Pago Festivos'] for d in data),
+                'Otros Depósitos': sum(d['Otros Depósitos'] for d in data),
+                'Depósitos Préstamos': sum(d['Depósitos Préstamos'] for d in data),
+                'Total Percepciones': sum(d['Total Percepciones'] for d in data),
+                'Descuento Infonavit': sum(d['Descuento Infonavit'] for d in data),
+                'Ajuste Inbursa': sum(d['Ajuste Inbursa'] for d in data),
+                'Otros Descuentos': sum(d['Otros Descuentos'] for d in data),
+                'Abono Préstamos': sum(d['Abono Préstamos'] for d in data),
+                'Descuento Incidencias': sum(d['Descuento Incidencias'] for d in data),
+                'Total Deducciones': sum(d['Total Deducciones'] for d in data),
+                'TOTAL A PAGAR': sum(d['TOTAL A PAGAR'] for d in data),
+                'Método de Pago': ''
+            }
+            data.append(total_row)
+            
         df = pd.DataFrame(data)
         df.to_excel(writer, sheet_name='Prenómina', index=False)
         
@@ -162,6 +226,20 @@ def excel_historico(fecha_str):
                 'TOTAL PAGADO': float(p.total_a_pagar or 0),
                 'Método de Pago': p.tipo_pago or ''
             })
+            
+        if data:
+            total_row = {
+                'Semana Inicio': 'TOTAL',
+                'Semana Fin': '',
+                'No. Empleado': '',
+                'Nombre del Empleado': '',
+                'Total Percepciones': sum(d['Total Percepciones'] for d in data),
+                'Total Deducciones': sum(d['Total Deducciones'] for d in data),
+                'TOTAL PAGADO': sum(d['TOTAL PAGADO'] for d in data),
+                'Método de Pago': ''
+            }
+            data.append(total_row)
+            
         df = pd.DataFrame(data)
         df.to_excel(writer, sheet_name='Histórico', index=False)
         
@@ -232,6 +310,28 @@ def excel_proyecto_total(proyecto_id):
              flash("No hay datos de nómina para este proyecto.", "warning")
              return redirect(request.referrer or url_for('proyecto_total.index'))
 
+        total_row = {
+            'Semana Inicio': 'TOTAL',
+            'Semana Fin': '',
+            'No. Empleado': '',
+            'Nombre del Empleado': '',
+            'Salario Base': sum(d['Salario Base'] for d in data),
+            'Pago Horas Extras': sum(d['Pago Horas Extras'] for d in data),
+            'Pago Viáticos': sum(d['Pago Viáticos'] for d in data),
+            'Pago Festivos': sum(d['Pago Festivos'] for d in data),
+            'Otros Depósitos': sum(d['Otros Depósitos'] for d in data),
+            'Depósitos Préstamos': sum(d['Depósitos Préstamos'] for d in data),
+            'Total Percepciones': sum(d['Total Percepciones'] for d in data),
+            'Descuento Infonavit': sum(d['Descuento Infonavit'] for d in data),
+            'Ajuste Inbursa': sum(d['Ajuste Inbursa'] for d in data),
+            'Otros Descuentos': sum(d['Otros Descuentos'] for d in data),
+            'Abono Préstamos': sum(d['Abono Préstamos'] for d in data),
+            'Descuento Incidencias': sum(d['Descuento Incidencias'] for d in data),
+            'Total Deducciones': sum(d['Total Deducciones'] for d in data),
+            'TOTAL A PAGAR': sum(d['TOTAL A PAGAR'] for d in data)
+        }
+        data.append(total_row)
+
         df = pd.DataFrame(data)
         df.to_excel(writer, sheet_name='Proyecto Total', index=False)
         
@@ -272,6 +372,20 @@ def excel_prestamos(trabajador_id):
                 'Estado': pr.estado,
                 'Motivo': pr.motivo or ''
             })
+            
+        if data:
+            total_row = {
+                'ID Préstamo': 'TOTAL',
+                'Fecha Registro': '',
+                'Monto Original': sum(d['Monto Original'] for d in data),
+                'Total Abonado': sum(d['Total Abonado'] for d in data),
+                'Saldo Restante': sum(d['Saldo Restante'] for d in data),
+                'Descuento Semanal': sum(d['Descuento Semanal'] for d in data),
+                'Estado': '',
+                'Motivo': ''
+            }
+            data.append(total_row)
+            
         df = pd.DataFrame(data)
         df.to_excel(writer, sheet_name='Préstamos', index=False)
         
@@ -290,28 +404,75 @@ def excel_prestamos(trabajador_id):
 @admin_required
 def excel_ajustes(periodo_id):
     try:
-        from app.models import AjustePeriodo, AjusteDescuento
+        from app.models import AjustePeriodo, AjusteDescuento, AjusteTrabajadorPeriodo
         periodo = AjustePeriodo.query.get_or_404(periodo_id)
         
         output = io.BytesIO()
         writer = pd.ExcelWriter(output, engine='openpyxl')
         
-        ajustes = AjusteDescuento.query.filter_by(periodo_id=periodo.id).all()
-        if not ajustes:
-             flash("No hay descuentos registrados en este periodo.", "warning")
+        # 1. Obtenemos los trabajadores y su progreso para la hoja Resumen
+        trabajadores_periodo = AjusteTrabajadorPeriodo.query.filter_by(periodo_id=periodo.id).all()
+        ajustes = AjusteDescuento.query.filter_by(periodo_id=periodo.id).order_by(AjusteDescuento.fecha_descuento).all()
+        
+        if not trabajadores_periodo and not ajustes:
+             flash("Este periodo aún no tiene información.", "warning")
              return redirect(request.referrer or url_for('ajustes.index'))
 
-        data = []
+        # Preparar data de Resumen por Trabajador
+        descuentos_por_trabajador = {}
+        for d in ajustes:
+            descuentos_por_trabajador.setdefault(d.trabajador_id, []).append(d)
+
+        data_resumen = []
+        for tp in trabajadores_periodo:
+            t_id = tp.trabajador_id
+            total_desc = sum(float(d.monto or 0) for d in descuentos_por_trabajador.get(t_id, []))
+            data_resumen.append({
+                'No. Empleado': tp.trabajador.no_empleado if tp.trabajador else '',
+                'Nombre del Empleado': tp.trabajador.nombre_completo if tp.trabajador else '',
+                'Meta (Depósito)': float(tp.monto_meta),
+                'Total Descontado': total_desc,
+                'Saldo Restante': float(tp.monto_meta) - total_desc
+            })
+            
+        if data_resumen:
+            total_row_res = {
+                'No. Empleado': 'TOTAL',
+                'Nombre del Empleado': '',
+                'Meta (Depósito)': sum(d['Meta (Depósito)'] for d in data_resumen),
+                'Total Descontado': sum(d['Total Descontado'] for d in data_resumen),
+                'Saldo Restante': sum(d['Saldo Restante'] for d in data_resumen)
+            }
+            data_resumen.append(total_row_res)
+            
+        df_resumen = pd.DataFrame(data_resumen)
+        if not df_resumen.empty:
+            df_resumen.to_excel(writer, sheet_name='Resumen Trabajadores', index=False)
+
+        # Preparar data de Detalle de Descuentos
+        data_detalle = []
         for aj in ajustes:
-            data.append({
+            data_detalle.append({
                 'No. Empleado': aj.trabajador.no_empleado if aj.trabajador else '',
                 'Nombre del Empleado': aj.trabajador.nombre_completo if aj.trabajador else '',
                 'Fecha Aplicación': aj.fecha_descuento.strftime('%Y-%m-%d'),
                 'Monto Descontado': float(aj.monto or 0),
                 'Notas': aj.notas or ''
             })
-        df = pd.DataFrame(data)
-        df.to_excel(writer, sheet_name='Ajuste Inbursa', index=False)
+            
+        if data_detalle:
+            total_row_det = {
+                'No. Empleado': 'TOTAL',
+                'Nombre del Empleado': '',
+                'Fecha Aplicación': '',
+                'Monto Descontado': sum(d['Monto Descontado'] for d in data_detalle),
+                'Notas': ''
+            }
+            data_detalle.append(total_row_det)
+            
+        df_detalle = pd.DataFrame(data_detalle)
+        if not df_detalle.empty:
+            df_detalle.to_excel(writer, sheet_name='Detalle Descuentos', index=False)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
         nombre_file = f"Ajuste_Inbursa_{periodo.id}_{timestamp}.xlsx"

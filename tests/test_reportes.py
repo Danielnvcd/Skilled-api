@@ -135,5 +135,5 @@ class TestReportesIndividuales:
         
         excel_data = BytesIO(response.data)
         workbook = openpyxl.load_workbook(excel_data)
-        assert 'Ajuste Inbursa' in workbook.sheetnames
+        assert 'Detalle Descuentos' in workbook.sheetnames
 

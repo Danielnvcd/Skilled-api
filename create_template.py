@@ -44,7 +44,6 @@ columnas = [
     "Letra",
     "Horas Extra",
     "Infonavit",
-    "Ajuste Inbursa",
     "Caja de Ahorro",
     "Viaticos",
     "Pago Dia Festivo",
