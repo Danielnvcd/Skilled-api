@@ -166,7 +166,11 @@ def guardar_registro(reporte_id):
             flash("Debes registrar hora de entrada y salida, o seleccionar una incidencia.", "danger")
             return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             
-        fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        try:
+            fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash("Error: El formato de fecha ingresado es inválido.", "danger")
+            return redirect(url_for('horas.capturar', reporte_id=reporte.id))
         trabajador = Trabajador.query.get(trabajador_id)
         
         if not trabajador:
@@ -203,11 +207,21 @@ def guardar_registro(reporte_id):
         horas_productivas = 0.0
 
         if hora_entrada_str and hora_salida_str:
-            hora_entrada = datetime.strptime(hora_entrada_str, '%H:%M').time()
-            hora_salida = datetime.strptime(hora_salida_str, '%H:%M').time()
+            try:
+                hora_entrada = datetime.strptime(hora_entrada_str, '%H:%M').time()
+                hora_salida = datetime.strptime(hora_salida_str, '%H:%M').time()
+            except ValueError:
+                flash("Error: El formato de hora ingresado es inválido.", "danger")
+                return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             
             if hora_entrada == hora_salida:
                 flash("La hora de salida debe ser distinta a la hora de entrada.", "danger")
+                return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+            
+            # Validar que la salida no sea antes que la entrada sin cruzar medianoche.
+            # Nuestro sistema basico no cruza medianoche (se espera en 1 mismo día)
+            if hora_salida < hora_entrada:
+                flash("La hora de salida no puede ser anterior a la hora de entrada en el mismo día.", "danger")
                 return redirect(url_for('horas.capturar', reporte_id=reporte.id))
             
             # --- Validar cruce de horarios ---

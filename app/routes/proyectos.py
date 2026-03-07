@@ -22,14 +22,21 @@ def agregar():
     try:
         data = request.form
         
+        numero_proyecto = data.get('numero_proyecto', '').strip()
+        nombre = data.get('nombre', '').strip()
+        
+        if not numero_proyecto or not nombre:
+            flash('Error: Número de Proyecto y Nombre son obligatorios.', 'danger')
+            return redirect(url_for('proyectos.index'))
+        
         # Validar si el proyecto ya existe
-        if Proyecto.query.filter_by(numero_proyecto=data.get('numero_proyecto')).first():
+        if Proyecto.query.filter_by(numero_proyecto=numero_proyecto).first():
             flash('Error: El Número de Proyecto ya existe.', 'danger')
             return redirect(url_for('proyectos.index'))
             
         nuevo_proyecto = Proyecto(
-            numero_proyecto=data.get('numero_proyecto'),
-            nombre=data.get('nombre'),
+            numero_proyecto=numero_proyecto,
+            nombre=nombre,
             activo=data.get('activo') == 'true' or data.get('activo') == 'on' or data.get('activo', '').lower() == 'true',
             coordinador_id=data.get('coordinador_id') if data.get('coordinador_id') else None
         )

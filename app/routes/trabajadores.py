@@ -39,14 +39,28 @@ def agregar():
     try:
         data = request.form
         
+        no_empleado = data.get('no_empleado', '').strip()
+        if not no_empleado:
+            flash('Error: El Número de Empleado es obligatorio.', 'danger')
+            return redirect(url_for('trabajadores.index'))
+            
         # Basic validation
-        if Trabajador.query.filter_by(no_empleado=data.get('no_empleado')).first():
+        if Trabajador.query.filter_by(no_empleado=no_empleado).first():
             flash('Error: El Número de Empleado ya existe.', 'danger')
+            return redirect(url_for('trabajadores.index'))
+
+        try:
+            salario = float(data.get('salario_real_pactado_x_sem') or 0)
+            if salario < 0:
+                flash('Error: El salario no puede ser negativo.', 'danger')
+                return redirect(url_for('trabajadores.index'))
+        except ValueError:
+            flash('Error: El salario ingresado es inválido.', 'danger')
             return redirect(url_for('trabajadores.index'))
 
         nuevo_trabajador = Trabajador(
             # Identificadores
-            no_empleado=data.get('no_empleado'),
+            no_empleado=no_empleado,
             nombre_apellidos=data.get('nombre_apellidos'),
             nombre=data.get('nombre'),
             
@@ -89,7 +103,7 @@ def agregar():
             estatura=data.get('estatura'),
             
             # Sueldos (Finanzas)
-            salario_real_pactado_x_sem=data.get('salario_real_pactado_x_sem') or 0,
+            salario_real_pactado_x_sem=float(data.get('salario_real_pactado_x_sem') or 0),
             tipo_pago=data.get('tipo_pago'),
             tipo_nomina=data.get('tipo_nomina'),
             sb=data.get('sb') or 0,

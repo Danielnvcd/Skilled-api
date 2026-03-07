@@ -190,3 +190,76 @@ class TestImportacionExcel:
         assert t3 is not None
         assert t3.nombre == 'Valido'
 
+class TestCrearTrabajadorEdgeCases:
+    """Pruebas para capturar errores humanos en la creación de trabajadores mediante el formulario web."""
+
+    def test_crear_trabajador_salario_negativo(self, logged_in_admin, db):
+        resp = logged_in_admin.post('/trabajadores/agregar',
+            data={
+                'no_empleado': 'ERR-001',
+                'nombre_apellidos': 'Falso',
+                'nombre': 'Falso',
+                'salario_real_pactado_x_sem': -1000,
+                'tipo_nomina': 'Semanal'
+            },
+            follow_redirects=True
+        )
+        html_response = resp.data.decode('utf-8')
+        assert 'negativo' in html_response.lower() or 'inválido' in html_response.lower()
+        
+        from app.models import Trabajador
+        t = Trabajador.query.filter_by(no_empleado='ERR-001').first()
+        # Podría validar que no lo guardó o lo guardó con validación extra. Ideal no guardarlo.
+        # Si se guardó porque el controlador no bloquea, este assert fallaría y nos avisaría del bug
+        if t:
+            assert t.salario_real_pactado_x_sem >= 0
+
+    def test_crear_trabajador_sin_no_empleado(self, logged_in_admin, db):
+        resp = logged_in_admin.post('/trabajadores/agregar',
+            data={
+                'no_empleado': '',
+                'nombre_apellidos': 'Falso',
+                'nombre': 'Falso',
+                'salario_real_pactado_x_sem': 1000,
+                'tipo_nomina': 'Semanal'
+            },
+            follow_redirects=True
+        )
+        html_response = resp.data.decode('utf-8')
+        assert 'obligatorio' in html_response.lower() or 'requerido' in html_response.lower()
+
+        from app.models import Trabajador
+        t = Trabajador.query.filter_by(nombre='Falso').first()
+        assert t is None
+
+    def test_crear_trabajador_duplicado(self, logged_in_admin, db):
+        # Crear 1 manual
+        from app.models import Trabajador
+        t1 = Trabajador(
+            no_empleado='DUP-002',
+            nombre_apellidos='Original',
+            nombre='Original',
+            salario_real_pactado_x_sem=1000,
+            tipo_nomina='Semanal'
+        )
+        db.session.add(t1)
+        db.session.commit()
+
+        # Intentar crear 2 desde forms
+        resp = logged_in_admin.post('/trabajadores/agregar',
+            data={
+                'no_empleado': 'DUP-002',
+                'nombre_apellidos': 'Copia',
+                'nombre': 'Copia',
+                'salario_real_pactado_x_sem': 1000,
+                'tipo_nomina': 'Semanal'
+            },
+            follow_redirects=True
+        )
+        html_response = resp.data.decode('utf-8')
+        assert 'ya existe' in html_response.lower() or 'duplicado' in html_response.lower()
+
+        t_dup = Trabajador.query.filter_by(nombre='Copia').first()
+        assert t_dup is None
+
+
