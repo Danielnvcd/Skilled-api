@@ -167,7 +167,8 @@
                 {% for t in trabajadores %}
                 {% set creds = {} %}
                 {% for c in t.credenciales %}
-                {% set _ = creds.update({c.planta: c.credencial_id}) %}
+                {% set _ = creds.update({c.planta: {'id': c.credencial_id, 'caducidad': c.fecha_caducidad.isoformat() if
+                c.fecha_caducidad else None}}) %}
                 {% endfor %}
                 <tr class="worker-row" data-id="{{ t.id }}">
                     <td style="font-weight: 600; color: var(--primary); text-align: left;">{{ t.no_empleado }}</td>
@@ -305,7 +306,11 @@
                         <input type="text" id="credencialIdInput" class="form-control" maxlength="40"
                             placeholder="Máx 40 chars">
                     </div>
-                    <div class="form-group" style="grid-column: span 2;">
+                    <div class="form-group" style="grid-column: span 1;">
+                        <label>Caducidad (Opcional)</label>
+                        <input type="date" id="credencialCaducidadInput" class="form-control">
+                    </div>
+                    <div class="form-group" style="grid-column: span 3;">
                         <button type="button" class="btn-secondary" id="btnAddCredential" style="width: 100%;">
                             + Agregar Credencial
                         </button>

@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const customPlantaContainer = document.getElementById('customPlantaContainer');
     const customPlantaName = document.getElementById('customPlantaName');
     const credencialIdInput = document.getElementById('credencialIdInput');
+    const credencialCaducidadInput = document.getElementById('credencialCaducidadInput');
     const btnAddCredential = document.getElementById('btnAddCredential');
     const credentialsList = document.getElementById('credentialsList');
     const credencialesJson = document.getElementById('credencialesJson');
@@ -88,12 +89,37 @@ document.addEventListener('DOMContentLoaded', function () {
             var plants = Object.keys(credIds);
             if (plants.length > 0) {
                 chipsContainer.innerHTML = '';
+                var today = new Date();
+                today.setHours(0, 0, 0, 0);
+
                 plants.forEach(function (planta) {
+                    var credData = credIds[planta];
+                    // Handle backward compatibility where credIds[planta] might just be a string ID
+                    var cid = typeof credData === 'object' ? credData.id : credData;
+                    var caducidad = typeof credData === 'object' ? credData.caducidad : null;
+
+                    var isExpired = false;
+                    var expText = '';
+                    if (caducidad) {
+                        var expDate = new Date(caducidad + 'T00:00:00'); // Ensure local timezone parsing
+                        if (expDate < today) {
+                            isExpired = true;
+                        }
+                        expText = ' <span style="font-size: 0.7rem; color: ' + (isExpired ? '#ef4444' : '#6b7280') + '; margin-left: 4px;">(' + (isExpired ? 'Caducada: ' : 'Vence: ') + caducidad + ')</span>';
+                    }
+
+                    var chipColor = isExpired ? '#fee2e2' : '#ecfdf5';
+                    var borderColor = isExpired ? '#fca5a5' : '#a7f3d0';
+                    var iconColor = isExpired ? '#ef4444' : '#10b981';
+                    var iconClass = isExpired ? 'fa-times-circle' : 'fa-check-circle';
+
                     var chip = document.createElement('div');
                     chip.className = 'cred-chip cred-active';
-                    chip.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981; margin-right: 4px;"></i>' +
+                    chip.style.background = chipColor;
+                    chip.style.borderColor = borderColor;
+                    chip.innerHTML = '<i class="fas ' + iconClass + '" style="color: ' + iconColor + '; margin-right: 4px;"></i>' +
                         '<strong>' + planta + '</strong>' +
-                        '<span class="cred-id">' + credIds[planta] + '</span>';
+                        '<span class="cred-id">' + cid + '</span>' + expText;
                     chipsContainer.appendChild(chip);
                 });
             } else {
@@ -153,33 +179,58 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateCredentialsUI() {
         if (!credentialsList) return;
         credentialsList.innerHTML = '';
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         credentialsArray.forEach((cred, index) => {
+            let isExpired = false;
+            let statusBadge = '';
+
+            if (cred.fecha_caducidad) {
+                let expDate = new Date(cred.fecha_caducidad + 'T00:00:00');
+                if (expDate < today) {
+                    isExpired = true;
+                }
+                statusBadge = `<span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${isExpired ? '#fee2e2' : '#d1fae5'}; color: ${isExpired ? '#991b1b' : '#065f46'}; margin-left: 8px;">
+                    ${isExpired ? 'Caducada' : 'Vigente'} (${cred.fecha_caducidad})
+                </span>`;
+            }
+
             const li = document.createElement('li');
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
             li.style.alignItems = 'center';
             li.style.padding = '8px 12px';
-            li.style.background = '#f3f4f6';
+            li.style.background = isExpired ? '#fef2f2' : '#f3f4f6';
             li.style.borderRadius = '6px';
-            li.style.border = '1px solid #e5e7eb';
+            li.style.border = isExpired ? '1px solid #fecaca' : '1px solid #e5e7eb';
 
             li.innerHTML = `
                 <div>
                     <strong style="color: #1f2937;">${cred.planta}</strong>
                     <span style="color: #6b7280; font-family: monospace; margin-left: 8px;">ID: ${cred.credencial_id}</span>
+                    ${statusBadge}
                 </div>
-                <button type="button" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;" onclick="removeCredential(${index})">X</button>
+                <button type="button" class="btn-remove-cred" data-index="${index}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">X</button>
             `;
             credentialsList.appendChild(li);
         });
+
+        // Attach event listeners safely
+        document.querySelectorAll('.btn-remove-cred').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const idx = parseInt(this.getAttribute('data-index'), 10);
+                removeCredential(idx);
+            });
+        });
+
         credencialesJson.value = JSON.stringify(credentialsArray);
     }
 
-    // Must be global for inline onclick handler
-    window.removeCredential = function (index) {
+    function removeCredential(index) {
         credentialsArray.splice(index, 1);
         updateCredentialsUI();
-    };
+    }
 
     if (btnAddCredential) {
         btnAddCredential.addEventListener('click', function () {
@@ -193,6 +244,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const credId = credencialIdInput.value.trim();
+            const fechaCaducidad = (credencialCaducidadInput && credencialCaducidadInput.value) ? credencialCaducidadInput.value : null;
 
             if (credId.length > 40) {
                 alert('El ID de la credencial no puede superar los 40 caracteres.');
@@ -206,11 +258,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
             credentialsArray.push({
                 planta: planta,
-                credencial_id: credId
+                credencial_id: credId,
+                fecha_caducidad: fechaCaducidad
             });
 
             // Reset UI
             credencialIdInput.value = '';
+            if (credencialCaducidadInput) credencialCaducidadInput.value = '';
             if (selectPlanta.value === 'OTRA') {
                 customPlantaName.value = '';
                 selectPlanta.value = 'CAET';
@@ -237,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Clean specific inputs
             credencialIdInput.value = '';
+            if (credencialCaducidadInput) credencialCaducidadInput.value = '';
             selectPlanta.value = 'CAET';
             customPlantaContainer.style.display = 'none';
             customPlantaName.value = '';
@@ -268,11 +323,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     planta = customPlantaName.value.trim().toUpperCase() || 'OTRA';
                 }
                 const credId = credencialIdInput.value.trim();
+                const fechaCaducidad = (credencialCaducidadInput && credencialCaducidadInput.value) ? credencialCaducidadInput.value : null;
 
                 if (!credentialsArray.find(c => c.planta === planta)) {
                     credentialsArray.push({
                         planta: planta,
-                        credencial_id: credId
+                        credencial_id: credId,
+                        fecha_caducidad: fechaCaducidad
                     });
                     updateCredentialsUI();
                 }

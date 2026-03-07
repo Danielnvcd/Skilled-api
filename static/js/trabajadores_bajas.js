@@ -242,11 +242,24 @@ document.addEventListener('DOMContentLoaded', function () {
             li.style.borderRadius = '6px';
             li.style.border = '1px solid #e5e7eb';
 
+            let caducadoHtml = '';
+            if (doc.fecha_fin) {
+                const hoy = new Date();
+                hoy.setHours(0, 0, 0, 0);
+                const [year, month, day] = doc.fecha_fin.split('-');
+                const fin = new Date(year, month - 1, day);
+
+                if (fin < hoy) {
+                    caducadoHtml = '<span style="color: #ef4444; font-weight: bold; font-size: 0.75rem; margin-left: 8px; border: 1px solid #ef4444; border-radius: 4px; padding: 1px 4px;">Caducado</span>';
+                }
+            }
+
             li.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <a href="/trabajadores/documento/${doc.id}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 500;">
                         ${doc.nombre_archivo}
                     </a>
+                    ${caducadoHtml}
                     <span style="font-size: 0.75rem; color: #9ca3af;">${new Date(doc.fecha_subida).toLocaleDateString()}</span>
                 </div>
                 <button type="button" class="btn-delete-doc" data-id="${doc.id}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">X</button>
@@ -295,6 +308,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const formData = new FormData();
             formData.append('documento', file);
 
+            const docFechaInicio = document.getElementById('docFechaInicio');
+            if (docFechaInicio && docFechaInicio.value) {
+                formData.append('fecha_inicio', docFechaInicio.value);
+            }
+
+            const docFechaFin = document.getElementById('docFechaFin');
+            if (docFechaFin && docFechaFin.value) {
+                formData.append('fecha_fin', docFechaFin.value);
+            }
+
             const csrfInput = document.querySelector('input[name="csrf_token"]');
             if (csrfInput) {
                 formData.append('csrf_token', csrfInput.value);
@@ -317,6 +340,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     documentosArray.push(newDoc);
                     updateDocumentosUI();
                     fileUploadInput.value = ''; // clear input
+                    const docFechaInicio = document.getElementById('docFechaInicio');
+                    const docFechaFin = document.getElementById('docFechaFin');
+                    if (docFechaInicio) docFechaInicio.value = '';
+                    if (docFechaFin) docFechaFin.value = '';
                 } else {
                     const err = await response.json();
                     alert(err.error || 'Ocurrió un error al subir el archivo');
@@ -506,12 +533,25 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (ext === 'pdf') icon = 'fa-file-pdf';
                             else if (['jpg', 'jpeg', 'png', 'heic'].includes(ext)) icon = 'fa-file-image';
 
+                            let caducadoHtml = '';
+                            if (d.fecha_fin) {
+                                const hoy = new Date();
+                                hoy.setHours(0, 0, 0, 0);
+                                const [year, month, day] = d.fecha_fin.split('-');
+                                const fin = new Date(year, month - 1, day);
+
+                                if (fin < hoy) {
+                                    caducadoHtml = '<span style="color: #ef4444; font-weight: bold; font-size: 0.75rem; margin-left: 8px; border: 1px solid #ef4444; border-radius: 4px; padding: 1px 4px;">Caducado</span>';
+                                }
+                            }
+
                             docList.innerHTML += `
                                 <li style="display: flex; align-items: center;">
                                     <i class="fas ${icon}" style="color: var(--primary-color); width: 20px;"></i> 
                                     <a href="/trabajadores/documento/${d.id}" target="_blank" class="hover-underline" style="color: #2563eb; text-decoration: none; font-weight: 500; font-size: 0.95rem;">
                                         ${d.nombre_original || d.nombre_archivo}
                                     </a>
+                                    ${caducadoHtml}
                                 </li>`;
                         });
                     } else {

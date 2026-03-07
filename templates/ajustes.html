@@ -8,11 +8,13 @@
 
 {% block content %}
 <div class="horas-wrapper">
-    <div class="header-card">
+    <div class="header-card"
+        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div class="header-titulos">
             <h1 class="main-title">Ajuste Inbursa</h1>
             <p class="subtitle">Control de recuperación de depósitos adelantados</p>
         </div>
+        {# Global export removed #}
     </div>
 
     <!-- Crear Nuevo Periodo -->
@@ -112,6 +114,17 @@
                     <span style="color:#EF4444; font-weight:600;">Descontado: ${{
                         "%.2f"|format(p.total_descontado|float) }}</span>
                 </div>
+
+                {% if session.get('role') == 'admin' %}
+                <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+                    <object>
+                        <a href="{{ url_for('reportes.excel_ajustes', periodo_id=p.id) }}" class="btn-primary"
+                            style="background: #10b981; font-size: 0.8rem; padding: 0.4rem 0.8rem; display: inline-flex; align-items: center; gap: 0.5rem; width: 100%; justify-content: center;">
+                            <i class="fa-solid fa-file-excel"></i> Exportar Periodo
+                        </a>
+                    </object>
+                </div>
+                {% endif %}
             </a>
             {% endfor %}
         </div>

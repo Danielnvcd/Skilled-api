@@ -8,6 +8,7 @@ import traceback
 import json
 import os
 from datetime import datetime as dt
+import pandas as pd
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
 
@@ -128,7 +129,8 @@ def agregar():
             for c_data in credenciales_data:
                 nueva_credencial = CredencialPlanta(
                     planta=c_data.get('planta', '').upper(),
-                    credencial_id=c_data.get('credencial_id', '')[:40]
+                    credencial_id=c_data.get('credencial_id', '')[:40],
+                    fecha_caducidad=_parse_date(c_data.get('fecha_caducidad'))
                 )
                 nuevo_trabajador.credenciales.append(nueva_credencial)
         except Exception as json_err:
@@ -148,11 +150,175 @@ def agregar():
         
     return redirect(url_for('trabajadores.index'))
 
+@bp.route('/importar', methods=['GET'])
+@login_required
+def importar():
+    return render_template('importar_empleados.html')
+
+@bp.route('/procesar_importacion', methods=['POST'])
+@login_required
+def procesar_importacion():
+    if 'archivo_excel' not in request.files:
+        flash('No se seleccionó ningún archivo.', 'danger')
+        return redirect(url_for('trabajadores.importar'))
+        
+    file = request.files['archivo_excel']
+    if file.filename == '':
+        flash('El archivo está vacío.', 'danger')
+        return redirect(url_for('trabajadores.importar'))
+        
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        flash('Formato no válido. Debe ser .xlsx o .xls', 'danger')
+        return redirect(url_for('trabajadores.importar'))
+        
+    try:
+        df = pd.read_excel(file)
+        
+        errores = []
+        exitosos = 0
+        
+        for index, row in df.iterrows():
+            no_emp = str(row.get('No. Empleado', '')).strip()
+            if no_emp == 'nan' or not no_emp:
+                errores.append(f"Fila {index+2}: Falta No. Empleado")
+                continue
+                
+            if Trabajador.query.filter_by(no_empleado=no_emp).first():
+                errores.append(f"Fila {index+2}: El empleado {no_emp} ya existe.")
+                continue
+                
+            nombre = str(row.get('Nombre(s)', '')).strip()
+            apellidos = str(row.get('Apellidos', '')).strip()
+            
+            if nombre == 'nan': nombre = ''
+            if apellidos == 'nan': apellidos = ''
+            
+            # Flags for current row errors
+            row_errors = []
+
+            def get_str(col_name, max_len=None):
+                val = row.get(col_name, '')
+                s = str(val).strip() if pd.notna(val) else ''
+                if max_len and len(s) > max_len:
+                    return s[:max_len]
+                return s
+                
+            def get_float(col_name):
+                val = row.get(col_name, 0)
+                if pd.isna(val) or val == '':
+                    return 0.0
+                try:
+                    return float(val)
+                except ValueError:
+                    row_errors.append(f"El valor '{val}' en '{col_name}' no es un número válido.")
+                    return 0.0
+                    
+            def get_date(col_name):
+                raw = row.get(col_name)
+                if pd.isna(raw) or raw == '':
+                    return None
+                try:
+                    return pd.to_datetime(raw).date()
+                except Exception:
+                    row_errors.append(f"La fecha '{raw}' en '{col_name}' no tiene el formato correcto (YYYY-MM-DD).")
+                    return None
+
+            t_nuevo = Trabajador(
+                # Identificadores
+                no_empleado=no_emp[:50],
+                nombre=nombre[:250],
+                nombre_apellidos=apellidos[:250],
+                
+                # Laborales
+                tipo_mov=get_str('Tipo de Movimiento', 100),
+                tipo_cont=get_str('Tipo de Contrato', 100),
+                area=get_str('Area', 150),
+                puesto=get_str('Puesto', 150),
+                tipo_jornada=get_str('Tipo de Jornada', 100),
+                fecha_ingreso=get_date('Fecha Ingreso (YYYY-MM-DD)'),
+                descripcion_servicio=get_str('Descripcion de Servicio'),
+                inicio=get_date('Fecha Inicio (YYYY-MM-DD)'),
+                termino_prueba=get_date('Termino de Prueba (YYYY-MM-DD)'),
+                
+                # Generales
+                rfc=get_str('RFC', 13),
+                curp=get_str('CURP', 18),
+                nss=get_str('NSS', 20),
+                sexo=get_str('Sexo (M/F)', 20),
+                estado_civil=get_str('Estado Civil', 50),
+                nacionalidad=get_str('Nacionalidad', 100),
+                edad=int(get_float('Edad')) if get_float('Edad') > 0 else None,
+                domicilio=get_str('Domicilio'),
+                
+                # Contacto
+                correo=get_str('Correo', 150),
+                celular=get_str('Celular', 20),
+                
+                # Medicos
+                tipo_sangre=get_str('Tipo de Sangre', 10),
+                alergias=get_str('Alergias'),
+                enfermedades_cronicas=get_str('Enfermedades Cronicas'),
+                contacto_emergencia=get_str('Contacto de Emergencia', 200),
+                parentesco_contacto=get_str('Parentesco del Contacto', 100),
+                numero_contacto_emerg=get_str('Numero Contacto Emergencia', 20),
+                lentes=get_str('Usa Lentes (Si/No)', 20),
+                licencia_conducir=get_str('Licencia de Conducir (Tipo)', 50),
+                estatura=get_str('Estatura', 20),
+                
+                # Finanzas
+                salario_real_pactado_x_sem=get_float('Salario Real Pactado por Semana'),
+                tipo_pago=get_str('Tipo Pago', 50),
+                tipo_nomina=get_str('Tipo de Nomina (Semanal/Por hora/Cuadrado)', 100),
+                sb=get_float('Sueldo Base (SB)'),
+                sdi=get_float('Salario Diario Integrado (SDI)'),
+                letra=get_str('Letra', 10),
+                hr_extra=get_float('Horas Extra'),
+                infonavit=get_float('Infonavit'),
+                ajuste_inbursa=get_float('Ajuste Inbursa'),
+                caja_ahorro=get_float('Caja de Ahorro'),
+                viaticos=get_float('Viaticos'),
+                pago_dia_festivo=get_float('Pago Dia Festivo'),
+                pagos_efectivo=get_float('Pagos Efectivo'),
+                folio_mov_idse=get_str('Folio Mov IDSE', 100),
+                
+                # Operacion
+                ubicacion_estado=get_str('Ubicacion Estado', 100),
+                observaciones=get_str('Observaciones')
+            )
+            
+            if row_errors:
+                # Si hay errores de formato en esta fila, abortamos su inserción y anotamos
+                errores.append(f"Fila {index+2} ({no_emp}): " + ", ".join(row_errors))
+            else:
+                db.session.add(t_nuevo)
+                exitosos += 1
+            
+        if exitosos > 0:
+            db.session.commit()
+            log_action(f"Importó masivamente {exitosos} trabajadores desde Excel")
+            flash(f'¡Éxito! Se importaron {exitosos} empleados correctamente.', 'success')
+            
+        if errores:
+            mensaje_error = "Errores encontrados:<br>" + "<br>".join(errores[:10])
+            if len(errores) > 10:
+                mensaje_error += f"<br>...y {len(errores)-10} errores más."
+            flash(mensaje_error, 'warning')
+            
+        if exitosos > 0 and not errores:
+            return redirect(url_for('trabajadores.index'))
+            
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error procesando Excel: {e}\n{traceback.format_exc()}")
+        flash('Error al leer el archivo Excel. Asegúrate de usar la plantilla correcta.', 'danger')
+
+    return redirect(url_for('trabajadores.importar'))
+
 @bp.route('/get/<int:id>')
 @login_required
 def get_trabajador(id):
     t = Trabajador.query.get_or_404(id)
-    credenciales = [{'planta': c.planta, 'credencial_id': c.credencial_id} for c in t.credenciales]
+    credenciales = [{'planta': c.planta, 'credencial_id': c.credencial_id, 'fecha_caducidad': c.fecha_caducidad.isoformat() if c.fecha_caducidad else None} for c in t.credenciales]
     documentos = [d.to_dict() for d in t.documentos]
     
     # Extraer coordinadores de los proyectos activos asignados
@@ -343,7 +509,8 @@ def editar(id):
             for c_data in credenciales_data:
                 nueva_credencial = CredencialPlanta(
                     planta=c_data.get('planta', '').upper(),
-                    credencial_id=c_data.get('credencial_id', '')[:40]
+                    credencial_id=c_data.get('credencial_id', '')[:40],
+                    fecha_caducidad=_parse_date(c_data.get('fecha_caducidad'))
                 )
                 t.credenciales.append(nueva_credencial)
         except Exception as json_err:
@@ -383,7 +550,8 @@ def guardar_credenciales(id):
         for c_data in credenciales_data:
             nueva_credencial = CredencialPlanta(
                 planta=c_data.get('planta', '').upper(),
-                credencial_id=c_data.get('credencial_id', '')[:40]
+                credencial_id=c_data.get('credencial_id', '')[:40],
+                fecha_caducidad=_parse_date(c_data.get('fecha_caducidad'))
             )
             t.credenciales.append(nueva_credencial)
             
@@ -464,13 +632,21 @@ def upload_documento(id):
         file_path = os.path.join(upload_folder, unique_filename)
         file.save(file_path)
         
+        # Parse Dates
+        fecha_inicio_str = request.form.get('fecha_inicio')
+        fecha_fin_str = request.form.get('fecha_fin')
+        f_inicio = _parse_date(fecha_inicio_str) if fecha_inicio_str else None
+        f_fin = _parse_date(fecha_fin_str) if fecha_fin_str else None
+        
         # Relate to DB path
         db_path = f"trabajadores/{t.id}/{unique_filename}"
         
         nuevo_doc = DocumentoTrabajador(
             trabajador_id=t.id,
             nombre_archivo=filename,
-            ruta_archivo=db_path
+            ruta_archivo=db_path,
+            fecha_inicio=f_inicio,
+            fecha_fin=f_fin
         )
         db.session.add(nuevo_doc)
         db.session.commit()

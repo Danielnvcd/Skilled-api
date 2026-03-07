@@ -139,14 +139,17 @@
             <p class="subtitle">Resumen acumulado de nómina por proyecto, incluyendo todas las semanas procesadas.</p>
         </div>
 
-        <div class="search-container" style="position: relative; min-width: 250px;">
-            <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #94a3b8;"
-                fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-            </svg>
-            <input type="text" id="buscadorProyectos" placeholder="Buscar proyecto o coordinador..."
-                style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div class="search-container" style="position: relative; min-width: 250px;">
+                <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #94a3b8;"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input type="text" id="buscadorProyectos" placeholder="Buscar proyecto o coordinador..."
+                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
+            </div>
+            {# Global export removed #}
         </div>
     </div>
 
@@ -177,6 +180,7 @@
                 <span class="grand-total-badge">
                     ${{ "%.2f"|format(pd.grand.total_a_pagar) }}
                 </span>
+
             </div>
         </div>
 
@@ -197,6 +201,17 @@
                         <div class="value blue">${{ "%.2f"|format(pd.grand.total_a_pagar) }}</div>
                     </div>
                 </div>
+
+                {% if session.get('role') == 'admin' %}
+                <div style="margin-top: 1rem; text-align: right;">
+                    <a href="{{ url_for('reportes.excel_proyecto_total', proyecto_id=pd.proyecto.id) }}"
+                        class="btn-primary"
+                        style="background: #10b981; font-size: 0.9rem; padding: 0.6rem 1.2rem; display: inline-flex; align-items: center; gap: 0.6rem;">
+                        <i class="fa-solid fa-file-excel"></i> Exportar este Proyecto (Cerrado)
+                    </a>
+                </div>
+                {% endif %}
+
 
                 <!-- Weeks detail table -->
                 <div class="table-scroll-wrapper">
@@ -237,9 +252,11 @@
                                 <td class="col-money">${{ "%.2f"|format(w.descuento_prestamos) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.descuento_incidencias) }}</td>
                                 <td class="col-money">${{ "%.2f"|format(w.recuperacion_manual) }}</td>
-                                <td class="col-money col-total-percep">${{ "%.2f"|format(w.total_percepciones) }}</td>
+                                <td class="col-money col-total-percep">${{ "%.2f"|format(w.total_percepciones) }}
+                                </td>
                                 <td class="col-money col-total-deduc">${{ "%.2f"|format(w.total_deducciones) }}</td>
-                                <td class="col-money col-neto"><strong>${{ "%.2f"|format(w.total_a_pagar) }}</strong>
+                                <td class="col-money col-neto"><strong>${{ "%.2f"|format(w.total_a_pagar)
+                                        }}</strong>
                                 </td>
                             </tr>
                             {% endfor %}

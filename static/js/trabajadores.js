@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const customPlantaContainer = document.getElementById('customPlantaContainer');
     const customPlantaName = document.getElementById('customPlantaName');
     const credencialIdInput = document.getElementById('credencialIdInput');
+    const credencialCaducidadInput = document.getElementById('credencialCaducidadInput');
     const btnAddCredential = document.getElementById('btnAddCredential');
     const credentialsList = document.getElementById('credentialsList');
     const credencialesJson = document.getElementById('credencialesJson');
@@ -145,33 +146,58 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateCredentialsUI() {
         if (!credentialsList) return;
         credentialsList.innerHTML = '';
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         credentialsArray.forEach((cred, index) => {
+            let isExpired = false;
+            let statusBadge = '';
+
+            if (cred.fecha_caducidad) {
+                let expDate = new Date(cred.fecha_caducidad + 'T00:00:00');
+                if (expDate < today) {
+                    isExpired = true;
+                }
+                statusBadge = `<span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${isExpired ? '#fee2e2' : '#d1fae5'}; color: ${isExpired ? '#991b1b' : '#065f46'}; margin-left: 8px;">
+                    ${isExpired ? 'Caducada' : 'Vigente'} (${cred.fecha_caducidad})
+                </span>`;
+            }
+
             const li = document.createElement('li');
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
             li.style.alignItems = 'center';
             li.style.padding = '8px 12px';
-            li.style.background = '#f3f4f6';
+            li.style.background = isExpired ? '#fef2f2' : '#f3f4f6';
             li.style.borderRadius = '6px';
-            li.style.border = '1px solid #e5e7eb';
+            li.style.border = isExpired ? '1px solid #fecaca' : '1px solid #e5e7eb';
 
             li.innerHTML = `
                 <div>
                     <strong style="color: #1f2937;">${cred.planta}</strong>
                     <span style="color: #6b7280; font-family: monospace; margin-left: 8px;">ID: ${cred.credencial_id}</span>
+                    ${statusBadge}
                 </div>
-                <button type="button" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;" onclick="removeCredential(${index})">X</button>
+                <button type="button" class="btn-remove-cred" data-index="${index}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">X</button>
             `;
             credentialsList.appendChild(li);
         });
+
+        // Attach event listeners safely
+        document.querySelectorAll('.btn-remove-cred').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const idx = parseInt(this.getAttribute('data-index'), 10);
+                removeCredential(idx);
+            });
+        });
+
         credencialesJson.value = JSON.stringify(credentialsArray);
     }
 
-    // Must be global for inline onclick handler
-    window.removeCredential = function (index) {
+    function removeCredential(index) {
         credentialsArray.splice(index, 1);
         updateCredentialsUI();
-    };
+    }
 
     if (btnAddCredential) {
         btnAddCredential.addEventListener('click', function () {
@@ -185,6 +211,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const credId = credencialIdInput.value.trim();
+            const fechaCaducidad = (credencialCaducidadInput && credencialCaducidadInput.value) ? credencialCaducidadInput.value : null;
 
             // Check max limits just in case
             if (credId.length > 40) {
@@ -200,11 +227,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
             credentialsArray.push({
                 planta: planta,
-                credencial_id: credId
+                credencial_id: credId,
+                fecha_caducidad: fechaCaducidad
             });
 
             // Rest UI
             credencialIdInput.value = '';
+            if (credencialCaducidadInput) credencialCaducidadInput.value = '';
             if (selectPlanta.value === 'OTRA') {
                 customPlantaName.value = '';
                 selectPlanta.value = 'CAET'; // Reset default
@@ -242,11 +271,24 @@ document.addEventListener('DOMContentLoaded', function () {
             li.style.borderRadius = '6px';
             li.style.border = '1px solid #e5e7eb';
 
+            let caducadoHtml = '';
+            if (doc.fecha_fin) {
+                const hoy = new Date();
+                hoy.setHours(0, 0, 0, 0);
+                const [year, month, day] = doc.fecha_fin.split('-');
+                const fin = new Date(year, month - 1, day);
+
+                if (fin < hoy) {
+                    caducadoHtml = '<span style="color: #ef4444; font-weight: bold; font-size: 0.75rem; margin-left: 8px; border: 1px solid #ef4444; border-radius: 4px; padding: 1px 4px;">Caducado</span>';
+                }
+            }
+
             li.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <a href="/trabajadores/documento/${doc.id}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 500;">
                         ${doc.nombre_archivo}
                     </a>
+                    ${caducadoHtml}
                     <span style="font-size: 0.75rem; color: #9ca3af;">${new Date(doc.fecha_subida).toLocaleDateString()}</span>
                 </div>
                 <button type="button" class="btn-delete-doc" data-id="${doc.id}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">X</button>
@@ -295,6 +337,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const formData = new FormData();
             formData.append('documento', file);
 
+            const docFechaInicio = document.getElementById('docFechaInicio');
+            if (docFechaInicio && docFechaInicio.value) {
+                formData.append('fecha_inicio', docFechaInicio.value);
+            }
+
+            const docFechaFin = document.getElementById('docFechaFin');
+            if (docFechaFin && docFechaFin.value) {
+                formData.append('fecha_fin', docFechaFin.value);
+            }
+
             const csrfInput = document.querySelector('input[name="csrf_token"]');
             if (csrfInput) {
                 formData.append('csrf_token', csrfInput.value);
@@ -317,6 +369,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     documentosArray.push(newDoc);
                     updateDocumentosUI();
                     fileUploadInput.value = ''; // clear input
+                    const docFechaInicio = document.getElementById('docFechaInicio');
+                    const docFechaFin = document.getElementById('docFechaFin');
+                    if (docFechaInicio) docFechaInicio.value = '';
+                    if (docFechaFin) docFechaFin.value = '';
                 } else {
                     const err = await response.json();
                     alert(err.error || 'Ocurrió un error al subir el archivo');
@@ -508,12 +564,25 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (ext === 'pdf') icon = 'fa-file-pdf';
                             else if (['jpg', 'jpeg', 'png', 'heic'].includes(ext)) icon = 'fa-file-image';
 
+                            let caducadoHtml = '';
+                            if (d.fecha_fin) {
+                                const hoy = new Date();
+                                hoy.setHours(0, 0, 0, 0);
+                                const [year, month, day] = d.fecha_fin.split('-');
+                                const fin = new Date(year, month - 1, day);
+
+                                if (fin < hoy) {
+                                    caducadoHtml = '<span style="color: #ef4444; font-weight: bold; font-size: 0.75rem; margin-left: 8px; border: 1px solid #ef4444; border-radius: 4px; padding: 1px 4px;">Caducado</span>';
+                                }
+                            }
+
                             docList.innerHTML += `
                                 <li style="display: flex; align-items: center;">
                                     <i class="fas ${icon}" style="color: var(--primary-color); width: 20px;"></i> 
                                     <a href="/trabajadores/documento/${d.id}" target="_blank" class="hover-underline" style="color: #2563eb; text-decoration: none; font-weight: 500; font-size: 0.95rem;">
                                         ${d.nombre_original || d.nombre_archivo}
                                     </a>
+                                    ${caducadoHtml}
                                 </li>`;
                         });
                     } else {
@@ -588,18 +657,21 @@ document.addEventListener('DOMContentLoaded', function () {
     // Auto-capture pending credentials on save
     form.addEventListener('submit', function (e) {
         const credencialIdInput = document.getElementById('credencialIdInput');
+        const credencialCaducidadInput = document.getElementById('credencialCaducidadInput');
         if (credencialIdInput && credencialIdInput.value.trim() !== '') {
             let planta = selectPlanta ? selectPlanta.value : 'CAET';
             if (planta === 'OTRA' && customPlantaName) {
                 planta = customPlantaName.value.trim().toUpperCase() || 'OTRA';
             }
             const credId = credencialIdInput.value.trim();
+            const fechaCaducidad = (credencialCaducidadInput && credencialCaducidadInput.value) ? credencialCaducidadInput.value : null;
 
             // Only add if not duplicate plant
             if (!credentialsArray.find(c => c.planta === planta)) {
                 credentialsArray.push({
                     planta: planta,
-                    credencial_id: credId
+                    credencial_id: credId,
+                    fecha_caducidad: fechaCaducidad
                 });
                 updateCredentialsUI();
             }

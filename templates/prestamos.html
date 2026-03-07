@@ -7,14 +7,18 @@
 
 {% block content %}
 <div class="horas-wrapper">
-    <div class="header-card">
+    <div class="header-card"
+        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div class="header-titulos">
             <h1 class="main-title">Préstamos</h1>
             <p class="subtitle">Registra, administra y da seguimiento a los préstamos otorgados a los trabajadores.</p>
         </div>
-        <button class="btn-primary" id="btnNuevoPrestamo">
-            <i class="fa-solid fa-plus"></i> Nuevo Préstamo
-        </button>
+        <div style="display: flex; gap: 0.75rem;">
+            {# Global export removed #}
+            <button class="btn-primary" id="btnNuevoPrestamo">
+                <i class="fa-solid fa-plus"></i> Nuevo Préstamo
+            </button>
+        </div>
     </div>
 
     <!-- Stats -->
@@ -101,6 +105,14 @@
                 <button class="btn-liquidar" data-id="{{ p.id }}" title="Liquidar">
                     <i class="fa-solid fa-check-double"></i> Liquidar
                 </button>
+                {% endif %}
+
+                {% if session.get('role') == 'admin' %}
+                <a href="{{ url_for('reportes.excel_prestamos', trabajador_id=p.trabajador_id) }}" class="btn-primary"
+                    style="background: #10b981; font-size: 0.85rem; padding: 0.5rem 0.8rem; display: inline-flex; align-items: center; gap: 0.5rem;"
+                    title="Exportar todos los préstamos de este trabajador">
+                    <i class="fa-solid fa-file-excel"></i> Exportar
+                </a>
                 {% endif %}
             </div>
         </div>

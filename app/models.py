@@ -119,11 +119,13 @@ class CredencialPlanta(db.Model):
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
     planta = db.Column(db.String(100), nullable=False)
     credencial_id = db.Column(db.String(40), nullable=False)
+    fecha_caducidad = db.Column(db.Date, nullable=True)
     
     def to_dict(self):
         return {
             'planta': self.planta,
-            'credencial_id': self.credencial_id
+            'credencial_id': self.credencial_id,
+            'fecha_caducidad': self.fecha_caducidad.isoformat() if self.fecha_caducidad else None
         }
 
 class DocumentoTrabajador(db.Model):
@@ -134,12 +136,17 @@ class DocumentoTrabajador(db.Model):
     ruta_archivo = db.Column(db.String(500), nullable=False)
     fecha_subida = db.Column(db.DateTime, default=datetime.utcnow)
     
+    fecha_inicio = db.Column(db.Date, nullable=True)
+    fecha_fin = db.Column(db.Date, nullable=True)
+    
     def to_dict(self):
         return {
             'id': self.id,
             'nombre_archivo': self.nombre_archivo,
             'ruta_archivo': self.ruta_archivo,
-            'fecha_subida': self.fecha_subida.isoformat() if self.fecha_subida else None
+            'fecha_subida': self.fecha_subida.isoformat() if self.fecha_subida else None,
+            'fecha_inicio': self.fecha_inicio.isoformat() if self.fecha_inicio else None,
+            'fecha_fin': self.fecha_fin.isoformat() if self.fecha_fin else None
         }
 
 proyecto_trabajador = db.Table('proyecto_trabajador',

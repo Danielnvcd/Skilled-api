@@ -421,11 +421,19 @@
                         (CURP, Acta Nacimiento, Identificaciones) para este trabajador.</p>
 
                     <div class="form-grid upload-section" style="align-items: end; margin-bottom: 20px;">
-                        <div class="form-group" style="grid-column: span 3;">
+                        <div class="form-group" style="grid-column: span 4;">
                             <label>Seleccionar Archivo (PDF, JPG, PNG)</label>
                             <input type="file" id="fileUploadInput" class="form-control" accept=".pdf,image/*">
                         </div>
                         <div class="form-group" style="grid-column: span 1;">
+                            <label>Fecha de Inicio (Opcional)</label>
+                            <input type="date" id="docFechaInicio" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column: span 1;">
+                            <label>Fecha de Fin (Opcional)</label>
+                            <input type="date" id="docFechaFin" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column: span 2;">
                             <button type="button" class="btn-primary" id="btnUploadDoc" style="width: 100%;">
                                 Subir Archivo
                             </button>

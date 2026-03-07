@@ -20,6 +20,16 @@
                 </svg>
                 Ver Bajas
             </a>
+            <a href="{{ url_for('trabajadores.importar') }}" class="btn-secondary"
+                style="text-decoration: none; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                Importar Excel
+            </a>
             <button class="btn-primary" id="btnNuevoTrabajador">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -426,7 +436,11 @@
                             <input type="text" id="credencialIdInput" class="form-control" maxlength="40"
                                 placeholder="Máx 40 chars">
                         </div>
-                        <div class="form-group" style="grid-column: span 2;">
+                        <div class="form-group" style="grid-column: span 1;">
+                            <label>Caducidad (Opcional)</label>
+                            <input type="date" id="credencialCaducidadInput" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column: span 3;">
                             <button type="button" class="btn-secondary" id="btnAddCredential" style="width: 100%;">
                                 + Agregar Credencial
                             </button>
@@ -449,11 +463,19 @@
                         (CURP, Acta Nacimiento, Identificaciones) para este trabajador.</p>
 
                     <div class="form-grid upload-section" style="align-items: end; margin-bottom: 20px;">
-                        <div class="form-group" style="grid-column: span 3;">
+                        <div class="form-group" style="grid-column: span 4;">
                             <label>Seleccionar Archivo (PDF, JPG, PNG)</label>
                             <input type="file" id="fileUploadInput" class="form-control" accept=".pdf,image/*">
                         </div>
                         <div class="form-group" style="grid-column: span 1;">
+                            <label>Fecha de Inicio (Opcional)</label>
+                            <input type="date" id="docFechaInicio" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column: span 1;">
+                            <label>Fecha de Fin (Opcional)</label>
+                            <input type="date" id="docFechaFin" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column: span 2;">
                             <button type="button" class="btn-primary" id="btnUploadDoc" style="width: 100%;">
                                 Subir Archivo
                             </button>
