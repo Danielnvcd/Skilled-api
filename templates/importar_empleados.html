@@ -1,43 +1,356 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="importar-wrapper" style="max-width: 800px; margin: 0 auto; padding: 20px;">
+<style>
+    .import-wrapper {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
 
-    <div class="header-card" style="margin-bottom: 24px;">
-        <div class="header-titulos">
-            <h1 class="main-title">Importar Empleados</h1>
-            <p class="subtitle">Agrega o actualiza múltiples empleados a la vez usando nuestra plantilla de Excel.</p>
-        </div>
+    .import-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .import-header h1 {
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .import-header p {
+        color: #4b5563;
+        margin: 0;
+        font-size: 1rem;
+    }
+
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        color: #374151;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .btn-back:hover {
+        background: #f3f4f6;
+        color: #111827;
+    }
+
+    .steps-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .step-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.75rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        border: 1px solid #e5e7eb;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .step-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    .step-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: var(--primary-color, #2563eb);
+        opacity: 0.8;
+    }
+
+    .step-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: #eff6ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--primary-color, #2563eb);
+        margin-bottom: 1.25rem;
+    }
+
+    .step-title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 0.75rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .step-number {
+        background: var(--primary-color, #2563eb);
+        color: white;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        font-weight: bold;
+    }
+
+    .step-desc {
+        color: #6b7280;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        margin-bottom: 1.5rem;
+        flex-grow: 1;
+    }
+
+    .btn-download {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: #eff6ff;
+        color: var(--primary-color, #2563eb);
+        font-weight: 600;
+        border-radius: 8px;
+        text-decoration: none;
+        border: 1px solid #bfdbfe;
+        transition: all 0.2s;
+    }
+
+    .btn-download:hover {
+        background: #dbeafe;
+    }
+
+    .instructions-wrap {
+        background: #f8fafc;
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        margin-top: auto;
+    }
+
+    .instructions-list {
+        margin: 0;
+        padding-left: 1.25rem;
+        color: #4b5563;
+        font-size: 0.9rem;
+    }
+
+    .instructions-list li {
+        margin-bottom: 0.5rem;
+    }
+
+    .instructions-list li:last-child {
+        margin-bottom: 0;
+    }
+
+    .instructions-list li::marker {
+        color: var(--primary-color, #2563eb);
+    }
+
+    .upload-area {
+        border: 2px dashed #cbd5e1;
+        border-radius: 8px;
+        padding: 1.5rem;
+        text-align: center;
+        background: #f8fafc;
+        transition: all 0.2s;
+        cursor: pointer;
+        margin-top: auto;
+    }
+
+    .upload-area:hover,
+    .upload-area:focus-within {
+        border-color: var(--primary-color, #2563eb);
+        background: #eff6ff;
+    }
+
+    .upload-input-group {
+        position: relative;
+    }
+
+    input[type="file"] {
+        width: 100%;
+        padding: 0.5rem;
+        font-size: 0.85rem;
+        color: #4b5563;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        cursor: pointer;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    input[type="file"]::file-selector-button {
+        background: #f8fafc;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        padding: 0.3rem 0.6rem;
+        margin-right: 0.5rem;
+        color: #374151;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.85rem;
+    }
+
+    input[type="file"]::file-selector-button:hover {
+        background: #f3f4f6;
+    }
+
+    .btn-submit {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: var(--primary-color, #2563eb);
+        color: white;
+        font-weight: 600;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        margin-top: 1rem;
+        transition: all 0.2s;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-submit:hover {
+        background: #1d4ed8;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .alert {
+        padding: 1rem 1.25rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .alert-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .alert-success {
+        background-color: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        color: #065f46;
+    }
+
+    .alert-warning {
+        background-color: #fffbeb;
+        border: 1px solid #fde68a;
+        color: #92400e;
+    }
+
+    .alert-danger {
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+    }
+
+    .alert-icon {
+        flex-shrink: 0;
+    }
+</style>
+
+<div class="import-wrapper">
+    <div class="import-header">
         <div>
-            <a href="{{ url_for('trabajadores.index') }}" class="btn-secondary" style="text-decoration: none;">
-                Volver a Trabajadores
-            </a>
+            <h1>Importar Empleados</h1>
+            <p>Sube y gestiona la información de tus empleados masivamente mediante Excel.</p>
         </div>
+        <a href="{{ url_for('trabajadores.index') }}" class="btn-back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Volver a Trabajadores
+        </a>
     </div>
 
-    <!-- Flash Messages para Resultados -->
+    <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-    <div style="margin-bottom: 20px;">
+    <div style="margin-bottom: 2rem;">
         {% for category, message in messages %}
-        <div class="alert alert-{{ category }}"
-            style="padding: 12px 16px; border-radius: 8px; margin-bottom: 10px; font-size: 0.95rem; 
-                    {% if category == 'success' %}background: #d1fae5; color: #065f46; border: 1px solid #34d399;{% endif %}
-                    {% if category == 'danger' %}background: #fee2e2; color: #991b1b; border: 1px solid #f87171;{% endif %}
-                    {% if category == 'warning' %}background: #fef3c7; color: #92400e; border: 1px solid #fbbf24;{% endif %}">
-            {{ message | safe }}
+        <div class="alert alert-{{ category }}">
+            <div class="alert-header">
+                <div class="alert-icon">
+                    {% if category == 'success' %}
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    {% elif category == 'danger' %}
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    {% else %}
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    {% endif %}
+                </div>
+                <strong style="font-size: 1rem;">
+                    {% if category == 'success' %}Operación exitosa
+                    {% elif category == 'warning' %}Atención solicitada
+                    {% else %}Error en procesar{% endif %}
+                </strong>
+            </div>
+            <div style="font-size: 0.95rem; margin-left: 32px;">{{ message | safe }}</div>
         </div>
         {% endfor %}
     </div>
     {% endif %}
     {% endwith %}
 
-    <div class="table-card" style="padding: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+    <div class="steps-container">
 
-        <!-- Sección 1: Descargar Plantilla -->
-        <div
-            style="background: #f9fafb; padding: 24px; border-radius: 12px; border: 1px dashed #d1d5db; text-align: center;">
-            <div style="margin-bottom: 16px; color: var(--primary-color);">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+        <!-- Step 1 -->
+        <div class="step-card">
+            <div class="step-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
@@ -45,66 +358,111 @@
                     <line x1="9" y1="15" x2="15" y2="15"></line>
                 </svg>
             </div>
-            <h3 style="margin-bottom: 8px; color: #111827; font-size: 1.1rem;">1. Descarga la plantilla</h3>
-            <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;">Utiliza nuestro archivo oficial con las
-                columnas correctas para subir la información.</p>
+            <h3 class="step-title"><span class="step-number">1</span> Descarga la plantilla</h3>
+            <p class="step-desc">
+                Obtén nuestro archivo oficial. Está calibrado con el formato correcto que el sistema necesita,
+                incluyendo menús desplegables para guiarte.
+            </p>
+            <div style="margin-top: auto;">
+                <a href="{{ url_for('static', filename='downloads/plantilla_empleados.xlsx') }}" download
+                    class="btn-download">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Descargar Plantilla Excel
+                </a>
+            </div>
+        </div>
 
-            <a href="{{ url_for('static', filename='downloads/plantilla_empleados.xlsx') }}" download
-                class="btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        <!-- Step 2 -->
+        <div class="step-card">
+            <div class="step-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                 </svg>
-                Descargar Plantilla
-            </a>
-
-            <div
-                style="margin-top: 20px; text-align: left; font-size: 0.8rem; color: #6b7280; background: white; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb;">
-                <strong>Importante:</strong>
-                <ul style="margin: 4px 0 0 20px; padding: 0;">
-                    <li>No alteres los nombres de las columnas.</li>
-                    <li>El "No. Empleado" es obligatorio y debe ser único.</li>
-                    <li>Fechas deben ir en formato YYYY-MM-DD.</li>
+            </div>
+            <h3 class="step-title"><span class="step-number">2</span> Llena cuidadosamente</h3>
+            <p class="step-desc">
+                Abre el archivo exportado y ve llenando la información siguiendo estrictamente estas condiciones:
+            </p>
+            <div class="instructions-wrap">
+                <ul class="instructions-list">
+                    <li><strong>No alteres, elimines o renombres</strong> la primera fila (los encabezados).</li>
+                    <li>El dato <strong>"No. de Empleado"</strong> es obligatorio y no puede duplicarse.</li>
+                    <li>En columnas de salarios/dinero, escribe <strong>únicamente números</strong> (ej. 1500), nada de
+                        texto o prefijos ($).</li>
                 </ul>
             </div>
         </div>
 
-        <!-- Sección 2: Subir Archivo -->
-        <div
-            style="background: #f9fafb; padding: 24px; border-radius: 12px; border: 1px solid #d1d5db; display: flex; flex-direction: column;">
-            <div style="text-align: center; margin-bottom: 16px; color: var(--primary-color);">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+        <!-- Step 3 -->
+        <div class="step-card">
+            <div class="step-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
             </div>
-            <h3 style="text-align: center; margin-bottom: 8px; color: #111827; font-size: 1.1rem;">2. Sube el archivo
-                llenado</h3>
-            <p style="text-align: center; color: #6b7280; font-size: 0.9rem; margin-bottom: 20px;">Sube el Excel con los
-                datos de los trabajadores para registrar.</p>
+            <h3 class="step-title"><span class="step-number">3</span> Sube el archivo final</h3>
+            <p class="step-desc">
+                Sube tu archivo `.xlsx`. Si cometes un error en algunas filas, <strong>los empleados correctos sí se
+                    guardarán</strong> y te avisaremos cuáles omitimos para que los corrijas.
+            </p>
 
             <form action="{{ url_for('trabajadores.procesar_importacion') }}" method="POST"
-                enctype="multipart/form-data"
-                style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end;">
+                enctype="multipart/form-data" style="margin-top: auto;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-                <div class="form-group" style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9rem;">Seleccionar
-                        Archivo (.xlsx)</label>
-                    <input type="file" name="archivo_excel" class="form-control" accept=".xlsx, .xls" required
-                        style="padding: 8px;">
+                <div class="upload-area">
+                    <div style="margin-bottom: 0.5rem; color: #64748b;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="9" y1="3" x2="9" y2="21"></line>
+                        </svg>
+                    </div>
+                    <label
+                        style="display: block; font-weight: 500; color: #334155; margin-bottom: 0.5rem; font-size: 0.95rem;">Cargar
+                        Archivo Excel</label>
+                    <div class="upload-input-group">
+                        <input type="file" id="archivoExcel" name="archivo_excel" accept=".xlsx, .xls" required>
+                    </div>
                 </div>
 
-                <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 12px;">
-                    Procesar y Guardar Empleados
+                <!-- Contenedor para mostrar el archivo seleccionado -->
+                <div id="fileUploadStatus"
+                    style="margin-bottom: 1rem; display: none; align-items: center; gap: 0.5rem; color: #10B981; background: #ecfdf5; border: 1px solid #10B981; padding: 0.75rem; border-radius: 8px; justify-content: center;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    <span id="fileNameDisplay"
+                        style="font-weight: 600; font-size: 0.9rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;"></span>
+                </div>
+
+                <button type="submit" class="btn-submit">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="16 16 12 12 8 16"></polyline>
+                        <line x1="12" y1="12" x2="12" y2="21"></line>
+                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                        <polyline points="16 16 12 12 8 16"></polyline>
+                    </svg>
+                    Procesar y Guardar
                 </button>
             </form>
         </div>
 
     </div>
 </div>
+
+<script defer src="{{ url_for('static', filename='js/importar.js') }}"></script>
 {% endblock %}

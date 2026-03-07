@@ -360,3 +360,27 @@
 .btn-secondary:hover {
     background: #F3F4F6;
 }
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+@media (max-width: 850px) {
+    .header-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.25rem;
+    }
+    
+    .header-actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+    
+    .btn-secondary, .btn-primary {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+}

@@ -97,7 +97,7 @@ def create_app():
 
     csp = {
         'default-src': '\'self\'',
-        'script-src': ['\'self\'', 'https://static.cloudflareinsights.com', 'https://cdnjs.cloudflare.com'],
+        'script-src': ['\'self\'', '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 'https://static.cloudflareinsights.com', 'https://cdnjs.cloudflare.com'],
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com'],

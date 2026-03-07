@@ -6,7 +6,7 @@
 <div class="user-management-wrapper">
     <div class="header-section">
         <div class="header-titles">
-            <h2 class="main-title">Gestión de Usuarios</h2>
+            <h1 class="main-title">Gestión de Usuarios</h1>
             <p class="subtitle">Administra el acceso y roles del sistema con altos estándares de seguridad</p>
         </div>
         <button id="btnAddUser" class="btn-glow">
@@ -38,8 +38,13 @@
                         <div class="user-name btn-view-profile" style="cursor: pointer;" title="Ver perfil de usuario"
                             data-id="{{ user.id }}" data-username="{{ user.username }}" data-role="{{ user.role }}"
                             data-fullname="{{ user.full_name or '' }}" data-area="{{ user.area or '' }}"
-                            data-position="{{ user.position or '' }}" data-contact="{{ user.contact_info or '' }}">
-                            <div class="avatar-initial">{{ user.username[0]|upper }}</div>
+                            data-position="{{ user.position or '' }}" data-contact="{{ user.contact_info or '' }}"
+                            data-profile-pic="{% if user.profile_pic and user.profile_pic != 'default.png' %}{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}{% endif %}">
+                            <div class="user-badge" {% if user.profile_pic and user.profile_pic !='default.png'
+                                %}style="background-image: url('{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}'); background-size: cover; background-position: center; color: transparent;"
+                                {% endif %}>
+                                {{ user.username[0] | upper }}
+                            </div>
                             {{ user.username }}
                         </div>
                     </td>
@@ -76,7 +81,8 @@
             <button class="btn-action btn-profile btn-edit-profile" data-id="{{ user.id }}"
                 data-username="{{ user.username }}" data-fullname="{{ user.full_name or '' }}"
                 data-area="{{ user.area or '' }}" data-position="{{ user.position or '' }}"
-                data-contact="{{ user.contact_info or '' }}">
+                data-contact="{{ user.contact_info or '' }}"
+                data-profile-pic="{% if user.profile_pic and user.profile_pic != 'default.png' %}{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}{% endif %}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -118,7 +124,23 @@
             </div>
             <div class="form-group">
                 <label>Contraseña</label>
-                <input type="password" name="password" placeholder="" required>
+                <input type="password" name="password" id="addPasswordInput" placeholder="" required
+                    autocomplete="new-password">
+
+                <div class="pwd-strength-container" id="addPwdStrength" style="display: none; margin-top: 0.5rem;">
+                    <div class="pwd-bars" style="display: flex; gap: 4px; margin-bottom: 0.25rem;">
+                        <div class="pwd-bar"
+                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                        </div>
+                        <div class="pwd-bar"
+                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                        </div>
+                        <div class="pwd-bar"
+                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                        </div>
+                    </div>
+                    <div class="pwd-text" style="font-size: 0.8rem; color: #6B7280;">Escribe una contraseña</div>
+                </div>
             </div>
             <div class="form-group">
                 <label>Rol de Acceso</label>
@@ -128,7 +150,7 @@
                     <option value="coordinador">Coordinador</option>
                 </select>
             </div>
-            <button type="submit" class="btn-submit">Crear Cuenta</button>
+            <button type="submit" class="btn-submit" id="btnSubmitAddUser">Crear Cuenta</button>
         </form>
     </div>
 </div>
@@ -143,9 +165,25 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label>Nueva Contraseña Segura</label>
-                <input type="password" name="new_password" placeholder="" required autocomplete="new-password">
+                <input type="password" name="new_password" id="changePasswordInput" placeholder="" required
+                    autocomplete="new-password">
+
+                <div class="pwd-strength-container" id="changePwdStrength" style="display: none; margin-top: 0.5rem;">
+                    <div class="pwd-bars" style="display: flex; gap: 4px; margin-bottom: 0.25rem;">
+                        <div class="pwd-bar"
+                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                        </div>
+                        <div class="pwd-bar"
+                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                        </div>
+                        <div class="pwd-bar"
+                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                        </div>
+                    </div>
+                    <div class="pwd-text" style="font-size: 0.8rem; color: #6B7280;">Escribe una contraseña</div>
+                </div>
             </div>
-            <button type="submit" class="btn-submit">Actualizar
+            <button type="submit" class="btn-submit" id="btnSubmitChangePwd">Actualizar
                 Contraseña</button>
         </form>
     </div>
@@ -155,27 +193,69 @@
 <div id="editProfileModal" class="modal">
     <div class="modal-content">
         <span class="close" id="closeEditProfile">&times;</span>
-        <h3>Editar Perfil de Usuario</h3>
-        <div id="editProfileUserDisplay" class="user-display-text"></div>
-        <form id="editProfileForm" method="POST">
+        <h2>Editar Perfil de Usuario</h2>
+        <p id="editProfileUserDisplay"
+            style="text-align: center; color: #546e7a; margin-bottom: 20px; font-weight: 500;"></p>
+
+        <form id="editProfileForm" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
-                <label>Nombre Completo</label>
-                <input type="text" name="full_name" id="editFullName" placeholder="Ej. Juan Pérez" autocomplete="off">
+                <label>Foto de Perfil</label>
+                <div class="profile-upload-horizontal">
+                    <div class="upload-avatar-preview" id="uploadAvatarPreview">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </div>
+                    <div class="upload-actions">
+                        <input type="file" name="profile_pic" id="profile_pic" accept="image/*">
+                        <label for="profile_pic" class="btn-upload-horizontal">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            Seleccionar foto...
+                        </label>
+                        <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
+                            <span id="file-upload-text" class="file-upload-filename">Ningún archivo seleccionado</span>
+                            <span id="preview-remove-btn" class="preview-remove-horizontal"
+                                style="display: none;">Quitar</span>
+                        </div>
+                    </div>
+                </div>
+                <small style="color: #6B7280; font-size: 0.8rem; display: block; margin-top: 6px;">Formatos
+                    recomendados: JPG cuadrado, PNG</small>
             </div>
-            <div class="form-group">
-                <label>Puesto</label>
-                <input type="text" name="position" id="editPosition" placeholder="Ej. Analista Contable"
-                    autocomplete="off">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nombre Completo</label>
+                    <input type="text" name="full_name" id="editFullName" placeholder="Ej. Juan Pérez"
+                        autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label>Puesto</label>
+                    <input type="text" name="position" id="editPosition" placeholder="Ej. Analista Contable"
+                        autocomplete="off">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Área o Departamento</label>
-                <input type="text" name="area" id="editArea" placeholder="Ej. Finanzas" autocomplete="off">
-            </div>
-            <div class="form-group">
-                <label>Información de Contacto</label>
-                <input type="text" name="contact_info" id="editContact" placeholder="Teléfono o Email de oficina"
-                    autocomplete="off">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Área o Departamento</label>
+                    <input type="text" name="area" id="editArea" placeholder="Ej. Finanzas" autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label>Información de Contacto</label>
+                    <input type="text" name="contact_info" id="editContact" placeholder="Teléfono o Email de oficina"
+                        autocomplete="off">
+                </div>
             </div>
             <button type="submit" class="btn-submit">Guardar Cambios</button>
         </form>
