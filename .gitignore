@@ -7,3 +7,4 @@ uploads/
 migrations/
 *.db
 app.db
+.vscode
