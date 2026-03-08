@@ -15,7 +15,7 @@
     max-width: 1400px;
     margin: 0 auto;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    
+
 }
 
 @keyframes fadeIn {
@@ -151,7 +151,7 @@
 
 .modern-table tbody tr:hover {
     background-color: #F8FAFC;
-    
+
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     z-index: 1;
     position: relative;
@@ -186,10 +186,10 @@
 }
 
 .glass-modal-content {
-    background: rgba(255, 255, 255, 0.8) !important;
-     !important;
-    -webkit- !important;
-    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    background: rgba(255, 255, 255, 0.92) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.6) !important;
 }
 
 /* Modal Styles */
@@ -199,8 +199,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(17, 24, 39, 0.6);
-    
+    background: rgba(17, 24, 39, 0.85);
+
     display: flex;
     justify-content: center;
     align-items: center;
@@ -306,7 +306,7 @@
 
 .tab-content {
     display: none;
-    
+
 }
 
 .tab-content.active {

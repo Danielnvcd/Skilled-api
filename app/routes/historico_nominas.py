@@ -3,6 +3,7 @@ from app.utils import login_required
 from app.extensions import db
 from app.models import Prenomina, ReporteSemanal, RegistroDiarioHoras, Proyecto
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 from datetime import datetime
 
 bp = Blueprint('historico', __name__, url_prefix='/historico')
@@ -27,7 +28,7 @@ def index():
     
     semanas = []
     for f in fechas_list:
-        reportes = ReporteSemanal.query.filter_by(fecha_inicio_semana=f, estado='PRENOMINA_CERRADA').all()
+        reportes = ReporteSemanal.query.options(selectinload(ReporteSemanal.proyecto)).filter_by(fecha_inicio_semana=f, estado='PRENOMINA_CERRADA').all()
         semanas.append({
             'fecha_inicio': f,
             'fecha_str': f.strftime('%Y-%m-%d'),
@@ -54,7 +55,7 @@ def detalle(fecha_str):
     reporte_ids = [r.id for r in reportes]
     
     # Get physical workers that have an approved global prenomina that week
-    prenominas_semana = Prenomina.query.filter_by(fecha_inicio=fecha_obj, estado='APROBADO').all()
+    prenominas_semana = Prenomina.query.options(selectinload(Prenomina.trabajador)).filter_by(fecha_inicio=fecha_obj, estado='APROBADO').all()
     prenominas_dict = {p.trabajador_id: p for p in prenominas_semana}
 
     # Structure data by project

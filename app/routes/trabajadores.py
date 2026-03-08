@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
 from app.utils import login_required, log_action, admin_required
@@ -27,7 +28,10 @@ def index():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
     
-    query = Trabajador.query.filter_by(activo=True)
+    query = Trabajador.query.options(
+        selectinload(Trabajador.credenciales),
+        selectinload(Trabajador.documentos)
+    ).filter_by(activo=True)
     
     if q:
         query = query.filter(or_(
@@ -48,7 +52,10 @@ def bajas():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
     
-    query = Trabajador.query.filter_by(activo=False)
+    query = Trabajador.query.options(
+        selectinload(Trabajador.credenciales),
+        selectinload(Trabajador.documentos)
+    ).filter_by(activo=False)
     
     if q:
         query = query.filter(or_(

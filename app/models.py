@@ -58,7 +58,7 @@ class Trabajador(db.Model):
     inicio = db.Column(db.Date)
     termino_prueba = db.Column(db.Date)
     fecha_baja = db.Column(db.Date)
-    activo = db.Column(db.Boolean, default=True)
+    activo = db.Column(db.Boolean, default=True, index=True)
     
     # Datos Personales Generales
     curp = db.Column(db.String(18))
@@ -159,7 +159,7 @@ class Proyecto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero_proyecto = db.Column(db.String(100), unique=True, nullable=False)
     nombre = db.Column(db.String(250), nullable=True)
-    activo = db.Column(db.Boolean, default=True) # Si es False, "ya no se le deberían cargar horas"
+    activo = db.Column(db.Boolean, default=True, index=True) # Si es False, "ya no se le deberían cargar horas"
     
     coordinador_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     coordinador = db.relationship('User', foreign_keys=[coordinador_id])
@@ -347,3 +347,40 @@ class AjusteDescuento(db.Model):
     periodo = db.relationship('AjustePeriodo', backref=db.backref('descuentos', lazy=True, cascade='all, delete-orphan'))
     trabajador = db.relationship('Trabajador')
 
+# --- MÉTODOS DE AUSENCIAS Y VACACIONES ---
+
+class SaldoVacaciones(db.Model):
+    """
+    Guarda el resumen anual/histórico de días de vacaciones de un trabajador.
+    """
+    __tablename__ = "saldo_vacaciones"
+    id = db.Column(db.Integer, primary_key=True)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
+    trabajador = db.relationship('Trabajador', backref=db.backref('saldo_vacaciones', uselist=False, cascade="all, delete-orphan"))
+    
+    dias_totales_asignados = db.Column(db.Integer, default=0, nullable=False)
+    dias_disfrutados = db.Column(db.Integer, default=0, nullable=False)
+    
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+class Ausencia(db.Model):
+    """
+    El registro maestro para cuando un trabajador ausenta un turno programado.
+    Sirve para Vacaciones, Incapacidades, Permisos, etc.
+    """
+    __tablename__ = "ausencias"
+    id = db.Column(db.Integer, primary_key=True)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
+    trabajador = db.relationship('Trabajador', backref=db.backref('ausencias_registros', lazy='dynamic', cascade="all, delete-orphan"))
+    
+    fecha_inicio = db.Column(db.Date, nullable=False, index=True)
+    fecha_fin = db.Column(db.Date, nullable=False, index=True)
+    
+    tipo_ausencia = db.Column(db.String(50), nullable=False)
+    estado = db.Column(db.String(20), default='PROGRAMADA', nullable=False) # PROGRAMADA, EN_CURSO, FINALIZADA, CANCELADA
+    
+    dias_solicitados = db.Column(db.Integer, default=1)
+    motivo = db.Column(db.Text, nullable=True)
+    
+    creado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)

@@ -4,6 +4,7 @@ from app.utils import login_required, to_dec
 from app.extensions import db
 from app.models import Proyecto, Prenomina, ReporteSemanal, RegistroDiarioHoras
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 bp = Blueprint('proyecto_total', __name__, url_prefix='/proyecto-total')
 
@@ -25,7 +26,7 @@ def index():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
 
-    query = Proyecto.query
+    query = Proyecto.query.options(selectinload(Proyecto.participantes))
     if q:
         query = query.filter(Proyecto.nombre.ilike(f'%{q}%') | Proyecto.numero_proyecto.ilike(f'%{q}%'))
         

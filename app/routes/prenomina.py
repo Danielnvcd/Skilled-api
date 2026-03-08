@@ -559,6 +559,18 @@ def calcular_preview_prenomina(fecha_obj, reportes):
     prestamos_por_trabajador = {}
     for pr in todos_prestamos:
         prestamos_por_trabajador.setdefault(pr.trabajador_id, []).append(pr)
+        
+    # Batch-load: ausencias activas o aprobadas para la semana
+    from app.models import Ausencia
+    todas_ausencias = Ausencia.query.filter(
+        Ausencia.trabajador_id.in_(trabajadores_ids),
+        Ausencia.estado.in_(['EN_CURSO', 'PROGRAMADA', 'FINALIZADA']),
+        Ausencia.fecha_inicio <= fecha_fin_semana,
+        Ausencia.fecha_fin >= fecha_obj
+    ).all()
+    ausencias_por_trabajador = {}
+    for aus in todas_ausencias:
+        ausencias_por_trabajador.setdefault(aus.trabajador_id, []).append(aus)
     
     # Agrupar registros por trabajador (sin queries adicionales)
     registros_por_trabajador = {}
@@ -630,11 +642,38 @@ def calcular_preview_prenomina(fecha_obj, reportes):
         
         # Cálculo de Incidencias Consolidadas
         total_descuento_incidencias = Decimal('0')
+        ausencias_tb = ausencias_por_trabajador.get(t_id, [])
+        
+        # Helper list of dates the worker was officially excused
+        dias_excusados_pagados = []
+        dias_excusados_no_pagados = []
+        
+        for aus in ausencias_tb:
+            # Iterar cada día de la ausencia que cae en la semana actual
+            actual_date = max(aus.fecha_inicio, fecha_obj)
+            end_date = min(aus.fecha_fin, fecha_fin_semana)
+            while actual_date <= end_date:
+                if 'VACACION' in aus.tipo_ausencia or 'PERMISO_CON_GOCE' in aus.tipo_ausencia:
+                    dias_excusados_pagados.append(actual_date)
+                else: # Incapacidades o sin goce
+                    dias_excusados_no_pagados.append(actual_date)
+                actual_date += timedelta(days=1)
+                
         if tipo in ['Semanal', 'Cuadrado']:
             horas_ausentes_incidencia = Decimal('0')
             incidencias_descontables = ['Falta', 'Retardo', 'Falta checada de entrada', 'Falta checada de salida', 'Permiso', 'Luto', 'Casamiento']
             
             for reg in registros_trabajador:
+                # Si el día del registro tiene una incapacidad o permiso sin goce, se descuenta completo (10hrs)
+                if reg.fecha in dias_excusados_no_pagados:
+                    horas_ausentes_incidencia += Decimal('10')
+                    continue # Ya se descontó, ignoramos lo que diga "incidencia"
+                    
+                # Si es un día excusado pagado (Vacaciones), perdonamos la falta.
+                if reg.fecha in dias_excusados_pagados:
+                    continue
+                
+                # Si no está ausente de base, revisamos las checadas o faltas manuales
                 if reg.incidencia in incidencias_descontables:
                     if not reg.horas_productivas or reg.horas_productivas == 0:
                         horas_ausentes_incidencia += Decimal('10')

@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from app.extensions import db, limiter, csrf, migrate
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
+from flask_compress import Compress
 
 def create_app():
     load_dotenv()
@@ -59,6 +60,9 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 
     app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'xlsm', 'jpg', 'png', 'mp4', 'mp3', 'wav', 'heic'}
     
+    app.config['COMPRESS_ALGORITHM'] = ['brotli', 'gzip', 'deflate']
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000 # 1 año de caché para estáticos
+    
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
@@ -94,6 +98,7 @@ def create_app():
     limiter.init_app(app)
     csrf.init_app(app)
     migrate.init_app(app, db)
+    Compress(app)
 
     csp = {
         'default-src': '\'self\'',
@@ -107,7 +112,7 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
@@ -123,6 +128,7 @@ def create_app():
     app.register_blueprint(info.bp)
     app.register_blueprint(ajustes.bp)
     app.register_blueprint(reportes.bp)
+    app.register_blueprint(ausencias.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):

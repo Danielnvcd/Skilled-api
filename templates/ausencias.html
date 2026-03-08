@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}Control de Ausencias y Vacaciones{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ausencias.css') }}?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="ausencias-container fade-in">
+    <div class="header-section">
+        <h2 class="page-title">Control de Ausencias y Vacaciones</h2>
+        <button class="btn btn-primary btn-icon" id="btnAbrirSolicitud">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Registrar Ausencia
+        </button>
+    </div>
+
+    <!-- 4 Dashboards solicitados por el usuario -->
+    <div class="dashboard-grid">
+        <!-- 1. Vacaciones pendientes por gozar -->
+        <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-title">Vacaciones Pendientes</h3>
+                <p class="stat-value">General</p>
+                <a href="#saldos-section" class="stat-link">Ver saldos detallados &rarr;</a>
+            </div>
+        </div>
+
+        <!-- 2. Vacaciones en curso al día -->
+        <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-title">Vacaciones en Curso (Hoy)</h3>
+                <p class="stat-value">{{ vacaciones_en_curso|length }} Emp.</p>
+                <span class="stat-desc">Disfrutando actualmente</span>
+            </div>
+        </div>
+
+        <!-- 3. Incapacidades vigentes -->
+        <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-title">Incapacidades Vigentes (Hoy)</h3>
+                <p class="stat-value">{{ incapacidades_vigentes|length }} Emp.</p>
+                <span class="stat-desc">Con baja médica temporal</span>
+            </div>
+        </div>
+
+        <!-- 4. Permisos en curso u otras incidencias -->
+        <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                    </path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-title">Permisos / Incidencias (Hoy)</h3>
+                <p class="stat-value">{{ permisos_vigentes|length }} Emp.</p>
+                <span class="stat-desc">Otras ausencias activas</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area: Tabs -->
+    <div class="tabs-container">
+        <ul class="tabs-nav">
+            <li class="tab-item active" data-tab="vigentes">Ausencias Vigentes y Próximas</li>
+            <li class="tab-item" data-tab="saldos" id="saldos-section">Saldos de Vacaciones</li>
+            <li class="tab-item" data-tab="historial">Historial</li>
+        </ul>
+
+        <div class="tabs-content">
+            <!-- TAB: VIGENTES -->
+            <div class="tab-pane active" id="tab-vigentes">
+                <div class="seccion-tabla">
+                    <h3>Personal con Asuencia Vigente</h3>
+                    <div class="table-responsive">
+                        <table class="table modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Empleado</th>
+                                    <th>Tipo</th>
+                                    <th>Periodo</th>
+                                    <th>Días Solicitados</th>
+                                    <th>Estado</th>
+                                    <th>Motivo</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% set combinadas = vacaciones_en_curso + incapacidades_vigentes + permisos_vigentes %}
+                                {% for aus in combinadas %}
+                                <tr>
+                                    <td>
+                                        <div class="trabajador-cell">
+                                            <div class="avatar-sm">
+                                                {{ aus.trabajador.nombre[:2].upper() }}
+                                            </div>
+                                            <div class="trabajador-info">
+                                                <span class="nombre">{{ aus.trabajador.nombre }} {{
+                                                    aus.trabajador.apellido_p }}</span>
+                                                <span class="puesto">{{ aus.trabajador.puesto }}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span
+                                            class="badge badge-outline-{{ 'primary' if 'VACACION' in aus.tipo_ausencia else ('danger' if 'INCAPACIDAD' in aus.tipo_ausencia else 'warning') }}">{{
+                                            aus.tipo_ausencia|replace('_', ' ') }}</span></td>
+                                    <td>
+                                        <div class="fechas-rango">
+                                            <span class="f-inicio">{{ aus.fecha_inicio|fecha_es('dia_corto') }}</span>
+                                            <span class="f-separador">&rarr;</span>
+                                            <span class="f-fin">{{ aus.fecha_fin|fecha_es('dia_corto') }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center font-bold">{{ aus.dias_solicitados }}</td>
+                                    <td><span class="badge badge-success">EN CURSO</span></td>
+                                    <td><span class="motivo-texto" title="{{ aus.motivo }}">{{ aus.motivo or 'N/A'
+                                            }}</span></td>
+                                    <td>
+                                        <form action="{{ url_for('ausencias.cancelar_ausencia', id=aus.id) }}"
+                                            method="POST" class="form-cancelar-ausencia">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit"
+                                                class="btn btn-sm btn-outline-danger">Cancelar</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        No hay personal ausente el día de hoy.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="seccion-tabla mt-5">
+                    <h3>Ausencias Próximas Programadas</h3>
+                    <div class="table-responsive">
+                        <table class="table modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Empleado</th>
+                                    <th>Tipo</th>
+                                    <th>Periodo</th>
+                                    <th>Días Solicitados</th>
+                                    <th>Inicia en</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for aus in proximas_ausencias %}
+                                <tr>
+                                    <td>
+                                        <div class="trabajador-cell">
+                                            <div class="avatar-sm">{{ aus.trabajador.nombre[:2].upper() }}</div>
+                                            <div class="trabajador-info">
+                                                <span class="nombre">{{ aus.trabajador.nombre }}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span
+                                            class="badge badge-outline-{{ 'primary' if 'VACACION' in aus.tipo_ausencia else ('danger' if 'INCAPACIDAD' in aus.tipo_ausencia else 'warning') }}">{{
+                                            aus.tipo_ausencia|replace('_', ' ') }}</span></td>
+                                    <td>{{ aus.fecha_inicio|fecha_es('dia_corto') }} &rarr; {{
+                                        aus.fecha_fin|fecha_es('dia_corto') }}</td>
+                                    <td class="text-center font-bold">{{ aus.dias_solicitados }}</td>
+                                    <td>
+                                        {% set delta = (aus.fecha_inicio - hoy).days %}
+                                        <span class="text-muted"><i class="far fa-clock"></i> {{ delta }} día(s)</span>
+                                    </td>
+                                    <td>
+                                        <form action="{{ url_for('ausencias.cancelar_ausencia', id=aus.id) }}"
+                                            method="POST" class="form-cancelar-ausencia">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit"
+                                                class="btn btn-sm btn-outline-danger">Cancelar</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        No hay ausencias programadas a futuro.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: SALDOS -->
+            <div class="tab-pane" id="tab-saldos">
+                <div class="seccion-tabla">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3>Saldos de Vacaciones por Empleado</h3>
+                        <input type="text" id="buscarSaldo" class="form-control" placeholder="Buscar empleado..."
+                            style="max-width: 280px;">
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table modern-table" id="tablaSaldos">
+                            <thead>
+                                <tr>
+                                    <th>Empleado</th>
+                                    <th>Puesto</th>
+                                    <th class="text-center">Asignados</th>
+                                    <th class="text-center">Disfrutados</th>
+                                    <th class="text-center">Pendientes</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for saldo in saldos %}
+                                <tr>
+                                    <td>
+                                        <div class="trabajador-cell">
+                                            <div class="avatar-md bg-gradient-blue">{{
+                                                saldo.trabajador.nombre[:2].upper() }}</div>
+                                            <div class="trabajador-info">
+                                                <span class="nombre">{{ saldo.trabajador.nombre }} {{
+                                                    saldo.trabajador.apellido_p }} {{ saldo.trabajador.apellido_m
+                                                    }}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ saldo.trabajador.puesto }}</td>
+                                    <td class="text-center font-bold text-gray-700">{{ saldo.dias_totales_asignados }}
+                                    </td>
+                                    <td class="text-center font-bold text-gray-700">{{ saldo.dias_disfrutados }}</td>
+                                    <td
+                                        class="text-center font-bold text-{{ 'success' if saldo.dias_totales_asignados - saldo.dias_disfrutados > 0 else 'danger' }}">
+                                        {{ saldo.dias_totales_asignados - saldo.dias_disfrutados }}
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-primary btn-ajustar-saldo"
+                                            data-id="{{ saldo.trabajador.id }}"
+                                            data-nombre="{{ saldo.trabajador.nombre }}"
+                                            data-asignados="{{ saldo.dias_totales_asignados }}"
+                                            data-disfrutados="{{ saldo.dias_disfrutados }}">
+                                            Ajustar Saldo
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="paginacion-saldos" id="paginacionSaldos"
+                        style="display:flex;justify-content:center;align-items:center;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: HISTORIAL -->
+            <div class="tab-pane" id="tab-historial">
+                <div class="seccion-tabla">
+                    <h3>Registros Anteriores</h3>
+                    <div class="table-responsive">
+                        <table class="table modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Empleado</th>
+                                    <th>Tipo</th>
+                                    <th>Periodo</th>
+                                    <th>Estado</th>
+                                    <th>Motivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for aus in historial_ausencias %}
+                                <tr>
+                                    <td>{{ aus.trabajador.nombre }}</td>
+                                    <td>{{ aus.tipo_ausencia }}</td>
+                                    <td>{{ aus.fecha_inicio|fecha_es('dia_corto') }} al {{
+                                        aus.fecha_fin|fecha_es('dia_corto') }}</td>
+                                    <td>
+                                        {% if aus.estado == 'FINALIZADA' %}
+                                        <span class="badge badge-success">FINALIZADA</span>
+                                        {% elif aus.estado == 'CANCELADA' %}
+                                        <span class="badge badge-danger">CANCELADA</span>
+                                        {% else %}
+                                        <span class="badge badge-secondary">{{ aus.estado }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ aus.motivo }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No hay historial reciente.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Solicitar / Registrar Ausencia -->
+<div id="modalSolicitud" class="modal-overlay">
+    <div class="modal-box w-lg">
+        <div class="modal-header">
+            <h3>Registrar Ausencia o Vacación</h3>
+            <button class="modal-close" id="btnCerrarSolicitud">&times;</button>
+        </div>
+        <form action="{{ url_for('ausencias.solicitar_ausencia') }}" method="POST" id="formAusencia">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+
+                <div class="form-group">
+                    <label>Trabajador</label>
+                    <select name="trabajador_id" id="selectTrabajador" class="form-control" required>
+                        <option value="">-- Seleccionar Trabajador --</option>
+                        {% for t in trabajadores %}
+                        <option value="{{ t.id }}">{{ t.nombre }} {{ t.apellido_p }} {{ t.apellido_m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Tipo de Ausencia</label>
+                    <select name="tipo_ausencia" id="selectTipoAusencia" class="form-control" required>
+                        <option value="VACACIONES">Vacaciones</option>
+                        <option value="INCAPACIDAD_IMSS">Incapacidad (IMSS - EC)</option>
+                        <option value="INCAPACIDAD_MATERNIDAD">Incapacidad (Maternidad)</option>
+                        <option value="PERMISO_CON_GOCE">Permiso Con Goce de Sueldo</option>
+                        <option value="PERMISO_SIN_GOCE">Permiso Sin Goce de Sueldo</option>
+                        <option value="FALTA_INJUSTIFICADA">Falta Injustificada (Programada)</option>
+                    </select>
+                </div>
+
+                <!-- Info de saldo solo visible al seleccionar Vacaciones -->
+                <div id="saldoInfoModal" class="alert alert-info" style="display: none;">
+                    <strong>Días pendientes de vacaciones:</strong> <span id="spanDiasPendientes">--</span>
+                </div>
+
+                <div class="grid-2-col">
+                    <div class="form-group">
+                        <label>Fecha de Inicio</label>
+                        <input type="date" name="fecha_inicio" id="fechaInicio" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Fin (Inclusive)</label>
+                        <input type="date" name="fecha_fin" id="fechaFin" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Días Equivalentes Solicitados</label>
+                    <input type="number" name="dias_solicitados" id="diasSolicitados" class="form-control" value="1"
+                        min="1" required>
+                    <small class="text-muted">Descontará sábados/domingos según lo determines.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Motivo u Observaciones</label>
+                    <textarea name="motivo" class="form-control" rows="2"
+                        placeholder="Ej. Vacaciones anuales, incapacidad num 1234..."></textarea>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" id="btnCancelarSolicitud">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Registrar Ausencia</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Ajuste Manual de Saldo -->
+<div id="modalAjuste" class="modal-overlay">
+    <div class="modal-box w-sm">
+        <div class="modal-header">
+            <h3>Ajustar Saldo Manual</h3>
+            <button class="modal-close" id="btnCerrarAjuste">&times;</button>
+        </div>
+        <form action="" method="POST" id="formAjusteSaldo">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+                <p>Ajustando saldo para: <strong id="ajusteNombre"></strong></p>
+                <hr>
+                <div class="form-group mt-3">
+                    <label>Días Totales Asignados (Históricos/Derecho)</label>
+                    <input type="number" name="dias_asignados" id="ajusteAsignados" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Días Disfrutados (Ya tomados)</label>
+                    <input type="number" name="dias_disfrutados" id="ajusteDisfrutados" class="form-control" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" id="btnCancelarAjuste">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Ajuste</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/ausencias.js') }}?v=1"></script>
+{% endblock %}

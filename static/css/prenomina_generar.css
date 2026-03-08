@@ -81,11 +81,11 @@
 }
 
 .text-success {
-    color: #059669;
+    color: #1f4e78;
 }
 
 .text-danger {
-    color: #DC2626;
+    color: #a80303;
 }
 
 .seccion-titulo {
@@ -100,11 +100,11 @@
 }
 
 .seccion-titulo.percepciones {
-    color: #059669;
+    color: #1f4e78;
 }
 
 .seccion-titulo.deducciones {
-    color: #DC2626;
+    color: #8B0000;
 }
 
 .recibo-footer {
