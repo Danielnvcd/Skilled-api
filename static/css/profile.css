@@ -17,7 +17,7 @@
     margin: 0 auto;
     padding: 2.5rem 0;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    animation: fadeIn 0.5s ease-out;
+    
 }
 
 @keyframes fadeIn {
@@ -64,7 +64,7 @@
     padding: 2rem;
     margin-bottom: 2rem;
     border: 1px solid rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(10px);
+    
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 

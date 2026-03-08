@@ -21,7 +21,7 @@
         <!-- Buscador de Fechas -->
         <div
             style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 1rem;">
-            <div
+            <form action="{{ url_for('historico.index') }}" method="GET"
                 style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border); flex: 1; max-width: max-content;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -33,19 +33,24 @@
                 <label
                     style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500; white-space: nowrap;">Filtrar
                     por fecha:</label>
-                <input type="date" id="searchFechaHistorico"
+                <input type="date" name="search_date" value="{{ search_date }}" onchange="this.form.submit()"
                     style="flex: 0 0 auto; border: 1px solid var(--border); outline: none; background: transparent; font-size: 0.95rem; color: var(--text-main); padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer;">
-                <button type="button" id="clearSearchHistorico" title="Limpiar filtro"
-                    style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0; display: none;">&times;</button>
-            </div>
+                {% if search_date %}
+                <a href="{{ url_for('historico.index') }}" title="Limpiar filtro"
+                    style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0 0.5rem; text-decoration: none;">&times;</a>
+                {% endif %}
+            </form>
             {# Global export removed #}
         </div>
+
+        {% if search_date and not semanas %}
         <div id="noResultsHistorico"
-            style="display: none; text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
+            style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
             <i class="fa-solid fa-calendar-xmark"
                 style="font-size: 1.5rem; margin-bottom: 0.5rem; display:block; opacity:0.5;"></i>
             No se encontraron nóminas para la fecha seleccionada.
         </div>
+        {% endif %}
 
         {% for s in semanas %}
         <div class="hist-card" data-fecha-inicio="{{ s.fecha_inicio.strftime('%Y-%m-%d') }}">
@@ -112,8 +117,65 @@
             <p style="margin:0;">Aún no has generado ni guardado ninguna nómina global.</p>
         </div>
         {% endfor %}
+
+        <!-- Paginación -->
+        {% if pagination.pages > 1 %}
+        <style>
+            .pg-btn {
+                padding: 0.5rem 0.75rem;
+                border-radius: 4px;
+                text-decoration: none;
+            }
+
+            .pg-disabled {
+                pointer-events: none;
+                opacity: 0.5;
+            }
+
+            .pg-active {
+                background-color: var(--primary);
+                color: white;
+                border-color: var(--primary);
+                font-weight: bold;
+                pointer-events: none;
+                border: 1px solid var(--primary);
+            }
+        </style>
+        <div
+            style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
+            <div style="display: flex; gap: 0.25rem;">
+                <a href="{{ url_for('historico.index', page=1, search_date=search_date) }}"
+                    class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
+                    &laquo; Primera
+                </a>
+                <a href="{{ url_for('historico.index', page=pagination.prev_num, search_date=search_date) }}"
+                    class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled disabled{% endif %}">
+                    &lsaquo; Anterior
+                </a>
+
+                {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                <a href="{{ url_for('historico.index', page=page_num, search_date=search_date) }}"
+                    class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active active{% endif %}">
+                    {{ page_num }}
+                </a>
+                {% else %}
+                <span class="btn-secondary pg-btn pg-disabled disabled">...</span>
+                {% endif %}
+                {% endfor %}
+
+                <a href="{{ url_for('historico.index', page=pagination.next_num, search_date=search_date) }}"
+                    class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled disabled{% endif %}">
+                    Siguiente &rsaquo;
+                </a>
+                <a href="{{ url_for('historico.index', page=pagination.pages, search_date=search_date) }}"
+                    class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled disabled{% endif %}">
+                    Última &raquo;
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
     </div>
 </div>
-
-<script src="{{ url_for('static', filename='js/search_historico.js') }}"></script>
 {% endblock %}

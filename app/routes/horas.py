@@ -20,15 +20,29 @@ def index():
     user_id = session.get('user_id')
     user_role = session.get('role', 'user')
 
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '').strip()
+
     if user_role == 'coordinador':
         proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=user_id).all()
         proyecto_ids = [p.id for p in proyectos] if proyectos else []
-        reportes = ReporteSemanal.query.filter(ReporteSemanal.proyecto_id.in_(proyecto_ids)).order_by(ReporteSemanal.created_at.desc()).all() if proyecto_ids else []
+        query = ReporteSemanal.query.filter(ReporteSemanal.proyecto_id.in_(proyecto_ids))
     else:
-        reportes = ReporteSemanal.query.order_by(ReporteSemanal.created_at.desc()).all()
+        query = ReporteSemanal.query
         proyectos = Proyecto.query.filter_by(activo=True).all()
 
-    return render_template('horas.html', reportes=reportes, proyectos=proyectos)
+    if q:
+        query = query.join(Proyecto).filter(
+            db.or_(
+                Proyecto.nombre.ilike(f'%{q}%'),
+                Proyecto.numero_proyecto.ilike(f'%{q}%')
+            )
+        )
+
+    pagination = query.order_by(ReporteSemanal.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+    reportes = pagination.items
+
+    return render_template('horas.html', reportes=reportes, proyectos=proyectos, pagination=pagination, q=q)
 
 @bp.route('/crear_reporte', methods=['POST'])
 @login_required

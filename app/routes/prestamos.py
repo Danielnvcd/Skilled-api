@@ -11,9 +11,25 @@ bp = Blueprint('prestamos', __name__, url_prefix='/prestamos')
 @bp.route('/')
 @login_required
 def index():
-    prestamos = Prestamo.query.order_by(Prestamo.creado_en.desc()).all()
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '').strip()
+
+    query = Prestamo.query
+    if q:
+        query = query.join(Trabajador, Prestamo.trabajador_id == Trabajador.id).filter(
+            db.or_(
+                Trabajador.nombre.ilike(f'%{q}%'),
+                Trabajador.nombre_apellidos.ilike(f'%{q}%'),
+                Trabajador.no_empleado.ilike(f'%{q}%'),
+                db.cast(Prestamo.id, db.String).ilike(f'%{q}%')
+            )
+        )
+
+    pagination = query.order_by(Prestamo.creado_en.desc()).paginate(page=page, per_page=20, error_out=False)
+    prestamos = pagination.items
+
     trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
-    return render_template('prestamos.html', prestamos=prestamos, trabajadores=trabajadores)
+    return render_template('prestamos.html', prestamos=prestamos, trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/crear', methods=['POST'])
 @login_required

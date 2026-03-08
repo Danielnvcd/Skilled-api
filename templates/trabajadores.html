@@ -44,15 +44,23 @@
     <div class="table-card">
         <div class="table-header-ops">
             <div class="search-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input type="text" id="searchInput" placeholder="Buscar por nombre, empleado o rfc...">
+                <form action="{{ url_for('trabajadores.index') }}" method="GET"
+                    style="display: flex; align-items: center; width: 100%;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" name="q" id="searchInput" placeholder="Buscar por nombre, empleado o rfc..."
+                        value="{{ q }}">
+                    {% if q %}
+                    <a href="{{ url_for('trabajadores.index') }}" title="Limpiar búsqueda"
+                        style="margin-left: 8px; color: #6B7280;"><i class="fas fa-times"></i></a>
+                    {% endif %}
+                </form>
             </div>
             <div class="filters">
-                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ trabajadores|length }}</span>
+                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ pagination.total }}</span>
             </div>
         </div>
         <table class="modern-table" id="Table">
@@ -69,7 +77,8 @@
             </thead>
             <tbody>
                 {% for t in trabajadores %}
-                <tr class="worker-row" data-id="{{ t.id }}">
+                <tr class="worker-row {% if not t.salario_real_pactado_x_sem or t.salario_real_pactado_x_sem == 0 %}no-salary-row{% endif %}"
+                    data-id="{{ t.id }}">
                     <td style="font-weight: 600; color: var(--primary);">{{ t.no_empleado }}</td>
                     <td>
                         <div style="font-weight: 600; color: #111827;">{{ t.nombre }}</div>
@@ -80,7 +89,8 @@
                         <div style="font-size: 0.8rem; margin-top: 4px;">{{ t.puesto or '-' }}</div>
                     </td>
                     <td>{{ t.tipo_nomina or 'Semanal' }}</td>
-                    <td style="font-family: monospace;">${{ t.salario_real_pactado_x_sem }}</td>
+                    <td style="font-family: monospace;">
+                        ${{ t.salario_real_pactado_x_sem }}</td>
                     <td>{{ t.fecha_ingreso.strftime('%d/%m/%Y') if t.fecha_ingreso else '-' }}</td>
                     <td>
                         <div style="display: flex; gap: 8px;">
@@ -124,6 +134,63 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <!-- Paginación -->
+        {% if pagination.pages > 1 %}
+        <style>
+            .pg-btn {
+                padding: 0.5rem 0.75rem;
+                border-radius: 4px;
+                text-decoration: none;
+            }
+
+            .pg-disabled {
+                pointer-events: none;
+                opacity: 0.5;
+            }
+
+            .pg-active {
+                background-color: var(--primary);
+                color: white;
+                border-color: var(--primary);
+                font-weight: bold;
+                pointer-events: none;
+                border: 1px solid var(--primary);
+            }
+        </style>
+        <div style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border);">
+            <div style="display: flex; gap: 0.25rem;">
+                <a href="{{ url_for('trabajadores.index', page=1, q=q) }}"
+                    class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
+                    &laquo; Primera
+                </a>
+                <a href="{{ url_for('trabajadores.index', page=pagination.prev_num, q=q) }}"
+                    class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled disabled{% endif %}">
+                    &lsaquo; Anterior
+                </a>
+
+                {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                <a href="{{ url_for('trabajadores.index', page=page_num, q=q) }}"
+                    class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active active{% endif %}">
+                    {{ page_num }}
+                </a>
+                {% else %}
+                <span class="btn-secondary pg-btn pg-disabled disabled">...</span>
+                {% endif %}
+                {% endfor %}
+
+                <a href="{{ url_for('trabajadores.index', page=pagination.next_num, q=q) }}"
+                    class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled disabled{% endif %}">
+                    Siguiente &rsaquo;
+                </a>
+                <a href="{{ url_for('trabajadores.index', page=pagination.pages, q=q) }}"
+                    class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled disabled{% endif %}">
+                    Última &raquo;
+                </a>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -501,15 +568,15 @@
      VIEW WORKER MODAL (PRESENTATION) 
      ========================= -->
 <div id="viewWorkerModal" class="modal-overlay">
-    <div class="modal"
-        style="max-width: 700px; padding: 0; background: var(--bg-card, #ffffff); border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+    <div class="modal glass-modal-content"
+        style="max-width: 700px; padding: 0; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
         <div class="modal-header"
-            style="background: linear-gradient(135deg, var(--primary-color), var(--primary-hover)); color: white; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+            style="background: transparent; color: #111827; padding: 20px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600;"><i class="fas fa-id-card"
-                        style="margin-right: 8px;"></i> Ficha del Trabajador</h3>
+                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; color: #111827;"><i class="fas fa-id-card"
+                        style="margin-right: 8px; color: var(--primary-color);"></i> Ficha del Trabajador</h3>
                 <button id="btnCloseViewModal"
-                    style="background: none; border: none; color: white; cursor: pointer; font-size: 1.2rem;"><i
+                    style="background: none; border: none; color: #6B7280; cursor: pointer; font-size: 1.2rem;"><i
                         class="fas fa-times"></i></button>
             </div>
         </div>
@@ -610,7 +677,7 @@
 
         </div>
         <div class="modal-footer"
-            style="padding: 16px 24px; border-top: 1px solid var(--border-color, #e5e7eb); background: var(--bg-body, #f9fafb); border-radius: 0 0 12px 12px; display: flex; justify-content: flex-end;">
+            style="padding: 16px 24px; border-top: 1px solid rgba(229, 231, 235, 0.2); background: transparent; border-radius: 0 0 12px 12px; display: flex; justify-content: flex-end;">
             <button type="button" class="btn-primary" id="btnCloseViewModalBottom">Cerrar Presentación</button>
         </div>
     </div>

@@ -7,161 +7,15 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=1">
     <style>
-        * {
-            box-sizing: border-box;
-            overflow-wrap: break-word;
-            word-wrap: break-word;
-        }
-
         body {
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 40%, rgba(255, 255, 255, 0.4) 100%),
             url("{{ url_for('static', filename='imagenes/fondo.png') }}");
             background-size: cover;
             background-position: top center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            color: #222;
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        .sidebar {
-            width: 280px;
-            background: rgba(255, 255, 255, 0.85);
-            /* Glass effect matching cards */
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-right: 1px solid rgba(255, 255, 255, 0.5);
-            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
-            /* Softer shadow */
-            display: flex;
-            flex-direction: column;
-            padding: 25px;
-            flex-shrink: 0;
-            z-index: 10;
-        }
-
-        .logo {
-            font-size: 22px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 40px;
-            text-align: center;
-            color: #37474f;
-        }
-
-        .logo span {
-            color: #546e7a;
-        }
-
-        .menu a {
-            display: flex;
-            align-items: center;
-            padding: 12px 18px;
-            margin-bottom: 8px;
-            color: #6b7280;
-            /* Modern gray */
-            text-decoration: none;
-            border-radius: 8px;
-            /* Softer, rounder edges */
-            transition: all 0.2s ease;
-            font-weight: 500;
-            font-size: 0.95rem;
-            border-left: 4px solid transparent;
-            /* Prepare for active state */
-        }
-
-        .menu-icon {
-            width: 20px;
-            height: 20px;
-            margin-right: 12px;
-            object-fit: contain;
-        }
-
-        .menu a:hover,
-        .menu a.active {
-            background: #eff6ff;
-            /* Soft blue background */
-            color: #1f2937;
-            /* Darker text */
-            border-left: 4px solid #3b82f6;
-            /* Modern bright blue indicator */
-            transform: translateX(4px);
-            font-weight: 600;
-        }
-
-        .menu {
-            flex: 1;
-            overflow-y: auto;
-            min-height: 0;
-            margin-bottom: 10px;
-            padding-right: 5px;
-        }
-
-        .user-info {
-            margin-top: auto;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 0.9em;
-            color: #6b7280;
-        }
-
-        .btn-logout {
-            background: none;
-            border: none;
-            padding: 5px 0 0 0;
-            cursor: pointer;
-            color: #78909c;
-            text-decoration: underline;
-            font-weight: 500;
-            font-size: 0.9em;
-            font-family: inherit;
-            display: block;
-            width: 100%;
-            text-align: left;
-            margin-top: 5px;
-            text-transform: none;
-        }
-
-        .btn-logout:hover {
-            color: #37474f;
-            text-decoration: underline;
-            background: none !important;
-        }
-
-        .main-content {
-            flex: 1;
-            padding: 40px;
-            overflow-y: auto;
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .alert {
-            background-color: #eceff1;
-            color: #37474f;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            border-left: 5px solid #546e7a;
-        }
-
-        .card {
-            background-color: rgba(255, 255, 255, 0.85);
-            /* Slightly less transparent for better contrast */
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            border-radius: 12px;
-            /* Match everything else */
-            padding: 20px;
-            transition: 0.3s;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
-            /* Consistent shadow */
         }
     </style>
     {% block head %}{% endblock %}
@@ -171,7 +25,7 @@
     <div class="sidebar">
         <div class="logo">
             <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled"
-                style="max-width: 180px; height: auto; mix-blend-mode: multiply; filter: contrast(1.1); margin-bottom: 10px;">
+                style="width: 180px; height: 60px; object-fit: contain; mix-blend-mode: multiply; filter: contrast(1.1); margin-bottom: 10px;">
         </div>
         <nav class="menu">
             {% if session.get('role') != 'coordinador' %}

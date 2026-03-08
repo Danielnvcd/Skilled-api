@@ -131,22 +131,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // === SEARCH / FILTER LOGIC ===
-    if (searchInput) {
-        searchInput.addEventListener('keyup', function () {
-            var filter = this.value.toUpperCase();
-            var table = document.getElementById("workersTable");
-            var rows = table.querySelectorAll('tbody tr.worker-row');
-
-            rows.forEach(function (row) {
-                var txtValue = row.textContent || row.innerText;
-                if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                    row.style.display = "";
-                } else {
-                    row.style.display = "none";
-                }
-            });
-        });
-    }
+    // Search is now handled server-side via form submission in credenciales.html
 
     // === MODAL LOGIC ===
     function closeModal() {

@@ -40,7 +40,7 @@ body {
     border-radius: 0;
     box-shadow: none;
     overflow: hidden;
-    animation: fadeIn 0.8s ease-out;
+    
 }
 
 @keyframes fadeIn {

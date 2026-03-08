@@ -67,22 +67,45 @@ def home():
 @bp.route('/credenciales')
 @login_required
 def credenciales():
-    from flask import session
+    from flask import session, request
+    from sqlalchemy import or_
+    import math
+    
     user_id = session.get('user_id')
     user_role = session.get('role', 'user')
+    
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '', type=str)
 
+    query = Trabajador.query
+
+    # Apply role-based filtering
     if user_role == 'coordinador':
+        # Find all workers involved in projects managed by this coordinator
         proyectos = Proyecto.query.filter_by(coordinador_id=user_id).all()
-        trabajadores_set = set()
+        trabajador_ids = []
         for p in proyectos:
             for t in p.participantes:
-                if t.activo:
-                    trabajadores_set.add(t)
-        trabajadores = sorted(list(trabajadores_set), key=lambda x: x.nombre)
-    else:
-        trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.id).all()
+                trabajador_ids.append(t.id)
+                
+        query = query.filter(Trabajador.id.in_(trabajador_ids))
+    
+    # Base filter: only active workers
+    query = query.filter_by(activo=True)
 
-    return render_template('credenciales.html', trabajadores=trabajadores)
+    # Apply search filter
+    if q:
+        query = query.filter(or_(
+            Trabajador.nombre.ilike(f'%{q}%'),
+            Trabajador.nombre_apellidos.ilike(f'%{q}%'),
+            Trabajador.no_empleado.ilike(f'%{q}%'),
+            Trabajador.rfc.ilike(f'%{q}%')
+        ))
+
+    # Paginate results
+    pagination = query.order_by(Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+
+    return render_template('credenciales.html', pagination=pagination, q=q)
 
 
 

@@ -140,16 +140,23 @@
 
     <div class="table-card">
         <div class="table-header-ops">
-            <div class="search-box">
+            <form action="{{ url_for('main.credenciales') }}" method="GET" class="search-box">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" id="searchInput" placeholder="Buscar por nombre, empleado o planta...">
-            </div>
-            <div class="filters">
-                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ trabajadores|length }}</span>
+                <input type="text" name="q" id="searchInput" placeholder="Buscar por nombre, empleado o rfc..."
+                    value="{{ q }}">
+                <button type="submit" style="display: none;">Buscar</button>
+            </form>
+            <div class="filters" style="display: flex; gap: 10px; align-items: center;">
+                {% if q %}
+                <a href="{{ url_for('main.credenciales') }}" class="btn-secondary"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Limpiar Búsqueda</a>
+                {% endif %}
+                <span style="font-size: 0.85rem; color: #6B7280; font-weight: 500;">Total Registros: {{ pagination.total
+                    }}</span>
             </div>
         </div>
 
@@ -164,7 +171,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for t in trabajadores %}
+                {% for t in pagination.items %}
                 {% set creds = {} %}
                 {% for c in t.credenciales %}
                 {% set _ = creds.update({c.planta: {'id': c.credencial_id, 'caducidad': c.fecha_caducidad.isoformat() if
@@ -230,6 +237,63 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <!-- Pagination Controls -->
+        {% if pagination.pages > 1 %}
+        <style>
+            .pg-btn {
+                padding: 0.5rem 0.75rem;
+                border-radius: 4px;
+                text-decoration: none;
+            }
+
+            .pg-disabled {
+                pointer-events: none;
+                opacity: 0.5;
+            }
+
+            .pg-active {
+                background-color: var(--primary);
+                color: white;
+                border-color: var(--primary);
+                font-weight: bold;
+                pointer-events: none;
+                border: 1px solid var(--primary);
+            }
+        </style>
+        <div style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border);">
+            <div style="display: flex; gap: 0.25rem;">
+                <a href="{{ url_for('main.credenciales', page=1, q=q) }}"
+                    class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
+                    &laquo; Primera
+                </a>
+                <a href="{{ url_for('main.credenciales', page=pagination.prev_num, q=q) }}"
+                    class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled disabled{% endif %}">
+                    &lsaquo; Anterior
+                </a>
+
+                {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if page_num %}
+                <a href="{{ url_for('main.credenciales', page=page_num, q=q) }}"
+                    class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active active{% endif %}">
+                    {{ page_num }}
+                </a>
+                {% else %}
+                <span style="padding: 0.5rem 0.75rem; color: #6B7280;">...</span>
+                {% endif %}
+                {% endfor %}
+
+                <a href="{{ url_for('main.credenciales', page=pagination.next_num, q=q) }}"
+                    class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled disabled{% endif %}">
+                    Siguiente &rsaquo;
+                </a>
+                <a href="{{ url_for('main.credenciales', page=pagination.pages, q=q) }}"
+                    class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled disabled{% endif %}">
+                    Última &raquo;
+                </a>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

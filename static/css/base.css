@@ -1,0 +1,149 @@
+* {
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #222;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 280px;
+    background: rgba(255, 255, 255, 0.85);
+    border-right: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    padding: 25px;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.logo {
+    font-size: 22px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 40px;
+    text-align: center;
+    color: #37474f;
+}
+
+.logo span {
+    color: #546e7a;
+}
+
+.menu {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    margin-bottom: 10px;
+    padding-right: 5px;
+}
+
+.menu a {
+    display: flex;
+    align-items: center;
+    padding: 12px 18px;
+    margin-bottom: 8px;
+    color: #6b7280;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    font-size: 0.95rem;
+    border-left: 4px solid transparent;
+}
+
+.menu-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    object-fit: contain;
+}
+
+.menu a:hover,
+.menu a.active {
+    background: #eff6ff;
+    color: #1f2937;
+    border-left: 4px solid #3b82f6;
+    transform: translateX(4px);
+}
+
+.user-info {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 0.9em;
+    color: #6b7280;
+}
+
+.btn-logout {
+    background: none;
+    border: none;
+    padding: 5px 0 0 0;
+    cursor: pointer;
+    color: #78909c;
+    text-decoration: underline;
+    font-weight: 500;
+    font-size: 0.9em;
+    font-family: inherit;
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 5px;
+    text-transform: none;
+}
+
+.btn-logout:hover {
+    color: #37474f;
+    text-decoration: underline;
+    background: none !important;
+}
+
+.main-content {
+    flex: 1;
+    padding: 40px;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+@keyframes smoothLoad {
+    0% {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.main-content>*:not(.modal-overlay) {
+    animation: smoothLoad 0.25s ease-out forwards;
+}
+
+.alert {
+    background-color: #eceff1;
+    color: #37474f;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    border-left: 5px solid #546e7a;
+}
+
+.card {
+    background-color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 12px;
+    padding: 20px;
+    transition: 0.3s;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+}

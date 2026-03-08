@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, request
 from decimal import Decimal
 from app.utils import login_required, to_dec
 from app.extensions import db
@@ -22,7 +22,15 @@ def index():
     - Todas las semanas procesadas (cerradas/aprobadas)
     - El acumulado total de cada columna de nómina
     """
-    proyectos = Proyecto.query.order_by(Proyecto.numero_proyecto).all()
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '').strip()
+
+    query = Proyecto.query
+    if q:
+        query = query.filter(Proyecto.nombre.ilike(f'%{q}%') | Proyecto.numero_proyecto.ilike(f'%{q}%'))
+        
+    pagination = query.order_by(Proyecto.numero_proyecto).paginate(page=page, per_page=20, error_out=False)
+    proyectos = pagination.items
     
     proyectos_data = []
     
@@ -97,4 +105,4 @@ def index():
             'grand': grand_float
         })
     
-    return render_template('proyecto_total.html', proyectos_data=proyectos_data)
+    return render_template('proyecto_total.html', proyectos_data=proyectos_data, pagination=pagination, q=q)

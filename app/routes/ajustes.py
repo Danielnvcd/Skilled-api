@@ -12,7 +12,15 @@ bp = Blueprint('ajustes', __name__, url_prefix='/ajustes')
 @bp.route('/')
 @login_required
 def index():
-    periodos = AjustePeriodo.query.order_by(AjustePeriodo.created_at.desc()).all()
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '').strip()
+
+    query = AjustePeriodo.query
+    if q:
+        query = query.filter(AjustePeriodo.nombre.ilike(f'%{q}%'))
+        
+    pagination = query.order_by(AjustePeriodo.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+    periodos = pagination.items
 
     # Calcular totales para cada periodo
     for p in periodos:
@@ -21,7 +29,8 @@ def index():
         p.num_trabajadores = len(p.trabajadores_periodo)
 
     return render_template('ajustes.html', periodos=periodos,
-                           trabajadores=Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all())
+                           trabajadores=Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all(),
+                           pagination=pagination, q=q)
 
 
 @bp.route('/crear_periodo', methods=['POST'])

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, flash, redirect, url_for, make_response
+from flask import Blueprint, render_template, flash, redirect, url_for, make_response, request
 from app.utils import login_required
 from app.extensions import db
 from app.models import Prenomina, ReporteSemanal, RegistroDiarioHoras, Proyecto
@@ -10,9 +10,20 @@ bp = Blueprint('historico', __name__, url_prefix='/historico')
 @bp.route('/')
 @login_required
 def index():
-    # Retrieve identical unique start dates where prenominas are closed / approved
-    fechas = db.session.query(Prenomina.fecha_inicio).filter_by(estado='APROBADO').distinct().order_by(Prenomina.fecha_inicio.desc()).all()
-    fechas_list = [f[0] for f in fechas]
+    page = request.args.get('page', 1, type=int)
+    search_date_str = request.args.get('search_date', '')
+
+    query = db.session.query(Prenomina.fecha_inicio).filter_by(estado='APROBADO')
+    
+    if search_date_str:
+        try:
+            search_date_obj = datetime.strptime(search_date_str, '%Y-%m-%d').date()
+            query = query.filter_by(fecha_inicio=search_date_obj)
+        except ValueError:
+            pass
+
+    pagination = query.distinct().order_by(Prenomina.fecha_inicio.desc()).paginate(page=page, per_page=20, error_out=False)
+    fechas_list = [f[0] for f in pagination.items]
     
     semanas = []
     for f in fechas_list:
@@ -23,7 +34,7 @@ def index():
             'proyectos': reportes
         })
         
-    return render_template('historico_nominas.html', fechas=fechas_list, semanas=semanas)
+    return render_template('historico_nominas.html', fechas=fechas_list, semanas=semanas, pagination=pagination, search_date=search_date_str)
 
 @bp.route('/detalle/<fecha_str>')
 @login_required

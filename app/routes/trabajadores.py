@@ -24,14 +24,44 @@ def _parse_date(value):
 @bp.route('/', methods=['GET'])
 @login_required
 def index():
-    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.id).all()
-    return render_template('trabajadores.html', trabajadores=trabajadores)
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '').strip()
+    
+    query = Trabajador.query.filter_by(activo=True)
+    
+    if q:
+        query = query.filter(or_(
+            Trabajador.nombre.ilike(f'%{q}%'),
+            Trabajador.nombre_apellidos.ilike(f'%{q}%'),
+            Trabajador.no_empleado.ilike(f'%{q}%'),
+            Trabajador.rfc.ilike(f'%{q}%')
+        ))
+        
+    pagination = query.order_by(Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+    trabajadores = pagination.items
+    
+    return render_template('trabajadores.html', trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/bajas', methods=['GET'])
 @login_required
 def bajas():
-    trabajadores = Trabajador.query.filter_by(activo=False).order_by(Trabajador.fecha_baja.desc().nulls_last(), Trabajador.id).all()
-    return render_template('trabajadores_bajas.html', trabajadores=trabajadores)
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '').strip()
+    
+    query = Trabajador.query.filter_by(activo=False)
+    
+    if q:
+        query = query.filter(or_(
+            Trabajador.nombre.ilike(f'%{q}%'),
+            Trabajador.nombre_apellidos.ilike(f'%{q}%'),
+            Trabajador.no_empleado.ilike(f'%{q}%'),
+            Trabajador.rfc.ilike(f'%{q}%')
+        ))
+        
+    pagination = query.order_by(Trabajador.fecha_baja.desc().nulls_last(), Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+    trabajadores = pagination.items
+    
+    return render_template('trabajadores_bajas.html', trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/agregar', methods=['POST'])
 @login_required

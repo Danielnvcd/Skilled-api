@@ -8,36 +8,44 @@ document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('searchInput');
     const searchParticipantes = document.getElementById('searchParticipantes');
 
+    // Debounce function to prevent UI freeze
+    function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
     // --- BÚSQUEDA EN TABLA ---
     if (searchInput) {
-        searchInput.addEventListener('input', function (e) {
+        searchInput.addEventListener('input', debounce(function (e) {
             const term = e.target.value.toLowerCase();
             const rows = document.querySelectorAll('.proyecto-row');
-            rows.forEach(row => {
-                const text = row.innerText.toLowerCase();
-                if (text.includes(term)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
+
+            // Allow JS engine to yield before heavy DOM manipulation
+            requestAnimationFrame(() => {
+                rows.forEach(row => {
+                    const text = row.innerText.toLowerCase();
+                    row.style.display = text.includes(term) ? '' : 'none';
+                });
             });
-        });
+        }, 300));
     }
 
     // --- FILTRAR PARTICIPANTES EN MODAL ---
     if (searchParticipantes) {
-        searchParticipantes.addEventListener('input', function (e) {
+        searchParticipantes.addEventListener('input', debounce(function (e) {
             const term = e.target.value.toLowerCase();
             const items = document.querySelectorAll('.participant-item');
-            items.forEach(item => {
-                const name = item.getAttribute('data-name') || '';
-                if (name.includes(term)) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
+
+            requestAnimationFrame(() => {
+                items.forEach(item => {
+                    const name = item.getAttribute('data-name') || '';
+                    item.style.display = name.includes(term) ? 'flex' : 'none';
+                });
             });
-        });
+        }, 300));
     }
 
     // --- MODAL logic ---

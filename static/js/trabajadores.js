@@ -102,22 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // === SEARCH / FILTER LOGIC ===
-    if (searchInput) {
-        searchInput.addEventListener('keyup', function () {
-            let filter = this.value.toUpperCase();
-            let table = document.getElementById("workersTable");
-            let tr = table.getElementsByTagName("tr");
-
-            for (let i = 1; i < tr.length; i++) {
-                let txtValue = tr[i].textContent || tr[i].innerText;
-                if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                    tr[i].style.display = "";
-                } else {
-                    tr[i].style.display = "none";
-                }
-            }
-        });
-    }
+    // Search is now handled server-side via form submission in trabajadores.html
 
     // === CREDENTIALS LOGIC ===
     const selectPlanta = document.getElementById('selectPlanta');

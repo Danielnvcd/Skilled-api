@@ -23,29 +23,27 @@
         </button>
     </div>
 
-    <!-- Buscador de Fechas -->
-    <div
-        style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; padding: 0.75rem 1rem; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border);">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-        </svg>
-        <label style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500; white-space: nowrap;">Filtrar por
-            fecha:</label>
-        <input type="date" id="searchFechaHoras"
-            style="flex: 0 0 auto; border: 1px solid var(--border); outline: none; background: transparent; font-size: 0.95rem; color: var(--text-main); padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer;">
-        <button type="button" id="clearSearchHoras" title="Limpiar filtro"
-            style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0; display: none;">&times;</button>
+    <!-- Buscador -->
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+        <form action="{{ url_for('horas.index') }}" method="GET" class="search-container"
+            style="flex: 1; position: relative; max-width: 400px;">
+            <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #9CA3AF;"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <input type="text" name="q" value="{{ q }}" placeholder="Buscar por proyecto o número..."
+                style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none; background: var(--bg-card); color: var(--text-main);">
+        </form>
     </div>
-    <div id="noResultsHoras"
-        style="display: none; text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
-        <i class="fa-solid fa-calendar-xmark"
+
+    {% if q and not reportes %}
+    <div id="noResultsHoras" style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
+        <i class="fa-solid fa-folder-open"
             style="font-size: 1.5rem; margin-bottom: 0.5rem; display:block; opacity:0.5;"></i>
-        No se encontraron reportes para la fecha seleccionada.
+        No se encontraron reportes para la búsqueda ingresada.
     </div>
+    {% endif %}
 
     <div class="reportes-grid">
         {% for rep in reportes %}
@@ -81,6 +79,65 @@
         </div>
         {% endfor %}
     </div>
+
+    <!-- Paginación -->
+    {% if pagination.pages > 1 %}
+    <style>
+        .pg-btn {
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+
+        .pg-disabled {
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .pg-active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            font-weight: bold;
+            pointer-events: none;
+            border: 1px solid var(--primary);
+        }
+    </style>
+    <div
+        style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
+        <div style="display: flex; gap: 0.25rem;">
+            <a href="{{ url_for('horas.index', page=1, q=q) }}"
+                class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
+                &laquo; Primera
+            </a>
+            <a href="{{ url_for('horas.index', page=pagination.prev_num, q=q) }}"
+                class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled disabled{% endif %}">
+                &lsaquo; Anterior
+            </a>
+
+            {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if page_num %}
+            <a href="{{ url_for('horas.index', page=page_num, q=q) }}"
+                class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active active{% endif %}">
+                {{ page_num }}
+            </a>
+            {% else %}
+            <span class="btn-secondary pg-btn pg-disabled disabled">...</span>
+            {% endif %}
+            {% endfor %}
+
+            <a href="{{ url_for('horas.index', page=pagination.next_num, q=q) }}"
+                class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled disabled{% endif %}">
+                Siguiente &rsaquo;
+            </a>
+            <a href="{{ url_for('horas.index', page=pagination.pages, q=q) }}"
+                class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled disabled{% endif %}">
+                Última &raquo;
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 <!-- Modal Principal para Nuevo Reporte (Semana global) -->
@@ -128,6 +185,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/search_horas.js') }}"></script>
 <script src="{{ url_for('static', filename='js/horas.js') }}"></script>
 {% endblock %}

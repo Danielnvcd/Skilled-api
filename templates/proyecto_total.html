@@ -167,15 +167,16 @@
         </div>
 
         <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-            <div class="search-container" style="position: relative; min-width: 250px;">
+            <form action="{{ url_for('proyecto_total.index') }}" method="GET" class="search-container"
+                style="position: relative; min-width: 250px;">
                 <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #94a3b8;"
                     fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
-                <input type="text" id="buscadorProyectos" placeholder="Buscar proyecto o coordinador..."
+                <input type="text" name="q" value="{{ q }}" placeholder="Buscar proyecto o coordinador..."
                     style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
-            </div>
+            </form>
             {# Global export removed #}
         </div>
     </div>
@@ -315,6 +316,64 @@
         </div>
     </div>
     {% endfor %}
+
+    <!-- Paginación -->
+    {% if pagination.pages > 1 %}
+    <style>
+        .pg-btn {
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+
+        .pg-disabled {
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .pg-active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            font-weight: bold;
+            pointer-events: none;
+            border: 1px solid var(--primary);
+        }
+    </style>
+    <div
+        style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
+        <div style="display: flex; gap: 0.25rem;">
+            <a href="{{ url_for('proyecto_total.index', page=1, q=q) }}"
+                class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
+                &laquo; Primera
+            </a>
+            <a href="{{ url_for('proyecto_total.index', page=pagination.prev_num, q=q) }}"
+                class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled disabled{% endif %}">
+                &lsaquo; Anterior
+            </a>
+
+            {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if page_num %}
+            <a href="{{ url_for('proyecto_total.index', page=page_num, q=q) }}"
+                class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active active{% endif %}">
+                {{ page_num }}
+            </a>
+            {% else %}
+            <span class="btn-secondary pg-btn pg-disabled disabled">...</span>
+            {% endif %}
+            {% endfor %}
+
+            <a href="{{ url_for('proyecto_total.index', page=pagination.next_num, q=q) }}"
+                class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled disabled{% endif %}">
+                Siguiente &rsaquo;
+            </a>
+            <a href="{{ url_for('proyecto_total.index', page=pagination.pages, q=q) }}"
+                class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled disabled{% endif %}">
+                Última &raquo;
+            </a>
+        </div>
+    </div>
+    {% endif %}
 
     {% else %}
     <div class="historico-empty">
