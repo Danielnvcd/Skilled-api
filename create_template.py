@@ -57,7 +57,6 @@ columnas = [
     "Estatura",
 
     # === FINANCIERO ===
-    "Pagos Efectivo",
     "Folio Mov IDSE",
     "Tipo Pago",
 
