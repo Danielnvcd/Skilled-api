@@ -192,20 +192,25 @@
                         <div class="participantes-container" id="participantesContainer">
                             {% for t in trabajadores %}
                             {% set sin_salario = not t.salario_real_pactado_x_sem or t.salario_real_pactado_x_sem <= 0
-                                %} <div class="participant-item"
+                                %} {% set sin_nomina=not t.tipo_nomina or t.tipo_nomina|trim=='' %} {% set
+                                no_disponible=sin_salario or sin_nomina %} <div class="participant-item"
                                 data-name="{{ t.nombre|lower }} {{ t.no_empleado|lower }}">
                                 <input type="checkbox" class="participant-check" id="part_{{ t.id }}" value="{{ t.id }}"
-                                    {% if sin_salario %}disabled{% endif %}>
-                                <label for="part_{{ t.id }}" {% if sin_salario %}style="cursor:not-allowed;"
-                                    title="Trabajador sin salario base registrado" {% endif %}>
+                                    {% if no_disponible %}disabled{% endif %}>
+                                <label for="part_{{ t.id }}" {% if no_disponible %}style="cursor:not-allowed;"
+                                    title="{% if sin_salario %}Sin salario registrado{% endif %}{% if sin_salario and sin_nomina %} | {% endif %}{% if sin_nomina %}Sin tipo de nómina{% endif %}"
+                                    {% endif %}>
                                     <div
-                                        style="font-weight: 600; color: #111827; {% if sin_salario %}text-decoration: underline; text-decoration-color: rgba(220, 38, 38, 0.5); text-decoration-style: solid; text-underline-offset: 4px;{% endif %}">
+                                        style="font-weight: 600; color: #111827; {% if no_disponible %}text-decoration: underline; text-decoration-color: rgba(220, 38, 38, 0.5); text-decoration-style: solid; text-underline-offset: 4px;{% endif %}">
                                         {{ t.nombre }}</div>
                                     <div style="font-size: 0.8rem; color: #6b7280;">No. {{ t.no_empleado }} - {{
                                         t.puesto or 'S/P' }}
                                         {% if sin_salario %}<span
                                             style="color: #ef4444; font-size: 0.7rem; margin-left: 4px;">(Sin
                                             salario)</span>{% endif %}
+                                        {% if sin_nomina %}<span
+                                            style="color: #ef4444; font-size: 0.7rem; margin-left: 4px;">(Sin tipo
+                                            nómina)</span>{% endif %}
                                     </div>
                                 </label>
                         </div>

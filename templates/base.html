@@ -62,10 +62,6 @@
                 <img src="{{ url_for('static', filename='iconos/prestamos.png') }}" class="menu-icon" alt="Préstamos">
                 Préstamos
             </a>
-            <a href="{{ url_for('ausencias.index') }}" class="{{ 'active' if request.endpoint == 'ausencias.index' }}">
-                <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Ausencias">
-                Ausencias/Vacaciones
-            </a>
             <a href="{{ url_for('ajustes.index') }}" class="{{ 'active' if request.endpoint == 'ajustes.index' }}">
                 <img src="{{ url_for('static', filename='iconos/ajuste.png') }}" class="menu-icon" alt="Ajuste">
                 Ajuste
