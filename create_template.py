@@ -121,7 +121,6 @@ validaciones = {
     "Tipo de Nomina (Semanal/Por hora/Cuadrado)": '"Semanal,Por hora,Cuadrado"',
     "Sexo (M/F)": '"M,F"',
     "Usa Lentes (Si/No)": '"Si,No"',
-    "Tipo Pago": '"EFECTIVO,TRANSFERENCIA"',
 }
 
 # Mapear los índices de columnas
