@@ -14,6 +14,10 @@ columnas = [
     # === LABORALES ===
     "Area",
     "Puesto",
+    "Tipo de Nomina (Semanal/Por hora/Cuadrado)",
+    "Salario Real Pactado por Semana",
+    "Sueldo Base (SB)",
+    "Salario Diario Integrado (SDI)",
     "Tipo de Movimiento",
     "Tipo de Contrato",
     "Tipo de Jornada",
@@ -47,10 +51,6 @@ columnas = [
     "Estatura",
 
     # === FINANCIERO ===
-    "Tipo de Nomina (Semanal/Por hora/Cuadrado)",
-    "Salario Real Pactado por Semana",
-    "Sueldo Base (SB)",
-    "Salario Diario Integrado (SDI)",
     "Letra",
     "Horas Extra",
     "Infonavit",
@@ -122,13 +122,6 @@ validaciones = {
     "Sexo (M/F)": '"M,F"',
     "Usa Lentes (Si/No)": '"Si,No"',
     "Tipo Pago": '"EFECTIVO,TRANSFERENCIA"',
-    "Estado Civil": '"Soltero(a),Casado(a),Union Libre,Divorciado(a),Viudo(a)"',
-    "Tipo de Movimiento": '"Alta,Reingreso,Modificacion de salario"',
-    "Tipo de Contrato": '"Indefinido,Temporal,Por obra determinada,Periodo de prueba"',
-    "Tipo de Jornada": '"Diurna,Nocturna,Mixta"',
-    "Tipo de Sangre": '"O+,O-,A+,A-,B+,B-,AB+,AB-"',
-    "Licencia de Conducir (Tipo)": '"No tiene,Tipo A,Tipo B,Tipo C,Tipo D,Tipo E"',
-    "Nacionalidad": '"Mexicana,Otra"',
 }
 
 # Mapear los índices de columnas
@@ -141,8 +134,8 @@ def get_col_letter(col_name):
 
 for col_name, formula in validaciones.items():
     dv = DataValidation(type="list", formula1=formula, allow_blank=True)
-    dv.error = f"Por favor selecciona una opción válida para {col_name}"
-    dv.errorTitle = "Opción no válida"
+    dv.errorStyle = "warning"
+    dv.showErrorMessage = False
     worksheet.add_data_validation(dv)
     
     letra = get_col_letter(col_name)
