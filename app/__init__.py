@@ -102,10 +102,17 @@ def create_app():
 
     csp = {
         'default-src': '\'self\'',
-        'script-src': ['\'self\'', '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 'https://static.cloudflareinsights.com', 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
-        'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com'],
+        'script-src': [
+            '\'self\'', 
+            '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 
+            '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
+            'https://static.cloudflareinsights.com', 
+            'https://cdnjs.cloudflare.com', 
+            'https://cdn.jsdelivr.net'
+        ],
+        'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
-        'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com'],
+        'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
         'connect-src': ['\'self\'', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
         'media-src': '\'self\''
