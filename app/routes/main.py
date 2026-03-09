@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template
 from app.utils import login_required
-from app.models import Trabajador, Proyecto, AuditLog
+from app.models import Trabajador, Proyecto, AuditLog, DocumentoTrabajador, CredencialPlanta
 from app.extensions import db
 from sqlalchemy import func, extract
-from datetime import datetime
+from datetime import datetime, timedelta, date
 
 bp = Blueprint('main', __name__)
 
@@ -50,6 +50,58 @@ def home():
     # Bitácora (Últimos 5 movimientos)
     actividad_reciente = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(5).all()
 
+    # Documentos y credenciales por vencer (próximos 30 días) o ya vencidos
+    hoy = date.today()
+    limite = hoy + timedelta(days=30)
+
+    docs_vencidos = (
+        db.session.query(DocumentoTrabajador, Trabajador)
+        .join(Trabajador, DocumentoTrabajador.trabajador_id == Trabajador.id)
+        .filter(
+            Trabajador.activo == True,
+            DocumentoTrabajador.fecha_fin != None,
+            DocumentoTrabajador.fecha_fin <= limite
+        )
+        .order_by(DocumentoTrabajador.fecha_fin.asc())
+        .all()
+    )
+
+    creds_vencidas = (
+        db.session.query(CredencialPlanta, Trabajador)
+        .join(Trabajador, CredencialPlanta.trabajador_id == Trabajador.id)
+        .filter(
+            Trabajador.activo == True,
+            CredencialPlanta.fecha_caducidad != None,
+            CredencialPlanta.fecha_caducidad <= limite
+        )
+        .order_by(CredencialPlanta.fecha_caducidad.asc())
+        .all()
+    )
+
+    # Combinar en lista unificada
+    docs_por_vencer = []
+    for doc, trab in docs_vencidos:
+        docs_por_vencer.append({
+            'tipo': 'documento',
+            'nombre_trabajador': trab.nombre_completo,
+            'trabajador_id': trab.id,
+            'descripcion': doc.nombre_archivo,
+            'fecha': doc.fecha_fin,
+            'vencido': doc.fecha_fin < hoy
+        })
+    for cred, trab in creds_vencidas:
+        docs_por_vencer.append({
+            'tipo': 'credencial',
+            'nombre_trabajador': trab.nombre_completo,
+            'trabajador_id': trab.id,
+            'descripcion': f'Credencial {cred.planta}',
+            'fecha': cred.fecha_caducidad,
+            'vencido': cred.fecha_caducidad < hoy
+        })
+
+    # Ordenar: vencidos primero, luego por fecha más próxima
+    docs_por_vencer.sort(key=lambda x: (not x['vencido'], x['fecha']))
+
     return render_template(
         'index.html',
         total_trabajadores=total_trabajadores,
@@ -61,7 +113,8 @@ def home():
         labels_puestos=labels_puestos,
         data_puestos=data_puestos,
         cumpleañeros=cumpleañeros,
-        actividad_reciente=actividad_reciente
+        actividad_reciente=actividad_reciente,
+        docs_por_vencer=docs_por_vencer
     )
 
 @bp.route('/credenciales')

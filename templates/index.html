@@ -181,6 +181,26 @@
         }
     }
 
+    /* Badge de estado */
+    .badge-vencido {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }
+
+    .badge-vencido.expired {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .badge-vencido.warning {
+        background: #fffbeb;
+        color: #d97706;
+    }
+
     @media(max-width: 768px) {
 
         .col-3,
@@ -264,9 +284,9 @@
     </div>
 
     <!-- Row 3: Lists -->
-    <div class="dashboard-panel col-8">
+    <div class="dashboard-panel col-4">
         <h3 class="panel-title"><i class="fa-solid fa-history"></i> Actividad Reciente en el Sistema</h3>
-        <div class="list-container">
+        <div class="list-container" style="max-height: 300px; overflow-y: auto;">
             {% for log in actividad_reciente %}
             <div class="list-item">
                 <div class="list-icon" style="background:#e0f2fe; color:#0284c7;">
@@ -274,9 +294,9 @@
                 </div>
                 <div class="list-text" style="flex:1;">
                     <h5>{{ log.action }}</h5>
-                    <p>Realizado por {{ log.user or 'Sistema' }}</p>
+                    <p>{{ log.user or 'Sistema' }}</p>
                 </div>
-                <div style="font-size: 0.8rem; color: #9ca3af;">
+                <div style="font-size: 0.75rem; color: #9ca3af; white-space: nowrap;">
                     {{ log.created_at.strftime('%d/%m/%Y %I:%M %p') }}
                 </div>
             </div>
@@ -307,6 +327,38 @@
             <div style="padding: 20px; text-align: center; background: #f9fafb; border-radius: 8px;">
                 <i class="fa-solid fa-face-smile" style="font-size: 2rem; color: #d1d5db; margin-bottom: 10px;"></i>
                 <p style="color: #6b7280; font-size: 0.9rem; margin:0;">Nadie cumple años este mes.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="dashboard-panel col-4">
+        <h3 class="panel-title"><i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Documentos por
+            Vencer</h3>
+        <div class="list-container" style="max-height: 300px; overflow-y: auto;">
+            {% for item in docs_por_vencer %}
+            <div class="list-item">
+                <div class="list-icon"
+                    style="{% if item.vencido %}background:#fef2f2; color:#dc2626;{% else %}background:#fffbeb; color:#d97706;{% endif %}">
+                    <i
+                        class="fa-solid {% if item.tipo == 'credencial' %}fa-id-card{% else %}fa-file-lines{% endif %}"></i>
+                </div>
+                <div class="list-text" style="flex: 1; min-width: 0;">
+                    <h5 style="text-transform: uppercase; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                        title="{{ item.nombre_trabajador }}">{{ item.nombre_trabajador }}</h5>
+                    <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                        title="{{ item.descripcion }}">{{ item.descripcion }}</p>
+                    <p style="margin-top: 2px;">{{ item.fecha.strftime('%d/%m/%Y') }}
+                        <span class="badge-vencido {{ 'expired' if item.vencido else 'warning' }}">
+                            {{ 'VENCIDO' if item.vencido else 'POR VENCER' }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+            {% else %}
+            <div style="padding: 20px; text-align: center; background: #f9fafb; border-radius: 8px;">
+                <i class="fa-solid fa-circle-check" style="font-size: 2rem; color: #10b981; margin-bottom: 10px;"></i>
+                <p style="color: #6b7280; font-size: 0.9rem; margin:0;">No hay documentos por vencer.</p>
             </div>
             {% endfor %}
         </div>
