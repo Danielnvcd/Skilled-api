@@ -689,6 +689,9 @@ def upload_documento(id):
         f_inicio = _parse_date(fecha_inicio_str) if fecha_inicio_str else None
         f_fin = _parse_date(fecha_fin_str) if fecha_fin_str else None
         
+        # Parse optional tipo_documento
+        tipo_doc = request.form.get('tipo_documento', '').strip() or None
+        
         # Relate to DB path
         db_path = f"trabajadores/{t.id}/{unique_filename}"
         
@@ -696,6 +699,7 @@ def upload_documento(id):
             trabajador_id=t.id,
             nombre_archivo=filename,
             ruta_archivo=db_path,
+            tipo_documento=tipo_doc,
             fecha_inicio=f_inicio,
             fecha_fin=f_fin
         )

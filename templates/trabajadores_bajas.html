@@ -488,9 +488,26 @@
                         (CURP, Acta Nacimiento, Identificaciones) para este trabajador.</p>
 
                     <div class="form-grid upload-section" style="align-items: end; margin-bottom: 20px;">
-                        <div class="form-group" style="grid-column: span 4;">
+                        <div class="form-group" style="grid-column: span 3;">
                             <label>Seleccionar Archivo (PDF, JPG, PNG)</label>
                             <input type="file" id="fileUploadInput" class="form-control" accept=".pdf,image/*">
+                        </div>
+                        <div class="form-group" style="grid-column: span 1;">
+                            <label>Tipo (Opcional)</label>
+                            <select id="docTipoDocumento" class="form-control">
+                                <option value="">Sin tipo</option>
+                                <option value="Permiso DC3">Permiso DC3</option>
+                                <option value="CURP">CURP</option>
+                                <option value="Acta Nacimiento">Acta Nacimiento</option>
+                                <option value="INE">INE</option>
+                                <option value="NSS">NSS</option>
+                                <option value="Comprobante Domicilio">Comprobante Domicilio</option>
+                                <option value="Contrato">Contrato</option>
+                                <option value="RFC">RFC</option>
+                                <option value="Otro">Otro...</option>
+                            </select>
+                            <input type="text" id="docTipoCustom" class="form-control"
+                                placeholder="Especifica el tipo..." style="display: none; margin-top: 6px;">
                         </div>
                         <div class="form-group" style="grid-column: span 1;">
                             <label>Fecha de Inicio (Opcional)</label>

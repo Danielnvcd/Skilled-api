@@ -134,6 +134,7 @@ class DocumentoTrabajador(db.Model):
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
     nombre_archivo = db.Column(db.String(250), nullable=False)
     ruta_archivo = db.Column(db.String(500), nullable=False)
+    tipo_documento = db.Column(db.String(100), nullable=True)
     fecha_subida = db.Column(db.DateTime, default=datetime.utcnow)
     
     fecha_inicio = db.Column(db.Date, nullable=True)
@@ -144,6 +145,7 @@ class DocumentoTrabajador(db.Model):
             'id': self.id,
             'nombre_archivo': self.nombre_archivo,
             'ruta_archivo': self.ruta_archivo,
+            'tipo_documento': self.tipo_documento,
             'fecha_subida': self.fecha_subida.isoformat() if self.fecha_subida else None,
             'fecha_inicio': self.fecha_inicio.isoformat() if self.fecha_inicio else None,
             'fecha_fin': self.fecha_fin.isoformat() if self.fecha_fin else None

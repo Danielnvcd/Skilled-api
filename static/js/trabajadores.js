@@ -234,6 +234,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const fileUploadInput = document.getElementById('fileUploadInput');
     const btnUploadDoc = document.getElementById('btnUploadDoc');
     const documentosList = document.getElementById('documentosList');
+    const docTipoDocumento = document.getElementById('docTipoDocumento');
+    const docTipoCustom = document.getElementById('docTipoCustom');
+
+    // Toggle custom tipo input
+    if (docTipoDocumento) {
+        docTipoDocumento.addEventListener('change', function () {
+            if (docTipoCustom) {
+                docTipoCustom.style.display = this.value === 'Otro' ? 'block' : 'none';
+                if (this.value !== 'Otro') docTipoCustom.value = '';
+            }
+        });
+    }
 
     let currentWorkerId = null;
     let documentosArray = [];
@@ -268,11 +280,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
 
+            const tipoHtml = doc.tipo_documento ? `<span style="font-size: 0.7rem; background: #eff6ff; color: #2563eb; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${doc.tipo_documento}</span>` : '';
+
             li.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <a href="/trabajadores/documento/${doc.id}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 500;">
                         ${doc.nombre_archivo}
                     </a>
+                    ${tipoHtml}
                     ${caducadoHtml}
                     <span style="font-size: 0.75rem; color: #9ca3af;">${new Date(doc.fecha_subida).toLocaleDateString()}</span>
                 </div>
@@ -322,6 +337,17 @@ document.addEventListener('DOMContentLoaded', function () {
             const formData = new FormData();
             formData.append('documento', file);
 
+            // Tipo de documento
+            if (docTipoDocumento) {
+                let tipoVal = docTipoDocumento.value;
+                if (tipoVal === 'Otro' && docTipoCustom) {
+                    tipoVal = docTipoCustom.value.trim();
+                }
+                if (tipoVal) {
+                    formData.append('tipo_documento', tipoVal);
+                }
+            }
+
             const docFechaInicio = document.getElementById('docFechaInicio');
             if (docFechaInicio && docFechaInicio.value) {
                 formData.append('fecha_inicio', docFechaInicio.value);
@@ -358,6 +384,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     const docFechaFin = document.getElementById('docFechaFin');
                     if (docFechaInicio) docFechaInicio.value = '';
                     if (docFechaFin) docFechaFin.value = '';
+                    if (docTipoDocumento) { docTipoDocumento.value = ''; }
+                    if (docTipoCustom) { docTipoCustom.value = ''; docTipoCustom.style.display = 'none'; }
                 } else {
                     const err = await response.json();
                     alert(err.error || 'Ocurrió un error al subir el archivo');
