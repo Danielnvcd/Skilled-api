@@ -88,7 +88,7 @@
                         <span class="badge area-default">{{ t.area or 'S/A' }}</span>
                         <div style="font-size: 0.8rem; margin-top: 4px;">{{ t.puesto or '-' }}</div>
                     </td>
-                    <td>{{ t.tipo_nomina or 'Semanal' }}</td>
+                    <td>{{ t.tipo_nomina or '' }}</td>
                     <td style="font-family: monospace;">
                         ${{ t.salario_real_pactado_x_sem }}</td>
                     <td>{{ t.fecha_ingreso.strftime('%d/%m/%Y') if t.fecha_ingreso else '-' }}</td>

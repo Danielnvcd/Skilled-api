@@ -66,6 +66,11 @@
                 <img src="{{ url_for('static', filename='iconos/ajuste.png') }}" class="menu-icon" alt="Ajuste">
                 Ajuste
             </a>
+            <a href="{{ url_for('metricas.index') }}" class="{{ 'active' if request.endpoint == 'metricas.index' }}">
+                <i class="fas fa-chart-bar"
+                    style="width: 20px; height: 20px; margin-right: 12px; font-size: 1.1rem; color: #6b7280; text-align: center;"></i>
+                Métricas
+            </a>
             {% endif %}
             <a href="{{ url_for('main.credenciales') }}"
                 class="{{ 'active' if request.endpoint == 'main.credenciales' }}">

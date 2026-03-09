@@ -102,17 +102,17 @@ def create_app():
 
     csp = {
         'default-src': '\'self\'',
-        'script-src': ['\'self\'', '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 'https://static.cloudflareinsights.com', 'https://cdnjs.cloudflare.com'],
+        'script-src': ['\'self\'', '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 'https://static.cloudflareinsights.com', 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com'],
-        'connect-src': ['\'self\'', 'https://cloudflare.com'],
+        'connect-src': ['\'self\'', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
         'media-src': '\'self\''
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
@@ -129,6 +129,7 @@ def create_app():
     app.register_blueprint(ajustes.bp)
     app.register_blueprint(reportes.bp)
     app.register_blueprint(ausencias.bp)
+    app.register_blueprint(metricas.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):
