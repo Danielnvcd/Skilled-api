@@ -1,146 +1,180 @@
 # Sistema de Nóminas 🏢
 
-Un sistema integral basado en web para la gestión de nóminas, empleados y reportes, desarrollado en **Python (Flask)**. Ofrece un entorno seguro y profesional con soporte para bases de datos relacionales, generación de documentos y opciones avanzadas de carga de datos masivos.
+Un sistema integral basado en web para la gestión de nóminas, empleados y reportes, desarrollado en **Python (Flask)**. Ofrece un entorno seguro y profesional con soporte para bases de datos relacionales, generación de documentos (PDF, Excel) y opciones avanzadas de carga de datos masivos.
 
 ---
 
 ## 🚀 Características Principales
 
 - **Gestión de Empleados**: Altas, bajas, y edición con múltiples campos (laborales, personales, médicos y financieros).
-- **Carga Masiva (Excel)**: Soporte completo para carga y descarga de plantillas en formato `.xlsx` usando `pandas` y `openpyxl`.
-- **Generación de Reportes**: Exportación a PDF de recibos y constancias generados en tiempo real con `xhtml2pdf`.
-- **Seguridad**:
-  - Protección avanzada con `Flask-Talisman` y `Flask-Limiter` (prevención de ataques y rate limiting usando Redis).
-  - Manejo de contraseñas y sesiones seguras.
-  - Generación de códigos QR y TOTP (`pyotp`, `qrcode`) para autenticación o accesos rápidos.
-- **Base de Datos Robusta**: Mapeo ORM con `SQLAlchemy` conectado a **PostgreSQL** y migraciones controladas por `Flask-Migrate`.
-- **Procesamiento de Archivos**: Validación y optimización de imágenes (incluidas `.heif`) con `Pillow`.
+- **Carga Masiva (Excel)**: Soporte completo para carga y descarga de plantillas en formato `.xlsx`.
+- **Generación de Reportes**: Exportación a PDF de recibos y constancias generados en tiempo real.
+- **Seguridad y Rendimiento**: Protección con `Flask-Talisman` e integraciones con `Redis` para balancear peticiones (`Flask-Limiter`).
+- **Base de Datos Robusta**: Mapeo ORM con `SQLAlchemy` conectado a **PostgreSQL**.
+- **Procesamiento de Archivos**: Validación de documentos y validación visual con imágenes (`Pillow`).
 
 ---
 
-## 🛠️ Requisitos Previos
+## 🛠️ Requisitos del Sistema
 
-Asegúrate de tener instalados los siguientes servicios en tu sistema antes de iniciar:
+Para ejecutar el proyecto sin problemas, necesitas tener instalados en tu computadora (haz clic sobre ellos si necesitas instalarlos):
 
-1. [Python 3.9+](https://www.python.org/downloads/)
-2. [PostgreSQL](https://www.postgresql.org/download/) (Levantado y corriendo)
-3. [Redis](https://redis.io/download/) (Requerido para el control de peticiones y sesiones)
-4. Git (Opcional, para versionamiento y clonado)
+1. [Python 3.9 o superior](https://www.python.org/downloads/)
+2. [Git](https://git-scm.com/downloads)
+3. [PostgreSQL](https://www.postgresql.org/download/)
+4. [Redis](https://redis.io/download/) - *(Opcionalmente, puedes levantar Redis y Postgres utilizando [Docker](https://www.docker.com/products/docker-desktop/))*
 
 ---
 
-## ⚙️ Instalación y Configuración (Entorno de Desarrollo)
+## ⚙️ Pasos de Instalación Rápida (Estilo Copiar y Pegar)
 
-Sigue estos pasos para levantar el proyecto localmente.
+Sigue estas instrucciones al pie de la letra, copiando y pegando en tu terminal para iniciar todo el sistema localmente.
 
-### 1. Clonar el repositorio
+### 1. Clonar el Repositorio
+
+Abre tu terminal y ejecuta el siguiente comando donde desees guardar el proyecto:
+
 ```bash
-git clone <URL_DEL_REPOSITORIO>
-cd sistema-de-nominas
+git clone https://github.com/TU_USUARIO/TU_REPOSITORIO.git
 ```
 
-### 2. Crear y activar el entorno virtual
-Se recomienda el uso de un entorno virtual para aislar las dependencias:
+Una vez clonado, ingresa a la carpeta del proyecto:
 
-**En Windows:**
+```bash
+cd SISTEMA_DE_NOMINAS
+```
+
+**(Nota: Reemplaza la URL anterior por el enlace directo de tu repositorio GitHub si estás clonando desde internet y la ruta en el comando `cd` si la carpeta difiere).**
+
+### 2. Creación del Entorno Virtual
+
+Para evitar conflictos con otras versiones de Python, crea un entorno virtual y actívalo. *(Copia el bloque según tu sistema operativo:)*
+
+**En WINDOWS (CMD o PowerShell):**
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
 
-**En Linux / macOS:**
+**En MAC / LINUX:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 3. Instalar las dependencias
-Con el entorno virtual activado, instala todas las librerías necesarias:
+Tu terminal ahora debería mostrar un `(venv)` al inicio de la línea. Esto significa que estás dentro del entorno aislado.
+
+### 3. Instalación de Dependencias
+
+Con el entorno virtual ya activo, instala todas las librerías necesarias ejecutando:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configurar las Variables de Entorno
-El proyecto necesita un archivo `.env` para manejar configuraciones sensibles. Crea un archivo `.env` en la raíz del proyecto basándote en la siguiente estructura:
+### 4. Configurar el Entorno (Archivo `.env`)
 
-```ini
-# Configuración de Flask
-FLASK_APP=run.py
-FLASK_ENV=development
-SECRET_KEY=tu_super_clave_secreta_aqui
+El sistema utiliza variables de entorno secretas. En la carpeta raíz del proyecto, debes crear un archivo que se llame exactamente `.env`.
 
-# Conexión a Base de Datos (Modifica usuario, contraseña y base de datos)
-DATABASE_URL=postgresql+psycopg2://usuario_db:password_db@localhost:5432/nombre_db
+> [!NOTE]
+> Puedes usar el siguiente comando rápido en la terminal (PowerShell o bash) para crear tu archivo `.env`:
 
-# Conexión a Redis
-REDIS_URL=redis://localhost:6379/0
+**En Windows (PowerShell) / Mac / Linux:**
+```bash
+echo FLASK_APP=run.py >> .env
+echo FLASK_ENV=development >> .env
+echo SECRET_KEY=una_clave_secreta_super_segura12345 >> .env
+echo "DATABASE_URL=postgresql+psycopg2://tu_usuario:tu_contrasena@localhost:5432/nombre_base_de_datos" >> .env
+echo REDIS_URL=redis://localhost:6379/0 >> .env
 ```
-> [!IMPORTANT]
-> Asegúrate de crear primero la base de datos vacía en PostgreSQL antes de pasar al siguiente paso.
 
-### 5. Aplicar las Migraciones y Crear la Base de Datos
-Este proyecto usa `Flask-Migrate` para crear la estructura dentro de tu base de datos configurada:
+⚠️ **MUY IMPORTANTE**:
+Abre el nuevo archivo `.env` que se creó. Asegúrate de modificar `tu_usuario`, `tu_contrasena` y `nombre_base_de_datos` con tus accesos reales configurados de PostgreSQL.
+
+---
+
+### 5. Configurar PostgreSQL y Redis (Base de Datos)
+
+Antes del siguiente paso, debes confirmar que abriste tu gestor de base de datos Postgres (como pgAdmin o la consola SQL) y creaste una base de datos vacía. 
+
+**Levantar Base de Datos y Redis por Docker (Modo muy simple - opcional):**
+Si tienes *Docker* instalado y prefieres no instalar servicios en la PC principal, pega esto:
+```bash
+docker run --name nominas-postgres -e POSTGRES_USER=tu_usuario -e POSTGRES_PASSWORD=tu_contrasena -e POSTGRES_DB=nombre_base_de_datos -p 5432:5432 -d postgres
+docker run --name nominas-redis -p 6379:6379 -d redis
+```
+
+---
+
+### 6. Ejecutar Migraciones e Iniciar Base de Datos
+
+Una vez que Postgres y Redis están funcionando y configurados en tu `.env`, crea la estructura de las tablas ejecutando este único comando:
+
 ```bash
 flask db upgrade
 ```
 
-### 6. Arrancar el Servidor
-Inicia la aplicación en modo desarrollo:
+### 7. Arrancar el Servidor Principal
+
+Ahora simplemente levanta la aplicación:
+
 ```bash
 python run.py
 ```
-O de forma alternativa:
-```bash
-flask run --host=0.0.0.0 --port=5000
-```
-La aplicación estará disponible en `http://localhost:5000`.
+
+> ¡Listo! Abre tu navegador favorito y accede a: **http://localhost:5000** 🚀
 
 ---
 
-## 📁 Estructura del Proyecto
+## 🧑‍💻 Comandos Útiles para el Día a Día
 
-```text
-/
-├── app/                  # Lógica principal de la aplicación Flask (rutas, modelos, vistas)
-├── data/                 # Almacenamiento local de datos temporales u otros
-├── migrations/           # Archivos e historial de migraciones de la base de datos
-├── static/               # Archivos públicos de frontend (CSS, JS, iconos, plantillas .xlsx)
-├── templates/            # Archivos HTML renderizados por Jinja2
-├── tests/                # Pruebas unitarias de la aplicación con pytest
-├── uploads/              # Carpeta de almacenamiento para archivos que sube el usuario
-├── .env                  # Variables del entorno (Base de datos, tokens, configuraciones)
-├── create_template.py    # Script utilitario para generar la plantilla Excel de empleados
-├── requirements.txt      # Dependencias del proyecto Python
-└── run.py                # Punto de entrada de la aplicación
-```
+Aquí tienes un listado de comandos a mano de utilidades extra cuando desarrollas. Asegúrate de tener activado siempre tu entorno virtual `(venv)` antes de usarlos.
 
----
-
-## 🧑‍💻 Otros Comandos Útiles
-
-**Generar la última versión de la plantilla Excel:**
-Si necesitas actualizar los valores de la plantilla base para subir usuarios:
+**1. Actualizar/Recrear Plantilla de Empleados en Excel**
+Este comando vuelve a generar o actualizar un archivo `plantilla_empleados.xlsx` con todas las listas actualizadas de trabajadores para carga masiva:
 ```bash
 python create_template.py
 ```
-Esto generará un archivo `plantilla_empleados.xlsx` en la ruta `static/downloads/`.
 
-**Ejecutar pruebas unitarias:**
+**2. Ejecutar Pruebas (Tests)**
+Levanta todo el módulo `pytest` para verificar si las funciones como creación de ausencias siguen funcionando bien:
 ```bash
 pytest tests/
 ```
 
-**Crear una nueva migración (si cambias un Modelo en SQLAlchemy):**
+**3. Registrar Modelos de Base de Datos Nuevos**
+Si en un futuro cambias código dentro de las carpetas de `app/models/`, deberás aplicar una migración para sincronizar el código con PostgreSQL:
 ```bash
-flask db migrate -m "Mensaje explicando el cambio"
+flask db migrate -m "Modifique la tabla empleados"
 flask db upgrade
 ```
 
 ---
 
-## 🛡️ Soporte y Contacto
+## 📁 Arquitectura del Código del Proyecto
 
-Si tienes alguna pregunta o encuentras problemas a la hora de levantar el entorno, por favor revisa que:
-1. Las credenciales de la base de datos son correctas en tu archivo `.env`.
-2. El servicio de **Redis** se encuentra encendido (puerto `6379`).
-3. Te encuentras dentro del entorno virtual al momento de ejecutar `python run.py`.
+Si quieres curiosear qué hace cada archivo y dónde va cada módulo, guíate por este mapa:
+
+```text
+SISTEMA DE NOMINAS/
+├── .env                  # Ubicación de Variables maestras secretas (claves, DB, etc.)
+├── run.py                # Punto de ENTRADA. Archivo con que se inicia todo el sistema.
+├── requirements.txt      # Paquetes y librerías pre-instaladas.
+├── create_template.py    # Generador automatizado del Excel de importación.
+├── app/                  
+│   ├── models/           # Definiciones de bases de datos.
+│   ├── routes/           # Rutas y Endpoints (URL) en Python y plantillas HTML.
+│   └── __init__.py      # Declarador de inicio de la aplicación y configuraciones.
+├── migrations/           # Historial e instrucciones de actualizaciones de columnas de Tablas.
+├── static/               
+│   ├── css/              # Hojas de estilo y diseños.
+│   ├── js/               # Funciones de Front-End reactivos (interfaz, graficas, validaciones).
+│   └── downloads/        # Carpetas públicas donde caen descargas como exportación excel.
+├── templates/            # Todo tu código HTML puro (plantillas jinja2).
+├── tests/                # Pruebas automatizadas.
+└── uploads/              # Cargas directas desde el portal por el usuario.
+```
+
+---
+
+> _Desarrollado para mantener la contabilidad organizada, veloz e inquebrantable._
