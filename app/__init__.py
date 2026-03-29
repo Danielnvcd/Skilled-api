@@ -66,7 +66,8 @@ def create_app():
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
-    app.config['SESSION_COOKIE_SECURE'] = True # Set to True in Prod
+    is_prod = os.environ.get('FLASK_ENV') == 'production'
+    app.config['SESSION_COOKIE_SECURE'] = is_prod # Set True in prod only
 
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
 
@@ -117,7 +118,7 @@ def create_app():
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
         'media-src': '\'self\''
     }
-    Talisman(app, content_security_policy=csp, force_https=False)
+    Talisman(app, content_security_policy=csp, force_https=is_prod)
 
     from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas
     app.register_blueprint(auth.bp)

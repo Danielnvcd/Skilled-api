@@ -10,8 +10,21 @@ import json
 import os
 from datetime import datetime as dt
 import pandas as pd
+from app.utils import allowed_file
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
+
+def is_authorized_for_worker(t):
+    from flask import session
+    role = session.get('role')
+    if role in ['admin', 'super_admin']:
+        return True
+    
+    user_id = session.get('user_id')
+    for p in t.proyectos.all():
+        if p.activo and p.coordinador_id == user_id:
+            return True
+    return False
 
 def _parse_date(value):
     """Convierte string YYYY-MM-DD a date. Retorna None si está vacío o es inválido."""
@@ -164,6 +177,9 @@ def agregar():
         if 'foto_perfil' in request.files:
             file = request.files['foto_perfil']
             if file and file.filename != '':
+                if not allowed_file(file):
+                    flash('Foto de perfil rechazada por formato o contenido incorrecto.', 'danger')
+                    return redirect(url_for('trabajadores.index'))
                 filename = secure_filename(file.filename)
                 import time
                 unique_filename = f"pp_{int(time.time())}_{filename}"
@@ -220,6 +236,14 @@ def procesar_importacion():
         
     if not file.filename.endswith(('.xlsx', '.xls')):
         flash('Formato no válido. Debe ser .xlsx o .xls', 'danger')
+        return redirect(url_for('trabajadores.importar'))
+        
+    # DoS protection: read file size without putting all in memory
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > 5 * 1024 * 1024:
+        flash('El archivo excede el tamaño máximo permitido (5MB).', 'danger')
         return redirect(url_for('trabajadores.importar'))
         
     try:
@@ -532,6 +556,9 @@ def editar(id):
         if 'foto_perfil' in request.files:
             file = request.files['foto_perfil']
             if file and file.filename != '':
+                if not allowed_file(file):
+                    flash('Foto de perfil rechazada por formato o contenido incorrecto.', 'danger')
+                    return redirect(url_for('trabajadores.index'))
                 # Delete old profile picture if exists
                 if t.foto_perfil:
                     old_pp_path = os.path.join(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
@@ -671,6 +698,8 @@ def upload_documento(id):
         return jsonify({'error': 'No selected file'}), 400
         
     if file:
+        if not allowed_file(file):
+            return jsonify({'error': 'File format not allowed or file is corrupt'}), 400
         filename = secure_filename(file.filename)
         # Create a unique filename to prevent overwrites
         import time
@@ -713,12 +742,17 @@ def upload_documento(id):
 @login_required
 def get_documento(doc_id):
     doc = DocumentoTrabajador.query.get_or_404(doc_id)
+    t = doc.trabajador
+    if not is_authorized_for_worker(t):
+        return "Acceso denegado", 403
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], doc.ruta_archivo)
 
 @bp.route('/foto/<int:id>', methods=['GET'])
 @login_required
 def get_foto_perfil(id):
     t = Trabajador.query.get_or_404(id)
+    if not is_authorized_for_worker(t):
+        return "Acceso denegado", 403
     if not t.foto_perfil:
         return "Not found", 404
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
@@ -727,6 +761,10 @@ def get_foto_perfil(id):
 @login_required
 def delete_documento(doc_id):
     doc = DocumentoTrabajador.query.get_or_404(doc_id)
+    t = doc.trabajador
+    if not is_authorized_for_worker(t):
+        return jsonify({'error': 'Acceso denegado'}), 403
+        
     file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], doc.ruta_archivo)
     
     try:

@@ -7,22 +7,10 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
 from app.models import User
 from app.extensions import db
-from app.utils import login_required, admin_required
+from app.extensions import db
+from app.utils import login_required, admin_required, is_strong_password
 
 bp = Blueprint('users', __name__, url_prefix='/users')
-
-def is_strong_password(password):
-    if len(password) < 8:
-        return False
-    if not re.search(r"[A-Z]", password):
-        return False
-    if not re.search(r"[a-z]", password):
-        return False
-    if not re.search(r"[0-9]", password):
-        return False
-    if not re.search(r"[^A-Za-z0-9]", password):
-        return False
-    return True
 
 @bp.route('/')
 @login_required
@@ -83,9 +71,9 @@ def update_profile(user_id):
     
     profile_pic = request.files.get('profile_pic')
     if profile_pic and profile_pic.filename != '':
-        allowed_exts = {'jpg', 'jpeg', 'png'}
-        ext = profile_pic.filename.rsplit('.', 1)[-1].lower() if '.' in profile_pic.filename else ''
-        if ext in allowed_exts:
+        from app.utils import allowed_file
+        if allowed_file(profile_pic):
+            ext = profile_pic.filename.rsplit('.', 1)[-1].lower() if '.' in profile_pic.filename else ''
             filename = secure_filename(profile_pic.filename)
             unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
             upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
@@ -102,7 +90,7 @@ def update_profile(user_id):
             
             user.profile_pic = unique_filename
         else:
-            flash('Formato de imagen no válido. Usa JPG o PNG.', 'warning')
+            flash('El archivo no cumple con el formato o contenido permitido (solo JPG/PNG o es un archivo corrupto/vacío).', 'warning')
     
     try:
         db.session.commit()
@@ -166,5 +154,16 @@ def delete_user(user_id):
 @bp.route('/profile_pic/<path:filename>')
 @login_required
 def serve_profile_pic(filename):
-    """Serve user profile pictures securely."""
+    """Serve user profile pictures securely (IDOR protection)."""
+    user_id = session.get('user_id')
+    user = User.query.get(user_id)
+    
+    if not user:
+        return "No autorizado", 403
+        
+    # El usuario solo puede ver su propia foto, a menos que sea admin
+    # "default.png" o similar (si existiera una general) también debe permitirse si se usa en la UI
+    if user.role not in ['admin', 'super_admin'] and user.profile_pic != filename and filename != 'default.png':
+        return "Acceso denegado", 403
+        
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)

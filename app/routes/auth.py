@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.extensions import db, limiter, get_redis
 from app.models import User
-from app.utils import log_action, login_required
+from app.utils import log_action, login_required, is_strong_password
 import pyotp
 import qrcode
 import io
@@ -27,8 +27,8 @@ def profile():
         
         if new_password != confirm_password:
             flash('Las contraseñas no coinciden.', 'danger')
-        elif len(new_password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+        elif not is_strong_password(new_password):
+            flash('La nueva contraseña es demasiado débil (usa mayúsculas, minúsculas, números y símbolos).', 'danger')
         else:
             user.password_hash = generate_password_hash(new_password)
             db.session.commit()
@@ -87,7 +87,6 @@ def login():
         u = User.query.filter_by(username=request.form.get('username')).first()
         
         if u and check_password_hash(u.password_hash, request.form.get('password')):
-            limiter.reset()
             session.clear()
             
             if u.totp_secret:

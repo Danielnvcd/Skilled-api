@@ -90,8 +90,8 @@ def test_user_profile_pic_upload(logged_in_admin, db, monkeypatch):
     assert user is not None
     assert user.profile_pic == 'default.png'
     
-    # Simulate an image upload
-    img_data = b"fake_image_byte_content"
+    # Simulate an image upload with proper magic bytes so allowed_file passes
+    img_data = b'\x89PNG\r\n\x1a\n' + b'\0'*100
     img_file = io.BytesIO(img_data)
     
     # Patch the current_app.config dynamically
@@ -100,7 +100,7 @@ def test_user_profile_pic_upload(logged_in_admin, db, monkeypatch):
     
     response = logged_in_admin.post(f'/users/update_profile/{user.id}', data={
         'full_name': 'Test PIC',
-        'profile_pic': (img_file, 'myphoto.jpg')
+        'profile_pic': (img_file, 'myphoto.png')
     }, content_type='multipart/form-data', follow_redirects=True)
     
     assert response.status_code == 200
@@ -109,7 +109,7 @@ def test_user_profile_pic_upload(logged_in_admin, db, monkeypatch):
     db.session.refresh(user)
     assert user.profile_pic != 'default.png'
     assert user.profile_pic.startswith('profile_')
-    assert user.profile_pic.endswith('.jpg')
+    assert user.profile_pic.endswith('.png')
     
     # Clean up dummy test files
     for f in os.listdir(fake_upload_dir):
