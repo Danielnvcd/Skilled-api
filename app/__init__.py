@@ -118,7 +118,7 @@ def create_app():
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
         'media-src': '\'self\''
     }
-    Talisman(app, content_security_policy=csp, force_https=is_prod)
+    Talisman(app, content_security_policy=csp, force_https=False)
 
     from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas
     app.register_blueprint(auth.bp)
