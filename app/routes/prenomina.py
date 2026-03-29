@@ -286,17 +286,19 @@ def editar(fecha_str):
         p.total_horas_calculadas = to_dec(total_horas)
     
     incidencias_por_trabajador = {}
-    incidencias_descontables = ['Falta', 'Retardo', 'Falta checada de entrada', 'Falta checada de salida', 'Permiso', 'Luto', 'Casamiento']
     for r in reportes:
         for reg in r.registros:
-            if reg.incidencia and reg.incidencia in incidencias_descontables:
+            if reg.incidencia and str(reg.incidencia).strip() != '':
                 if reg.trabajador_id not in incidencias_por_trabajador:
                     incidencias_por_trabajador[reg.trabajador_id] = []
-                incidencias_por_trabajador[reg.trabajador_id].append({
-                    'fecha': reg.fecha.strftime('%Y-%m-%d'),
-                    'incidencia': reg.incidencia,
-                    'horas': float(reg.horas_productivas or 0)  # horas no es monetario
-                })
+                # Evitar duplicados exactos si hay dos registros del mismo día/incidencia (mismo proyecto a veces)
+                existe = any(i['fecha'] == reg.fecha.strftime('%Y-%m-%d') and i['incidencia'] == reg.incidencia for i in incidencias_por_trabajador[reg.trabajador_id])
+                if not existe:
+                    incidencias_por_trabajador[reg.trabajador_id].append({
+                        'fecha': reg.fecha.strftime('%Y-%m-%d'),
+                        'incidencia': reg.incidencia,
+                        'horas': float(reg.horas_productivas or 0)
+                    })
     
     # Préstamos activos por trabajador
     prestamos_por_trabajador = {}
