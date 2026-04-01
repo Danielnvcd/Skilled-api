@@ -8,10 +8,11 @@ Un sistema integral basado en web para la gestión de nóminas, empleados y repo
 
 - **Gestión de Empleados**: Altas, bajas, y edición con múltiples campos (laborales, personales, médicos y financieros).
 - **Carga Masiva (Excel)**: Soporte completo para carga y descarga de plantillas en formato `.xlsx`.
-- **Generación de Reportes**: Exportación a PDF de recibos y constancias generados en tiempo real.
-- **Seguridad y Rendimiento**: Protección con `Flask-Talisman` e integraciones con `Redis` para balancear peticiones (`Flask-Limiter`).
+- **Generación de Reportes Precisos**: Exportación a PDF de recibos y constancias, sumado a reportes en Excel de Totales por Proyecto e Histórico, con visibilidad garantizada incluso para trabajadores con 0 horas operativas (tipo "Cuadrado").
+- **Seguridad Perimetral Anti-DDoS**: Protección con `Flask-Talisman` y *Rate Limiting* estricto (vía Redis y `Flask-Limiter`) en endpoints sensibles como subidas masivas y generación de reportes pesados.
+- **Validación Fuerte de Archivos**: Análisis profundo de *Magic Bytes* para restringir el tamaño de fotografías (máximo 5MB) garantizando eficiencia en almacenamiento.
+- **Rendimiento y Observabilidad**: Consultas consolidadas en el Dashboard (reduciendo llamadas a la BD a la mitad), índices de rendimiento específicos en PostgreSQL, y middleware de logging para rastrear peticiones lentas mayores a 500ms.
 - **Base de Datos Robusta**: Mapeo ORM con `SQLAlchemy` conectado a **PostgreSQL**.
-- **Procesamiento de Archivos**: Validación de documentos y validación visual con imágenes (`Pillow`).
 
 ---
 
