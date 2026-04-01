@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from app.models import User
-from app.extensions import db
+from app.extensions import db, limiter
 from app.utils import login_required, admin_required, is_strong_password, allowed_image_file
 
 bp = Blueprint('users', __name__, url_prefix='/users')
@@ -58,6 +58,7 @@ def add_user():
 @bp.route('/update_profile/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required
+@limiter.limit("10 per minute")
 def update_profile(user_id):
     user = User.query.get_or_404(user_id)
     

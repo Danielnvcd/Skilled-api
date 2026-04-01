@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
 from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file
 from werkzeug.utils import secure_filename
@@ -85,6 +85,7 @@ def bajas():
 
 @bp.route('/agregar', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def agregar():
     try:
         data = request.form
@@ -223,6 +224,7 @@ def importar():
 
 @bp.route('/procesar_importacion', methods=['POST'])
 @login_required
+@limiter.limit("5 per minute")
 def procesar_importacion():
     if 'archivo_excel' not in request.files:
         flash('No se seleccionó ningún archivo.', 'danger')
@@ -685,6 +687,7 @@ def reactivar(id):
 
 @bp.route('/<int:id>/documentos', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def upload_documento(id):
     t = Trabajador.query.get_or_404(id)
     

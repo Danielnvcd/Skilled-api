@@ -2,7 +2,7 @@ from flask import Blueprint, render_template
 from app.utils import login_required
 from app.models import Trabajador, Proyecto, AuditLog, DocumentoTrabajador, CredencialPlanta
 from app.extensions import db
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, case
 from datetime import datetime, timedelta, date
 
 bp = Blueprint('main', __name__)
@@ -10,15 +10,22 @@ bp = Blueprint('main', __name__)
 @bp.route('/')
 @login_required
 def home():
-    # Tarjetas de resumen
-    total_trabajadores = Trabajador.query.count()
-    total_proyectos = Proyecto.query.count()
-    proyectos_activos = Proyecto.query.filter_by(activo=True).count()
-    
-    # Trabajadores agregados este mes
     current_month = datetime.now().month
     current_year = datetime.now().year
-    # Asuminos 'fecha_ingreso' para nuevos ingresos. Contamos cuantos entraron este mes.
+
+    # Consolidar 4 counts en 1 sola query
+    stats = db.session.query(
+        func.count(Trabajador.id)
+    ).first()
+    total_trabajadores = stats[0]
+    
+    proj_stats = db.session.query(
+        func.count(Proyecto.id),
+        func.count(case((Proyecto.activo == True, 1)))
+    ).first()
+    total_proyectos = proj_stats[0]
+    proyectos_activos = proj_stats[1]
+    
     nuevos_ingresos = Trabajador.query.filter(
         extract('month', Trabajador.fecha_ingreso) == current_month,
         extract('year', Trabajador.fecha_ingreso) == current_year

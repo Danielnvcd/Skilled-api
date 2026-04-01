@@ -3,9 +3,8 @@ from flask import Blueprint, send_file, flash, redirect, current_app, request, u
 from sqlalchemy import func
 from datetime import datetime
 import pandas as pd
-from openpyxl.styles import Font, PatternFill, Alignment
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import (
     Trabajador, Prenomina, ReporteSemanal, RegistroDiarioHoras,
     Proyecto, Prestamo, AjustePeriodo, AjusteTrabajadorPeriodo, AjusteDescuento,
@@ -103,6 +102,7 @@ def _aplicar_estilos_y_retornar(writer, output, filename):
 @bp.route('/excel_prenomina/<fecha_str>', methods=['GET'])
 @login_required
 @admin_required
+@limiter.limit("10 per minute")
 def excel_prenomina(fecha_str):
     try:
         try:
@@ -194,6 +194,7 @@ def excel_prenomina(fecha_str):
 @bp.route('/excel_historico/<fecha_str>', methods=['GET'])
 @login_required
 @admin_required
+@limiter.limit("10 per minute")
 def excel_historico(fecha_str):
     try:
         try:
@@ -255,6 +256,7 @@ def excel_historico(fecha_str):
 @bp.route('/excel_proyecto_total/<int:proyecto_id>', methods=['GET'])
 @login_required
 @admin_required
+@limiter.limit("10 per minute")
 def excel_proyecto_total(proyecto_id):
     try:
         proyecto = Proyecto.query.get_or_404(proyecto_id)
@@ -272,8 +274,7 @@ def excel_proyecto_total(proyecto_id):
         for rep in reportes:
             # Find workers that participated in this project this week
             trabajadores_in_project = db.session.query(RegistroDiarioHoras.trabajador_id).filter(
-                RegistroDiarioHoras.reporte_id == rep.id, 
-                RegistroDiarioHoras.horas_productivas > 0
+                RegistroDiarioHoras.reporte_id == rep.id
             ).distinct().all()
             
             t_ids = [t[0] for t in trabajadores_in_project]
@@ -347,6 +348,7 @@ def excel_proyecto_total(proyecto_id):
 @bp.route('/excel_prestamos/<int:trabajador_id>', methods=['GET'])
 @login_required
 @admin_required
+@limiter.limit("10 per minute")
 def excel_prestamos(trabajador_id):
     try:
         trabajador = Trabajador.query.get_or_404(trabajador_id)
@@ -402,6 +404,7 @@ def excel_prestamos(trabajador_id):
 @bp.route('/excel_ajustes/<int:periodo_id>', methods=['GET'])
 @login_required
 @admin_required
+@limiter.limit("10 per minute")
 def excel_ajustes(periodo_id):
     try:
         from app.models import AjustePeriodo, AjusteDescuento, AjusteTrabajadorPeriodo

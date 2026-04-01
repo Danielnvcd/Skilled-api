@@ -20,8 +20,13 @@ def app():
     application.config.update({
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,   # Desactivar CSRF en tests
+        'RATELIMIT_ENABLED': False,  # Desactivar Limiter en tests
         'SERVER_NAME': 'localhost',
     })
+    
+    # Asegurar que el limiter esté apagado durante toda la ejecución
+    from app.extensions import limiter
+    limiter.enabled = False
 
     with application.app_context():
         _db.create_all()

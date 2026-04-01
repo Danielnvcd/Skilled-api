@@ -4,7 +4,6 @@ __pycache__/
 *.pyc
 app/uploads/
 uploads/
-migrations/
 *.db
 app.db
 .vscode

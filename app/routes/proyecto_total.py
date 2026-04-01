@@ -57,8 +57,7 @@ def index():
             trabajadores_in_project = db.session.query(
                 RegistroDiarioHoras.trabajador_id
             ).filter(
-                RegistroDiarioHoras.reporte_id == reporte.id,
-                RegistroDiarioHoras.horas_productivas > 0
+                RegistroDiarioHoras.reporte_id == reporte.id
             ).distinct().all()
             t_ids = [t[0] for t in trabajadores_in_project]
             

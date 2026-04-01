@@ -151,6 +151,26 @@ def create_app():
         flash("Has excedido el número de intentos permitidos. Por favor espera unos minutos.", "danger")
         return redirect(url_for('main.home'))
 
+    # ── Observabilidad: logging de requests lentos y errores ──
+    import time as _time
+
+    @app.before_request
+    def _start_timer():
+        request._start_time = _time.time()
+
+    @app.after_request
+    def _log_request(response):
+        if request.endpoint and 'static' in request.endpoint:
+            return response
+        elapsed_ms = (_time.time() - getattr(request, '_start_time', _time.time())) * 1000
+        if elapsed_ms > 500 or response.status_code >= 400:
+            app.logger.log(
+                logging.WARNING if response.status_code >= 400 else logging.INFO,
+                "[PERF] %s %s -> %s (%.0fms)",
+                request.method, request.path, response.status_code, elapsed_ms
+            )
+        return response
+
     with app.app_context():
         os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
         # db.create_all() # User should use migrations

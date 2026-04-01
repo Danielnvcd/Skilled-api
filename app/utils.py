@@ -100,13 +100,15 @@ def allowed_file(file_storage):
 # ──────────────────────────────────────────────
 ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png'}
 ALLOWED_IMAGE_MIMES = {'image/jpeg', 'image/png'}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB máximo para fotos de perfil
 
 def allowed_image_file(file_storage):
-    """Valida que el archivo sea una imagen real (JPG/PNG).
+    """Valida que el archivo sea una imagen real (JPG/PNG) de máximo 5MB.
     
     A diferencia de allowed_file(), esta función:
     - Solo acepta extensiones de imagen (jpg, jpeg, png)
     - Valida magic bytes con filetype
+    - Rechaza archivos > 5MB
     - Rechaza cualquier otro tipo aunque tenga extensión de imagen
     
     Usar para: fotos de perfil de trabajadores y usuarios.
@@ -118,6 +120,15 @@ def allowed_image_file(file_storage):
     ext = filename.rsplit('.', 1)[1].lower()
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         logging.warning(f"Foto rechazada: extensión '{ext}' no permitida para {filename}")
+        return False
+
+    # Verificar tamaño: leer todo el contenido para medir, luego resetear
+    file_storage.seek(0, 2)  # Ir al final del archivo
+    file_size = file_storage.tell()
+    file_storage.seek(0)  # Resetear al inicio
+    
+    if file_size > MAX_IMAGE_SIZE:
+        logging.warning(f"Foto rechazada: {filename} excede el límite de {MAX_IMAGE_SIZE // (1024*1024)}MB ({file_size} bytes)")
         return False
 
     # Leer primeros bytes para verificar magic number
