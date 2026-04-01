@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from app.extensions import db
 from app.models import Proyecto, Trabajador, User
-from app.utils import login_required, log_action
+from app.utils import login_required, log_action, admin_required
 import traceback
 import json
 
@@ -18,6 +18,7 @@ def index():
 
 @bp.route('/agregar', methods=['POST'])
 @login_required
+@admin_required
 def agregar():
     try:
         data = request.form
@@ -97,6 +98,7 @@ def get_proyecto(id):
 
 @bp.route('/editar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def editar(id):
     try:
         p = Proyecto.query.get_or_404(id)

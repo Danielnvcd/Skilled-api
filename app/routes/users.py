@@ -1,14 +1,11 @@
-import re
 import os
 import uuid
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, send_from_directory
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, send_from_directory, jsonify
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash
 from app.models import User
 from app.extensions import db
-from app.extensions import db
-from app.utils import login_required, admin_required, is_strong_password
+from app.utils import login_required, admin_required, is_strong_password, allowed_image_file
 
 bp = Blueprint('users', __name__, url_prefix='/users')
 
@@ -71,8 +68,7 @@ def update_profile(user_id):
     
     profile_pic = request.files.get('profile_pic')
     if profile_pic and profile_pic.filename != '':
-        from app.utils import allowed_file
-        if allowed_file(profile_pic):
+        if allowed_image_file(profile_pic):
             ext = profile_pic.filename.rsplit('.', 1)[-1].lower() if '.' in profile_pic.filename else ''
             filename = secure_filename(profile_pic.filename)
             unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
@@ -90,7 +86,7 @@ def update_profile(user_id):
             
             user.profile_pic = unique_filename
         else:
-            flash('El archivo no cumple con el formato o contenido permitido (solo JPG/PNG o es un archivo corrupto/vacío).', 'warning')
+            flash('Foto rechazada: solo se permiten imágenes JPG o PNG reales.', 'warning')
     
     try:
         db.session.commit()
@@ -159,11 +155,11 @@ def serve_profile_pic(filename):
     user = User.query.get(user_id)
     
     if not user:
-        return "No autorizado", 403
+        return jsonify({'error': 'No autorizado'}), 403
         
     # El usuario solo puede ver su propia foto, a menos que sea admin
     # "default.png" o similar (si existiera una general) también debe permitirse si se usa en la UI
     if user.role not in ['admin', 'super_admin'] and user.profile_pic != filename and filename != 'default.png':
-        return "Acceso denegado", 403
+        return jsonify({'error': 'Acceso denegado'}), 403
         
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)

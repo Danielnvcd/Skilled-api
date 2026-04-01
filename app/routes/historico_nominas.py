@@ -63,8 +63,7 @@ def detalle(fecha_str):
     for r in reportes:
         # Find all workers that participated in this specific project this week
         trabajadores_in_project = db.session.query(RegistroDiarioHoras.trabajador_id).filter(
-            RegistroDiarioHoras.reporte_id == r.id, 
-            RegistroDiarioHoras.horas_productivas > 0
+            RegistroDiarioHoras.reporte_id == r.id
         ).distinct().all()
         
         t_ids = [t[0] for t in trabajadores_in_project]
@@ -96,8 +95,7 @@ def imprimir_proyecto(fecha_str, proyecto_id):
         
     # Find workers that participated in this project this week
     trabajadores_in_project = db.session.query(RegistroDiarioHoras.trabajador_id).filter(
-        RegistroDiarioHoras.reporte_id == reporte.id, 
-        RegistroDiarioHoras.horas_productivas > 0
+        RegistroDiarioHoras.reporte_id == reporte.id
     ).distinct().all()
     t_ids = [t[0] for t in trabajadores_in_project]
     

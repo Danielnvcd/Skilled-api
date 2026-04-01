@@ -96,6 +96,49 @@ def allowed_file(file_storage):
     return True
 
 # ──────────────────────────────────────────────
+# Validación estricta para fotos de perfil (solo imágenes reales)
+# ──────────────────────────────────────────────
+ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png'}
+ALLOWED_IMAGE_MIMES = {'image/jpeg', 'image/png'}
+
+def allowed_image_file(file_storage):
+    """Valida que el archivo sea una imagen real (JPG/PNG).
+    
+    A diferencia de allowed_file(), esta función:
+    - Solo acepta extensiones de imagen (jpg, jpeg, png)
+    - Valida magic bytes con filetype
+    - Rechaza cualquier otro tipo aunque tenga extensión de imagen
+    
+    Usar para: fotos de perfil de trabajadores y usuarios.
+    """
+    filename = file_storage.filename
+    if not filename or '.' not in filename:
+        return False
+
+    ext = filename.rsplit('.', 1)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        logging.warning(f"Foto rechazada: extensión '{ext}' no permitida para {filename}")
+        return False
+
+    # Leer primeros bytes para verificar magic number
+    header = file_storage.read(2048)
+    file_storage.seek(0)  # IMPORTANTE: resetear posición del stream
+
+    kind = filetype.guess(header)
+    if kind is None:
+        logging.warning(f"Foto rechazada: no se pudo determinar el tipo de {filename}")
+        return False
+
+    if kind.mime not in ALLOWED_IMAGE_MIMES:
+        logging.warning(
+            f"Security Alert: Foto rechazada por MIME inválido para {filename}. "
+            f"Extensión: {ext}, MIME detectado: {kind.mime}"
+        )
+        return False
+
+    return True
+
+# ──────────────────────────────────────────────
 # Matriz declarativa: rol → blueprints permitidos
 # '*' = acceso total.  Agregar/quitar permisos aquí.
 # ──────────────────────────────────────────────

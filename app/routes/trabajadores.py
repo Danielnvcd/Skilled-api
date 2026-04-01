@@ -3,14 +3,14 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
-from app.utils import login_required, log_action, admin_required
+from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file
 from werkzeug.utils import secure_filename
 import traceback
 import json
 import os
+import time
 from datetime import datetime as dt
 import pandas as pd
-from app.utils import allowed_file
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
 
@@ -173,15 +173,14 @@ def agregar():
             observaciones=data.get('observaciones')
         )
         
-        # Handle Profile Picture
+        # Handle Profile Picture (solo JPG/PNG reales)
         if 'foto_perfil' in request.files:
             file = request.files['foto_perfil']
             if file and file.filename != '':
-                if not allowed_file(file):
-                    flash('Foto de perfil rechazada por formato o contenido incorrecto.', 'danger')
+                if not allowed_image_file(file):
+                    flash('Foto de perfil rechazada: solo se permiten imágenes JPG o PNG reales.', 'danger')
                     return redirect(url_for('trabajadores.index'))
                 filename = secure_filename(file.filename)
-                import time
                 unique_filename = f"pp_{int(time.time())}_{filename}"
                 pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
                 os.makedirs(pp_folder, exist_ok=True)
@@ -552,12 +551,12 @@ def editar(id):
         t.ubicacion_estado = data.get('ubicacion_estado')
         t.observaciones = data.get('observaciones')
         
-        # Handle Profile Picture Edit
+        # Handle Profile Picture Edit (solo JPG/PNG reales)
         if 'foto_perfil' in request.files:
             file = request.files['foto_perfil']
             if file and file.filename != '':
-                if not allowed_file(file):
-                    flash('Foto de perfil rechazada por formato o contenido incorrecto.', 'danger')
+                if not allowed_image_file(file):
+                    flash('Foto de perfil rechazada: solo se permiten imágenes JPG o PNG reales.', 'danger')
                     return redirect(url_for('trabajadores.index'))
                 # Delete old profile picture if exists
                 if t.foto_perfil:
@@ -569,7 +568,6 @@ def editar(id):
                         current_app.logger.error(f"Error deleting old profile pic: {e}")
                 
                 filename = secure_filename(file.filename)
-                import time
                 unique_filename = f"pp_{int(time.time())}_{filename}"
                 pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
                 os.makedirs(pp_folder, exist_ok=True)
@@ -702,7 +700,6 @@ def upload_documento(id):
             return jsonify({'error': 'File format not allowed or file is corrupt'}), 400
         filename = secure_filename(file.filename)
         # Create a unique filename to prevent overwrites
-        import time
         unique_filename = f"{int(time.time())}_{filename}"
         
         # Save path: uploads/trabajadores/<id>/
@@ -744,7 +741,7 @@ def get_documento(doc_id):
     doc = DocumentoTrabajador.query.get_or_404(doc_id)
     t = doc.trabajador
     if not is_authorized_for_worker(t):
-        return "Acceso denegado", 403
+        return jsonify({'error': 'Acceso denegado'}), 403
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], doc.ruta_archivo)
 
 @bp.route('/foto/<int:id>', methods=['GET'])
@@ -752,9 +749,9 @@ def get_documento(doc_id):
 def get_foto_perfil(id):
     t = Trabajador.query.get_or_404(id)
     if not is_authorized_for_worker(t):
-        return "Acceso denegado", 403
+        return jsonify({'error': 'Acceso denegado'}), 403
     if not t.foto_perfil:
-        return "Not found", 404
+        return jsonify({'error': 'No encontrado'}), 404
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
     
 @bp.route('/documento/<int:doc_id>', methods=['DELETE'])

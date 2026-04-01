@@ -384,3 +384,96 @@ class TestCalcularPreviewPrenominaFestivos:
         # manual 120 + perfil 50 = 170
         assert float(preview[0].pago_viaticos) == 170.0
 
+
+class TestFaltaSinDescuentoAutomatico:
+    """Verificar que las faltas NO generan descuento automático en la prenómina.
+    
+    Las incidencias (Falta, Retardo, etc.) se muestran en la vista de edición
+    pero el admin decide manualmente cuánto descontar vía el API de descuentos.
+    """
+
+    def test_falta_no_descuenta_automaticamente(self, db, trabajador, proyecto):
+        """Un trabajador con 'Falta' debe tener descuento_incidencias = 0."""
+        from app.routes.prenomina import calcular_preview_prenomina
+        from app.models import ReporteSemanal, RegistroDiarioHoras
+        from datetime import date, time
+
+        trabajador.tipo_nomina = 'Semanal'
+        trabajador.salario_real_pactado_x_sem = 5000
+        db.session.commit()
+
+        reporte = ReporteSemanal(
+            proyecto_id=proyecto.id,
+            fecha_inicio_semana=date(2025, 8, 5),
+            fecha_fin_semana=date(2025, 8, 11),
+            estado='TERMINADO'
+        )
+        db.session.add(reporte)
+        db.session.commit()
+
+        # Día 1: Trabajó normal
+        reg1 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 8, 5), hora_entrada=time(8, 0), hora_salida=time(18, 0),
+            tomo_comida=True, horas_productivas=10
+        )
+        # Día 2: FALTA — sin horas productivas
+        reg2 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 8, 6), hora_entrada=None, hora_salida=None,
+            incidencia='Falta', horas_productivas=0
+        )
+        # Día 3: RETARDO — sin horas productivas
+        reg3 = RegistroDiarioHoras(
+            reporte_id=reporte.id, trabajador_id=trabajador.id,
+            fecha=date(2025, 8, 7), hora_entrada=None, hora_salida=None,
+            incidencia='Retardo', horas_productivas=0
+        )
+        db.session.add_all([reg1, reg2, reg3])
+        db.session.commit()
+
+        preview = calcular_preview_prenomina(date(2025, 8, 5), [reporte])
+
+        assert len(preview) == 1
+        p = preview[0]
+        # descuento_incidencias debe ser 0 — NO hay descuento automático
+        assert float(p.descuento_incidencias) == 0.0
+        # El salario base debe seguir siendo el pactado (Semanal = pago completo)
+        assert float(p.salario_base) == 5000.0
+
+    def test_falta_se_descuenta_manualmente_via_api(self, logged_in_admin, db, trabajador):
+        """El admin puede agregar un descuento manual por concepto de falta."""
+        import json
+        from datetime import date, timedelta
+
+        pren = Prenomina(
+            trabajador_id=trabajador.id,
+            fecha_inicio=date(2025, 8, 5),
+            fecha_fin=date(2025, 8, 11),
+            estado='ABIERTA',
+            salario_base=5000,
+            total_percepciones=5000,
+            total_deducciones=0,
+            total_a_pagar=5000,
+        )
+        db.session.add(pren)
+        db.session.commit()
+
+        # Admin decide descontar $800 por la falta (monto a su criterio)
+        resp = logged_in_admin.post('/prenomina/api/descuento',
+            data=json.dumps({
+                'prenomina_id': pren.id,
+                'tipo': 'INCIDENCIA',
+                'concepto': 'Falta del 06/Ago',
+                'monto': 800,
+                'fecha_incidencia': '2025-08-06'
+            }),
+            content_type='application/json'
+        )
+        result = resp.get_json()
+        assert result['success'] is True
+
+        # Verificar que los totales se actualizaron
+        db.session.refresh(pren)
+        assert float(pren.total_deducciones) == 800.0
+        assert float(pren.total_a_pagar) == 4200.0  # 5000 - 800
