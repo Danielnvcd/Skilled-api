@@ -93,7 +93,7 @@ class Trabajador(db.Model):
     # Salarios y Deducciones (Financiero)
     sb = db.Column(db.Numeric(10, 2))
     sdi = db.Column(db.Numeric(10, 2))
-    letra = db.Column(db.String(10))
+    letra = db.Column(db.String(100))
     salario_real_pactado_x_sem = db.Column(db.Numeric(10, 2))
     hr_extra = db.Column(db.Numeric(10, 2))
     infonavit = db.Column(db.Numeric(10, 2))

@@ -348,7 +348,7 @@ def procesar_importacion():
                 tipo_nomina=get_str('Tipo de Nomina (Semanal/Por hora/Cuadrado)', 100),
                 sb=get_float('Sueldo Base (SB)'),
                 sdi=get_float('Salario Diario Integrado (SDI)'),
-                letra=get_str('Letra', 10),
+                letra=get_str('Letra', 100),
                 hr_extra=get_float('Horas Extra'),
                 infonavit=get_float('Infonavit'),
                 caja_ahorro=get_float('Caja de Ahorro'),
