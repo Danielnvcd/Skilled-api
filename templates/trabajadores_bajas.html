@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}?v=31">
 
 <div class="trabajadores-wrapper">
     <div class="header-card">
@@ -33,12 +33,12 @@
                         value="{{ q }}">
                     {% if q %}
                     <a href="{{ url_for('trabajadores.bajas') }}" title="Limpiar búsqueda"
-                        style="margin-left: 8px; color: #6B7280;"><i class="fas fa-times"></i></a>
+                        style="margin-left: 8px; color: var(--text-muted);"><i class="fas fa-times"></i></a>
                     {% endif %}
                 </form>
             </div>
             <div class="filters">
-                <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ pagination.total }}</span>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">Total Registros: {{ pagination.total }}</span>
             </div>
         </div>
         <table class="modern-table" id="Table">
@@ -59,8 +59,8 @@
                     data-id="{{ t.id }}">
                     <td style="font-weight: 600; color: var(--primary);">{{ t.no_empleado }}</td>
                     <td>
-                        <div style="font-weight: 600; color: #111827;">{{ t.nombre }}</div>
-                        <div style="font-size: 0.8rem; color: #6B7280;">{{ t.nombre_apellidos }}</div>
+                        <div style="font-weight: 600; color: var(--text-main);">{{ t.nombre }}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">{{ t.nombre_apellidos }}</div>
                     </td>
                     <td>
                         <span class="badge area-default">{{ t.area or 'S/A' }}</span>
@@ -81,7 +81,7 @@
                                 </svg>
                             </button>
                             <button class="btn-icon edit-btn" data-id="{{ t.id }}" title="Editar"
-                                style="background:none; border:none; cursor:pointer; color: #4B5563;">
+                                style="background:none; border:none; cursor:pointer; color: var(--text-main);">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -103,7 +103,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" style="text-align: center; padding: 3rem; color: #6B7280;">
+                    <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-muted);">
                         No hay trabajadores registrados en la base de datos. Completa el formulario para iniciar.
                     </td>
                 </tr>
@@ -215,7 +215,7 @@
                         <div class="form-group">
                             <label>Salario Base Real Pactado ($)</label>
                             <input type="number" step="0.01" name="salario_real_pactado_x_sem" class="form-control">
-                            <small style="color: #6b7280; font-size: 0.75rem;">Si es 'Por hora', ingresa el pago por
+                            <small style="color: var(--text-muted); font-size: 0.75rem;">Si es 'Por hora', ingresa el pago por
                                 hora. Si es 'Semanal'/'Cuadrado', ingresa el pago semanal total.</small>
                         </div>
                         <div class="form-group">
@@ -429,7 +429,7 @@
 
                 <!-- Tab 4: Plantas -->
                 <div id="tab-plantas" class="tab-content">
-                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">El proyecto y ubicación se
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">El proyecto y ubicación se
                         asignan automáticamente desde la sección de Proyectos. Aquí puedes registrar credenciales de
                         planta y observaciones operativas.</p>
                     <div class="form-grid">
@@ -439,8 +439,8 @@
                         </div>
                     </div>
 
-                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
-                    <h4 style="margin-bottom: 10px; font-size: 1rem; color: #1f2937;">Credenciales de Planta</h4>
+                    <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 10px; font-size: 1rem; color: var(--text-main);">Credenciales de Planta</h4>
 
                     <div class="form-grid" style="align-items: end;">
                         <div class="form-group" style="grid-column: span 1;">
@@ -484,7 +484,7 @@
 
                 <!-- Tab 5: Documentos -->
                 <div id="tab-documentos" class="tab-content">
-                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">Sube expedientes y documentos
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Sube expedientes y documentos
                         (CURP, Acta Nacimiento, Identificaciones) para este trabajador.</p>
 
                     <div class="form-grid upload-section" style="align-items: end; margin-bottom: 20px;">
@@ -524,7 +524,7 @@
                         </div>
                     </div>
 
-                    <h4 style="margin-bottom: 10px; font-size: 1rem; color: #1f2937;">Archivos Subidos</h4>
+                    <h4 style="margin-bottom: 10px; font-size: 1rem; color: var(--text-main);">Archivos Subidos</h4>
                     <div style="margin-top: 10px;">
                         <ul id="documentosList"
                             style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px;">
@@ -549,12 +549,12 @@
     <div class="modal glass-modal-content"
         style="max-width: 700px; padding: 0; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
         <div class="modal-header"
-            style="background: transparent; color: #111827; padding: 20px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+            style="background: transparent; color: var(--text-main); padding: 20px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; color: #111827;"><i class="fas fa-id-card"
+                <h3 style="margin: 0; font-size: 1.2rem; font-weight: 600; color: var(--text-main);"><i class="fas fa-id-card"
                         style="margin-right: 8px; color: var(--primary-color);"></i> Ficha del Trabajador</h3>
                 <button id="btnCloseViewModal"
-                    style="background: none; border: none; color: #6B7280; cursor: pointer; font-size: 1.2rem;"><i
+                    style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;"><i
                         class="fas fa-times"></i></button>
             </div>
         </div>
@@ -563,22 +563,22 @@
 
             <!-- Header section with Profile Pic and Core Info -->
             <div
-                style="display: flex; gap: 24px; margin-bottom: 30px; border-bottom: 1px solid #e5e7eb; padding-bottom: 24px; align-items: center;">
+                style="display: flex; gap: 24px; margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 24px; align-items: center;">
                 <div id="viewAvatarContainer"
                     style="width: 120px; height: 120px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: bold; color: white; background: var(--primary-color); border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden;">
                     <span id="viewAvatarInitial">...</span>
                 </div>
                 <div style="flex: 1;">
-                    <h2 id="viewNombreCompleto" style="margin: 0 0 8px 0; color: #111827; font-size: 1.5rem;">
+                    <h2 id="viewNombreCompleto" style="margin: 0 0 8px 0; color: var(--text-main); font-size: 1.5rem;">
                         Cargando...</h2>
-                    <p style="margin: 0; color: #4b5563; font-size: 0.95rem; margin-bottom: 4px;"><i
+                    <p style="margin: 0; color: var(--text-main); font-size: 0.95rem; margin-bottom: 4px;"><i
                             class="fas fa-briefcase" style="width: 20px; color: var(--primary-color);"></i> <span
                             id="viewPuesto">Puesto</span> - <span id="viewArea" style="font-weight: 500;">Área</span>
                     </p>
-                    <p style="margin: 0; color: #4b5563; font-size: 0.95rem;"><i class="fas fa-hashtag"
+                    <p style="margin: 0; color: var(--text-main); font-size: 0.95rem;"><i class="fas fa-hashtag"
                             style="width: 20px; color: var(--primary-color);"></i> No. Empleado: <strong
                             id="viewNoEmpleado">000</strong></p>
-                    <p style="margin: 0; color: #4b5563; font-size: 0.95rem; margin-top: 4px;"><i
+                    <p style="margin: 0; color: var(--text-main); font-size: 0.95rem; margin-top: 4px;"><i
                             class="fas fa-envelope" style="width: 20px; color: var(--primary-color);"></i> <span
                             id="viewCorreo">correo@ejemplo.com</span> | <i class="fas fa-phone"
                             style="width: 20px; margin-left:8px; color: var(--primary-color);"></i> <span
@@ -592,25 +592,25 @@
                 <!-- Left Column -->
                 <div>
                     <h4
-                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; font-size: 1.05rem;">
+                        style="color: var(--text-main); border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; font-size: 1.05rem;">
                         Datos Personales</h4>
                     <ul
-                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 10px;">
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; flex-direction: column; gap: 10px;">
                         <li><strong>RFC:</strong> <span id="viewRfc">---</span></li>
                         <li><strong>CURP:</strong> <span id="viewCurp">---</span></li>
                         <li><strong>NSS:</strong> <span id="viewNss">---</span></li>
                         <li><strong>Nacimiento:</strong> <span id="viewNacimiento">---</span></li>
                         <li><strong>Sangre:</strong> <span id="viewSangre"
-                                style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 999px; font-weight: 600; font-size:0.8rem;">---</span>
+                                style="background: var(--bg-card); color: #991b1b; padding: 2px 8px; border-radius: 999px; font-weight: 600; font-size:0.8rem;">---</span>
                         </li>
                         <li><strong>Alergias:</strong> <span id="viewAlergias">---</span></li>
                     </ul>
 
                     <h4
-                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
+                        style="color: var(--text-main); border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
                         Emergencia</h4>
                     <ul
-                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 10px;">
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; flex-direction: column; gap: 10px;">
                         <li><strong>Contacto:</strong> <span id="viewContactoE">---</span></li>
                         <li><strong>Teléfono:</strong> <span id="viewTelefonoE">---</span></li>
                     </ul>
@@ -619,10 +619,10 @@
                 <!-- Right Column -->
                 <div>
                     <h4
-                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; font-size: 1.05rem;">
+                        style="color: var(--text-main); border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; font-size: 1.05rem;">
                         Datos Laborales</h4>
                     <ul
-                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 10px;">
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; flex-direction: column; gap: 10px;">
                         <li><strong>Fecha Ingreso:</strong> <span id="viewIngreso">---</span></li>
                         <li><strong>Tipo Nómina:</strong> <span id="viewNomina">---</span></li>
                         <li><strong>Salario Pactado:</strong> $<span id="viewSalario">0.00</span></li>
@@ -632,21 +632,21 @@
                     </ul>
 
                     <h4
-                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
+                        style="color: var(--text-main); border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
                         Credenciales Activas</h4>
                     <ul id="viewCredentialsList"
-                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 8px;">
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; flex-direction: column; gap: 8px;">
                         <!-- Dynamic -->
-                        <li style="color: #9ca3af; font-style: italic;">Ninguna registrada.</li>
+                        <li style="color: var(--text-muted); font-style: italic;">Ninguna registrada.</li>
                     </ul>
 
                     <h4
-                        style="color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
+                        style="color: var(--text-main); border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; font-size: 1.05rem;">
                         Documentos del Expediente</h4>
                     <ul id="viewDocumentosList"
-                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: #4b5563; display: flex; flex-direction: column; gap: 8px;">
+                        style="list-style: none; padding: 0; margin: 0; font-size: 0.9rem; color: var(--text-main); display: flex; flex-direction: column; gap: 8px;">
                         <!-- Dynamic Documents will appear here -->
-                        <li style="color: #9ca3af; font-style: italic;">Ningún documento subido.</li>
+                        <li style="color: var(--text-muted); font-style: italic;">Ningún documento subido.</li>
                     </ul>
                 </div>
             </div>

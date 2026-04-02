@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}?v=4">
 {% endblock %}
 
@@ -61,7 +61,7 @@
             </button>
             {% elif estado_actual == 'ABIERTA' %}
             <a href="{{ url_for('prenomina.editar', fecha_str=fecha_str) }}" class="btn-primary"
-                style="background: linear-gradient(135deg, #F59E0B, #FBBF24);">
+                style="background: var(--bg-card);">
                 <i class="fa-solid fa-pen-to-square"></i> Editar Prenómina
             </a>
             {% else %}

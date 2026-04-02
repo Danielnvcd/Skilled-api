@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
 <style>
     .prenomina-empty {
         background: var(--bg-card);
@@ -13,7 +13,7 @@
     }
 
     .rep-card {
-        background: white;
+        background: var(--bg-card);
         padding: 1.5rem;
         border-radius: 12px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
@@ -45,7 +45,7 @@
     }
 
     .badge.pendiente {
-        background: #FEF3C7;
+        background: var(--bg-card);
         color: #92400E;
     }
 
@@ -90,7 +90,7 @@
                 <input type="date" id="searchFechaPrenomina"
                     style="flex: 0 0 auto; border: 1px solid var(--border); outline: none; background: transparent; font-size: 0.95rem; color: var(--text-main); padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer;">
                 <button type="button" id="clearSearchPrenomina" title="Limpiar filtro"
-                    style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0; display: none;">&times;</button>
+                    style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1.2rem; padding: 0; display: none;">&times;</button>
             </div>
 
             {# Global export removed #}
@@ -171,7 +171,7 @@
         {% else %}
         <div class="prenomina-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
+                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: var(--text-muted);">
                 <circle cx="12" cy="12" r="10"></circle>
                 <path d="M12 6v6l4 2"></path>
             </svg>

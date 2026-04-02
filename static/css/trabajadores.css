@@ -1,15 +1,5 @@
 /* trabajadores.css - Premium UI for Worker Management */
-:root {
-    --primary: #4F46E5;
-    --primary-hover: #4338CA;
-    --success: #10B981;
-    --warning: #F59E0B;
-    --danger: #EF4444;
-    --bg-card: #ffffff;
-    --text-main: #111827;
-    --text-muted: #6B7280;
-    --border: #E5E7EB;
-}
+
 
 .trabajadores-wrapper {
     max-width: 1400px;
@@ -46,10 +36,10 @@
     font-size: 1.75rem;
     font-weight: 800;
     margin: 0;
-    background: linear-gradient(135deg, #111827 0%, #4B5563 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-main);
+    
+    
+    
     letter-spacing: -0.02em;
 }
 
@@ -130,7 +120,7 @@
 }
 
 .modern-table th {
-    background-color: #F9FAFB;
+    background: var(--bg-body);
     color: var(--text-muted);
     font-size: 0.75rem;
     font-weight: 600;
@@ -150,7 +140,7 @@
 }
 
 .modern-table tbody tr:hover {
-    background-color: #F8FAFC;
+    background: var(--bg-card);
 
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     z-index: 1;
@@ -167,7 +157,7 @@
 }
 
 .badge.area-operaciones {
-    background: #E0E7FF;
+    background: var(--bg-card);
     color: #4338CA;
 }
 
@@ -177,8 +167,8 @@
 }
 
 .badge.area-default {
-    background: #F3F4F6;
-    color: #4B5563;
+    background: var(--border-hover);
+    color: var(--text-muted);
 }
 
 .no-salary-row td {
@@ -186,7 +176,7 @@
 }
 
 .glass-modal-content {
-    background: rgba(255, 255, 255, 0.92) !important;
+    background: var(--bg-card);
     backdrop-filter: blur(24px) !important;
     -webkit-backdrop-filter: blur(24px) !important;
     border: 1px solid rgba(255, 255, 255, 0.6) !important;
@@ -216,7 +206,7 @@
 }
 
 .modal-content {
-    background: white;
+    background: var(--bg-card);
     width: 90%;
     max-width: 900px;
     max-height: 90vh;
@@ -238,7 +228,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #F9FAFB;
+    background: var(--bg-body);
     border-radius: 16px 16px 0 0;
 }
 
@@ -338,11 +328,11 @@
     border-radius: 8px;
     font-size: 0.95rem;
     transition: all 0.2s;
-    background: #F9FAFB;
+    background: var(--bg-body);
 }
 
 .form-control:focus {
-    background: #fff;
+    background: var(--bg-card);
     border-color: var(--primary);
     outline: none;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
@@ -354,12 +344,12 @@
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
-    background: #F9FAFB;
+    background: var(--bg-body);
     border-radius: 0 0 16px 16px;
 }
 
 .btn-secondary {
-    background: white;
+    background: var(--bg-card);
     border: 1px solid var(--border);
     color: var(--text-main);
     padding: 0.75rem 1.5rem;
@@ -370,7 +360,7 @@
 }
 
 .btn-secondary:hover {
-    background: #F3F4F6;
+    background: var(--border-hover);
 }
 
 .header-actions {

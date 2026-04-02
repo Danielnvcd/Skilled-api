@@ -13,7 +13,7 @@
             <h1><i class="fas fa-chart-bar" style="color: #3b82f6; margin-right: 8px;"></i> Métricas</h1>
             <p>Visión general de credenciales por planta y permisos DC3 del personal activo.</p>
         </div>
-        <div style="font-size: 0.8rem; color: #9ca3af;">
+        <div style="font-size: 0.8rem; color: var(--text-muted);">
             <i class="fas fa-clock"></i> Datos en tiempo real
         </div>
     </div>
@@ -111,7 +111,7 @@
                             <td>{{ t.nombre }}</td>
                             <td>{{ t.puesto }}</td>
                             <td><code
-                                    style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem;">{{ t.credencial_id }}</code>
+                                    style="background: var(--bg-card); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem;">{{ t.credencial_id }}</code>
                             </td>
                             <td>{{ t.fecha_caducidad if t.fecha_caducidad else '---' }}</td>
                             <td>
@@ -127,7 +127,7 @@
             </div>
             {% endfor %}
             {% else %}
-            <p style="color: #9ca3af; font-style: italic;">No hay credenciales de planta registradas.</p>
+            <p style="color: var(--text-muted); font-style: italic;">No hay credenciales de planta registradas.</p>
             {% endif %}
         </div>
     </div>
@@ -166,7 +166,7 @@
                 </tbody>
             </table>
             {% else %}
-            <p style="color: #9ca3af; font-style: italic;">No hay empleados con Permiso DC3 registrado.</p>
+            <p style="color: var(--text-muted); font-style: italic;">No hay empleados con Permiso DC3 registrado.</p>
             {% endif %}
         </div>
     </div>

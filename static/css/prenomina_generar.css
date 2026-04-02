@@ -6,7 +6,7 @@
 }
 
 .recibo-card {
-    background: #ffffff;
+    background: var(--bg-card);
     border-radius: 12px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 20px 25px -5px rgba(0, 0, 0, 0.05);
     border: 1px solid rgba(226, 232, 240, 0.8);
@@ -33,7 +33,7 @@
 }
 
 .recibo-header {
-    background: linear-gradient(to bottom, #F8FAFC, #FFFFFF);
+    background: var(--bg-card);
     padding: 1rem 1.5rem;
     border-bottom: 1px solid rgba(226, 232, 240, 0.6);
     display: flex;
@@ -49,13 +49,13 @@
 .empleado-info .nombre {
     font-size: 1.1rem;
     font-weight: 800;
-    color: #0F172A;
+    color: var(--text-main);
     letter-spacing: -0.01em;
 }
 
 .empleado-info .meta {
     font-size: 0.8rem;
-    color: #64748B;
+    color: var(--text-muted);
     margin-top: 0.25rem;
     display: flex;
     gap: 0.5rem;
@@ -64,9 +64,9 @@
 }
 
 .empleado-info .meta strong {
-    color: #334155;
+    color: var(--text-main);
     font-weight: 600;
-    background: #F1F5F9;
+    background: var(--bg-card);
     padding: 1px 4px;
     border-radius: 4px;
 }
@@ -76,7 +76,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
-    background: #FFFFFF;
+    background: var(--bg-card);
 }
 
 @media (max-width: 768px) {
@@ -103,17 +103,17 @@
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
     font-size: 0.85rem;
-    color: #475569;
+    color: var(--text-main);
     border-radius: 6px;
     transition: background-color 0.2s ease, padding-left 0.2s ease;
 }
 
 .concept-item:nth-child(even):not(.total) {
-    background-color: #F8FAFC;
+    background: var(--bg-card);
 }
 
 .concept-item:hover:not(.total) {
-    background-color: #F1F5F9;
+    background: var(--bg-card);
     padding-left: 1rem; 
 }
 
@@ -160,7 +160,7 @@
 }
 
 .recibo-footer {
-    background: linear-gradient(to right, #F8FAFC, #F1F5F9);
+    background: var(--bg-card);
     padding: 1rem 1.5rem;
     border-top: 1px dashed rgba(203, 213, 225, 0.8); 
     display: flex;
@@ -171,8 +171,8 @@
 .gran-total {
     font-size: 1.4rem;
     font-weight: 900;
-    color: #0F172A;
-    background: linear-gradient(135deg, #0F172A, #334155);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-main);
+    background: none;
+    
+    
 }

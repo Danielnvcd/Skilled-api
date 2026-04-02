@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}?v=31">
 <style>
     .table-credenciales th {
         font-size: 0.8rem;
@@ -27,7 +27,7 @@
     .status-id {
         font-family: monospace;
         font-size: 0.75rem;
-        color: #374151;
+        color: var(--text-main);
         display: inline-block;
         margin-left: 6px;
         vertical-align: middle;
@@ -47,7 +47,7 @@
         width: 64px;
         height: 64px;
         border-radius: 50%;
-        background: white;
+        background: var(--bg-card);
         color: #3b5998;
         display: flex;
         align-items: center;
@@ -60,7 +60,7 @@
 
     .view-ficha-body {
         padding: 1.5rem;
-        background: white;
+        background: var(--bg-card);
     }
 
     .ficha-section h4 {
@@ -68,9 +68,9 @@
         font-size: 0.8rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #6b7280;
+        color: var(--text-muted);
         font-weight: 600;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--border);
         padding-bottom: 0.5rem;
     }
 
@@ -83,7 +83,7 @@
 
     .ficha-label {
         font-size: 0.8rem;
-        color: #6b7280;
+        color: var(--text-muted);
         font-weight: 500;
         width: 120px;
         flex-shrink: 0;
@@ -91,7 +91,7 @@
 
     .ficha-value {
         font-size: 0.85rem;
-        color: #111827;
+        color: var(--text-main);
         font-weight: 600;
         text-align: left;
         flex-grow: 1;
@@ -114,7 +114,7 @@
         padding: 0.35rem 0.75rem;
         border-radius: 6px;
         font-size: 0.8rem;
-        background: #ecfdf5;
+        background: var(--bg-card);
         border: 1px solid #a7f3d0;
     }
 
@@ -122,7 +122,7 @@
         margin-left: 6px;
         font-family: monospace;
         font-size: 0.75rem;
-        color: #374151;
+        color: var(--text-main);
     }
 
     .btn-view-ficha:hover {
@@ -155,7 +155,7 @@
                 <a href="{{ url_for('main.credenciales') }}" class="btn-secondary"
                     style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Limpiar Búsqueda</a>
                 {% endif %}
-                <span style="font-size: 0.85rem; color: #6B7280; font-weight: 500;">Total Registros: {{ pagination.total
+                <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Total Registros: {{ pagination.total
                     }}</span>
             </div>
         </div>
@@ -180,8 +180,8 @@
                 <tr class="worker-row" data-id="{{ t.id }}">
                     <td style="font-weight: 600; color: var(--primary); text-align: left;">{{ t.no_empleado }}</td>
                     <td style="text-align: left;">
-                        <div style="font-weight: 600; color: #111827;">{{ t.nombre }} {{ t.nombre_apellidos }}</div>
-                        <div style="font-size: 0.8rem; color: #6B7280;">{{ t.puesto or '' }}</div>
+                        <div style="font-weight: 600; color: var(--text-main);">{{ t.nombre }} {{ t.nombre_apellidos }}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">{{ t.puesto or '' }}</div>
                     </td>
                     <td style="text-align: left;"><span class="badge area-default">{{ t.area or 'S/A' }}</span></td>
                     <td style="text-align: left;">{{ t.ubicacion_estado or '-' }}</td>
@@ -212,12 +212,12 @@
                                 data-foto="{{ url_for('trabajadores.get_foto_perfil', id=t.id) if t.foto_perfil else '' }}"
                                 data-creds='{{ t.credenciales|map(attribute="planta")|list|tojson }}'
                                 data-credids='{{ creds|tojson }}'
-                                style="background: #eef2ff; color: #3b5998; border: 1px solid #c7d2fe; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s;">
+                                style="background: var(--bg-card); color: #3b5998; border: 1px solid #c7d2fe; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s;">
                                 <i class="fas fa-id-card" style="margin-right: 4px;"></i> Ver Ficha
                             </button>
                             {% if session.get('role') in ['admin', 'super_admin'] %}
                             <button class="btn-icon edit-btn" data-id="{{ t.id }}" title="Editar Credenciales"
-                                style="background:none; border:none; cursor:pointer; color: #4B5563;">
+                                style="background:none; border:none; cursor:pointer; color: var(--text-main);">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -230,7 +230,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 3rem; color: #6B7280;">
+                    <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-muted);">
                         No hay trabajadores registrados.
                     </td>
                 </tr>
@@ -279,7 +279,7 @@
                     {{ page_num }}
                 </a>
                 {% else %}
-                <span style="padding: 0.5rem 0.75rem; color: #6B7280;">...</span>
+                <span style="padding: 0.5rem 0.75rem; color: var(--text-muted);">...</span>
                 {% endif %}
                 {% endfor %}
 
@@ -330,7 +330,7 @@
             <div class="ficha-section" style="margin-top: 1rem;">
                 <h4>Credenciales de Planta</h4>
                 <div class="cred-chips" id="fichaCredChips">
-                    <p style="color: #9ca3af; font-size: 0.85rem; margin: 0;">Sin credenciales registradas</p>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">Sin credenciales registradas</p>
                 </div>
             </div>
         </div>

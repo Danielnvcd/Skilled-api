@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
 <!-- Select2 CSS for searchable dropdowns -->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css?v=20" rel="stylesheet" />
 {% endblock %}
 
 {% block content %}
@@ -38,7 +38,7 @@
             </form>
             {% else %}
             <span class="badge"
-                style="background:#E5E7EB; color:#4B5563; font-size: 0.9rem; padding: 0.5rem 1rem;">Reporte
+                style="background: var(--bg-card); color: var(--text-main); font-size: 0.9rem; padding: 0.5rem 1rem;">Reporte
                 Cerrado</span>
             {% endif %}
         </div>
@@ -198,7 +198,7 @@
                     <td style="font-weight:bold; color:var(--success);">{{ reg.horas_productivas or '0.00' }} hrs.</td>
                     <td>
                         {% if reg.incidencia %}
-                        <span class="badge" style="background:#FEE2E2; color:#B91C1C;">{{ reg.incidencia }}</span>
+                        <span class="badge" style="background: var(--bg-card); color:#B91C1C;">{{ reg.incidencia }}</span>
                         {% else %}
                         -
                         {% endif %}

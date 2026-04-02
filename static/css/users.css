@@ -1,16 +1,5 @@
 /* users.css - Premium UI for User Management */
-:root {
-    --primary: #4F46E5;
-    --primary-hover: #4338CA;
-    --danger: #E11D48;
-    --danger-hover: #BE123C;
-    --warning: #D97706;
-    --warning-hover: #B45309;
-    --bg-card: #FFFFFF;
-    --text-main: #111827;
-    --text-muted: #6B7280;
-    --border: #E5E7EB;
-}
+
 
 .user-management-wrapper {
     max-width: 1200px;
@@ -59,10 +48,10 @@
     font-weight: 800;
     color: var(--text-main);
     margin: 0;
-    background: linear-gradient(135deg, #111827 0%, #4B5563 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-main);
+    
+    
+    
     letter-spacing: -0.02em;
 }
 
@@ -115,7 +104,7 @@
 }
 
 .modern-table th {
-    background-color: #F9FAFB;
+    background: var(--bg-body);
     padding: 1rem 1.5rem;
     font-size: 0.75rem;
     font-weight: 600;
@@ -136,7 +125,7 @@
 }
 
 .table-row:hover {
-    background-color: #F3F4F6;
+    background: var(--border-hover);
 }
 
 .table-row:last-child td {
@@ -183,19 +172,19 @@
 }
 
 .role-admin {
-    background-color: #FFF1F2;
+    background: var(--bg-card);
     color: #E11D48;
     border: 1px solid #FECDD3;
 }
 
 .role-coordinador {
-    background-color: #EEF2FF;
+    background: var(--bg-card);
     color: #4F46E5;
     border: 1px solid #C7D2FE;
 }
 
 .role-supervisor {
-    background-color: #f5f3ff;
+    background: var(--bg-card);
     color: #5b21b6;
     border: 1px solid #ddd6fe;
 }
@@ -206,8 +195,8 @@
     align-items: center;
     gap: 1.25rem;
     padding: 0.75rem;
-    background-color: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 12px;
 }
 
@@ -215,7 +204,7 @@
     width: 55px;
     height: 55px;
     border-radius: 50%;
-    background-color: #F1F5F9;
+    background: var(--bg-card);
     border: 2px dashed #CBD5E1;
     display: flex;
     align-items: center;
@@ -247,7 +236,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.4rem 0.75rem;
-    background-color: #EEF2FF;
+    background: var(--bg-card);
     color: #4F46E5;
     border: 1px solid #C7D2FE;
     border-radius: 6px;
@@ -259,11 +248,11 @@
 }
 
 .btn-upload-horizontal:hover {
-    background-color: #E0E7FF;
+    background: var(--bg-card);
 }
 
 .file-upload-filename {
-    color: #64748B;
+    color: var(--text-muted);
     font-size: 0.8rem;
     white-space: nowrap;
     overflow: hidden;
@@ -283,9 +272,9 @@
 }
 
 .role-user {
-    background-color: #F3F4F6;
-    color: #374151;
-    border: 1px solid #E5E7EB;
+    background: var(--border-hover);
+    color: var(--text-main);
+    border: 1px solid var(--border);
 }
 
 /* Status */
@@ -310,7 +299,7 @@
 }
 
 .dot-offline {
-    background-color: #9CA3AF;
+    background-color: var(--text-muted);
 }
 
 @keyframes pulse-online {
@@ -376,12 +365,12 @@
 }
 
 .btn-delete {
-    background-color: #FEE2E2;
+    background: var(--bg-card);
     color: #EF4444;
 }
 
 .btn-delete:hover {
-    background-color: #FECACA;
+    background: var(--bg-card);
     transform: translateY(-1px);
 }
 
@@ -410,7 +399,7 @@
 }
 
 .modal-content {
-    background-color: #ffffff;
+    background: var(--bg-card);
     margin: 5% auto;
     padding: 2.5rem;
     width: 100%;
@@ -457,7 +446,7 @@
     position: absolute;
     top: 1.5rem;
     right: 1.5rem;
-    color: #9CA3AF;
+    color: var(--text-muted);
     font-size: 1.5rem;
     line-height: 1;
     cursor: pointer;
@@ -465,7 +454,7 @@
 }
 
 .close:hover {
-    color: #111827;
+    color: var(--text-main);
 }
 
 .modal h3 {
@@ -492,7 +481,7 @@
 .form-group select {
     width: 100%;
     padding: 0.75rem 1rem;
-    background-color: #F9FAFB;
+    background: var(--bg-body);
     border: 1px solid #D1D5DB;
     border-radius: 10px;
     font-size: 0.95rem;
@@ -503,7 +492,7 @@
 
 .form-group input:focus,
 .form-group select:focus {
-    background-color: #FFFFFF;
+    background: var(--bg-card);
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(59, 89, 152, 0.1);
     outline: none;
@@ -534,7 +523,7 @@
     color: var(--text-muted);
     margin-bottom: 1.5rem;
     padding: 0.75rem;
-    background: #F3F4F6;
+    background: var(--border-hover);
     border-radius: 8px;
     text-align: center;
     font-weight: 500;
@@ -556,7 +545,7 @@
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: white;
+    background: var(--bg-card);
     color: var(--primary);
     display: flex;
     align-items: center;
@@ -571,7 +560,7 @@
 
 .view-profile-body {
     padding: 2rem;
-    background: white;
+    background: var(--bg-card);
     border-bottom-left-radius: 20px;
     border-bottom-right-radius: 20px;
     display: flex;

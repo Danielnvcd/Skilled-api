@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}?v=31">
 {% endblock %}
 
 {% block content %}
@@ -37,7 +37,7 @@
                     style="flex: 0 0 auto; border: 1px solid var(--border); outline: none; background: transparent; font-size: 0.95rem; color: var(--text-main); padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer;">
                 {% if search_date %}
                 <a href="{{ url_for('historico.index') }}" title="Limpiar filtro"
-                    style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0 0.5rem; text-decoration: none;">&times;</a>
+                    style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1.2rem; padding: 0 0.5rem; text-decoration: none;">&times;</a>
                 {% endif %}
             </form>
             {# Global export removed #}
@@ -108,7 +108,7 @@
         {% else %}
         <div class="historico-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
+                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: var(--text-muted);">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>

@@ -6,7 +6,7 @@
 }
 
 .ficha-card {
-    background: #fff;
+    background: var(--bg-card);
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     padding: 20px;
@@ -46,7 +46,7 @@
 .ficha-title p {
     margin: 5px 0 0 0;
     font-size: 0.85rem;
-    color: #64748b;
+    color: var(--text-muted);
 }
 
 .ficha-content p {
@@ -58,11 +58,11 @@
 
 .ficha-label {
     font-weight: 600;
-    color: #475569;
+    color: var(--text-main);
     margin-right: 10px;
 }
 
 .ficha-value {
-    color: #0f172a;
+    color: var(--text-main);
     text-align: right;
 }

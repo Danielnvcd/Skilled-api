@@ -1,28 +1,118 @@
+:root {
+    /* Modo Oscuro Principal (Dark SaaS Dashboard) */
+    --bg-body-gradient: linear-gradient(135deg, #090e17 0%, #17212f 100%);
+    --bg-sidebar: rgba(15, 23, 42, 0.45);
+    --bg-card: rgba(30, 41, 59, 0.6);
+    --bg-card-solid: #1e293b;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.15);
+    
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    
+    --primary: #3B82F6;
+    --primary-hover: #2563EB;
+    --primary-light: rgba(59, 130, 246, 0.15);
+    
+    --success: #10B981;
+    --success-bg: rgba(16, 185, 129, 0.1);
+    
+    --warning: #F59E0B;
+    --warning-bg: rgba(245, 158, 11, 0.1);
+    
+    --danger: #EF4444;
+    --danger-bg: rgba(239, 68, 68, 0.1);
+    
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    
+    --glass-blur: blur(12px);
+    
+    /* Config manual de fondo pero por defecto la imagen que ya existía */
+    --bg-image-url: url('../imagenes/fondo.png'); 
+}
+
+/* Modo Claro Alternativo (Classic) */
+html.light-theme {
+    --bg-body-gradient: linear-gradient(180deg, #F8FAFC 0%, #E2E8F0 100%);
+    --bg-sidebar: rgba(255, 255, 255, 0.85);
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --bg-card-solid: #ffffff;
+    --border: rgba(148, 163, 184, 0.3);
+    --border-hover: rgba(148, 163, 184, 0.5);
+    
+    --text-main: #0F172A;
+    --text-muted: #64748B;
+    
+    --primary-light: #eff6ff;
+    
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
 * {
     box-sizing: border-box;
     overflow-wrap: break-word;
     word-wrap: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) var(--bg-card-solid);
+}
+
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 10px;
 }
 
 body {
     margin: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #222;
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text-main);
     display: flex;
     height: 100vh;
     overflow: hidden;
+    background: var(--bg-body-gradient);
 }
 
+/* El fondo inyectado de la app original puede fusionarse con el dark gradient usando mezcla */
+body::before {
+    content: '';
+    position: absolute;
+    top:0; left:0; width:100%; height:100%;
+    background-image: var(--bg-image-url, none);
+    background-size: cover;
+    background-position: top center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    opacity: 0.35; /* Balance óptimo para modo oscuro */
+    z-index: -1;
+    pointer-events: none;
+}
+
+html.light-theme body::before {
+    opacity: 1; /* Si es claro, el fondo se ve completo normal, o se borra el gradiente debajo */
+}
+
+/* SIDEBAR GLASSMORPHISM */
 .sidebar {
     width: 280px;
-    background: rgba(255, 255, 255, 0.85);
-    border-right: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
+    background: var(--bg-sidebar);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-right: 1px solid var(--border);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
     padding: 25px;
     flex-shrink: 0;
     z-index: 10;
+    transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .logo {
@@ -30,13 +120,16 @@ body {
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 1px;
-    margin-bottom: 40px;
+    margin-bottom: 25px;
     text-align: center;
-    color: #37474f;
+    color: var(--text-main);
 }
 
-.logo span {
-    color: #546e7a;
+/* Invertir colores logo si estamos en tema oscuro por defecto (filter) */
+html:not(.light-theme) .logo img.skilled-logo {
+    filter: brightness(0) invert(1) drop-shadow(0 0 10px rgba(255,255,255,0.2)) !important;
+    opacity: 0.95;
+    mix-blend-mode: normal !important;
 }
 
 .menu {
@@ -52,7 +145,7 @@ body {
     align-items: center;
     padding: 12px 18px;
     margin-bottom: 8px;
-    color: #6b7280;
+    color: var(--text-muted);
     text-decoration: none;
     border-radius: 8px;
     transition: all 0.2s ease;
@@ -66,84 +159,131 @@ body {
     height: 20px;
     margin-right: 12px;
     object-fit: contain;
+    filter: grayscale(1) opacity(0.7);
+    transition: all 0.2s;
+}
+
+html:not(.light-theme) .menu-icon {
+    filter: grayscale(1) invert(0.8) opacity(0.7);
 }
 
 .menu a:hover,
 .menu a.active {
-    background: #eff6ff;
-    color: #1f2937;
-    border-left: 4px solid #3b82f6;
+    background: var(--primary-light);
+    color: var(--text-main);
+    border-left: 4px solid var(--primary);
     transform: translateX(4px);
 }
 
+.menu a:hover .menu-icon,
+.menu a.active .menu-icon {
+    filter: grayscale(0) opacity(1);
+}
+html:not(.light-theme) .menu a:hover .menu-icon,
+html:not(.light-theme) .menu a.active .menu-icon {
+    filter: grayscale(0) invert(0) brightness(1.2) drop-shadow(0 0 4px var(--primary)); 
+    /* The icons are colored, we might want them slightly brightened, but invert(0) removes the dark mode brightness invert. Wait, if we user invert(0) they regain their original color! */
+}
+
+/* User Info Section & Toggle */
 .user-info {
     margin-top: auto;
-    padding-top: 20px;
-    border-top: 1px solid #e5e7eb;
+    padding-top: 15px;
+    border-top: 1px solid var(--border);
     font-size: 0.9em;
-    color: #6b7280;
+    color: var(--text-muted);
+}
+
+.user-info a {
+    color: var(--primary);
+}
+
+.user-info-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
 }
 
 .btn-logout {
     background: none;
     border: none;
-    padding: 5px 0 0 0;
+    padding: 0;
     cursor: pointer;
-    color: #78909c;
-    text-decoration: underline;
-    font-weight: 500;
-    font-size: 0.9em;
+    color: var(--danger);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.85em;
     font-family: inherit;
-    display: block;
-    width: 100%;
     text-align: left;
-    margin-top: 5px;
-    text-transform: none;
+    margin-top: 8px;
+    opacity: 0.8;
 }
 
 .btn-logout:hover {
-    color: #37474f;
+    opacity: 1;
     text-decoration: underline;
-    background: none !important;
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.theme-toggle-btn:hover {
+    background: var(--border);
+    transform: scale(1.05);
 }
 
 .main-content {
     flex: 1;
     padding: 40px;
     overflow-y: auto;
-    background: rgba(255, 255, 255, 0.2);
+    background: transparent; /* Permite ver el fondo body */
+    position: relative;
+    z-index: 1;
 }
 
 @keyframes smoothLoad {
-    0% {
-        opacity: 0;
-        transform: translateY(5px);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    0% { opacity: 0; transform: translateY(5px); }
+    100% { opacity: 1; transform: translateY(0); }
 }
 
-.main-content>*:not(.modal-overlay) {
+.main-content > *:not(.modal-overlay) {
     animation: smoothLoad 0.25s ease-out forwards;
 }
 
 .alert {
-    background-color: #eceff1;
-    color: #37474f;
+    background-color: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: var(--text-main);
     padding: 15px;
     margin-bottom: 20px;
-    border-radius: 5px;
-    border-left: 5px solid #546e7a;
+    border-radius: 8px;
+    border-left: 5px solid var(--primary);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
 }
 
 .card {
-    background-color: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    background-color: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 20px;
     transition: 0.3s;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+    box-shadow: var(--shadow-md);
+    color: var(--text-main);
 }

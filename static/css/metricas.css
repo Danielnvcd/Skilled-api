@@ -6,7 +6,7 @@
 }
 
 .metricas-header {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--bg-card);
     border-radius: 16px;
     padding: 30px 35px;
     margin-bottom: 24px;
@@ -21,12 +21,12 @@
     margin: 0;
     font-size: 1.6rem;
     font-weight: 700;
-    color: #111827;
+    color: var(--text-main);
 }
 
 .metricas-header p {
     margin: 4px 0 0;
-    color: #6b7280;
+    color: var(--text-muted);
     font-size: 0.9rem;
 }
 
@@ -39,7 +39,7 @@
 }
 
 .metric-stat-card {
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--bg-card);
     border-radius: 14px;
     padding: 24px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
@@ -82,7 +82,7 @@
 }
 
 .metric-stat-icon.amber {
-    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    background: var(--bg-card);
     color: #d97706;
 }
 
@@ -90,13 +90,13 @@
     margin: 0;
     font-size: 1.8rem;
     font-weight: 700;
-    color: #111827;
+    color: var(--text-main);
     line-height: 1;
 }
 
 .metric-stat-info p {
     margin: 4px 0 0;
-    color: #6b7280;
+    color: var(--text-muted);
     font-size: 0.82rem;
     font-weight: 500;
 }
@@ -110,7 +110,7 @@
 }
 
 .chart-card {
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--bg-card);
     border-radius: 14px;
     padding: 28px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
@@ -121,7 +121,7 @@
     margin: 0 0 20px 0;
     font-size: 1.05rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--text-main);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -143,7 +143,7 @@
 }
 
 .detail-card {
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--bg-card);
     border-radius: 14px;
     padding: 28px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
@@ -155,7 +155,7 @@
     margin: 0 0 16px 0;
     font-size: 1.05rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--text-main);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -176,9 +176,9 @@
 .plant-tab {
     padding: 8px 18px;
     border-radius: 8px;
-    border: 1px solid #e5e7eb;
-    background: #f9fafb;
-    color: #4b5563;
+    border: 1px solid var(--border);
+    background: var(--bg-body);
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 500;
@@ -187,7 +187,7 @@
 }
 
 .plant-tab:hover {
-    background: #eff6ff;
+    background: var(--bg-card);
     border-color: #93c5fd;
     color: #2563eb;
 }
@@ -200,7 +200,7 @@
 
 .plant-tab .count-badge {
     display: inline-block;
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--bg-card);
     padding: 1px 7px;
     border-radius: 10px;
     font-size: 0.75rem;
@@ -209,7 +209,7 @@
 }
 
 .plant-tab.active .count-badge {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--bg-card);
 }
 
 /* Tables */
@@ -221,10 +221,10 @@
 }
 
 .metrics-table thead th {
-    background: #f8fafc;
+    background: var(--bg-card);
     padding: 10px 14px;
     text-align: left;
-    color: #64748b;
+    color: var(--text-muted);
     font-weight: 600;
     font-size: 0.8rem;
     text-transform: uppercase;
@@ -237,13 +237,13 @@
 }
 
 .metrics-table tbody tr:hover {
-    background: #f8fafc;
+    background: var(--bg-card);
 }
 
 .metrics-table tbody td {
     padding: 10px 14px;
     border-bottom: 1px solid #f1f5f9;
-    color: #334155;
+    color: var(--text-main);
 }
 
 .metrics-table tbody tr:last-child td {
@@ -265,13 +265,13 @@
 }
 
 .status-badge.vencido {
-    background: #fee2e2;
+    background: var(--bg-card);
     color: #991b1b;
 }
 
 .status-badge.sin-fecha {
-    background: #f3f4f6;
-    color: #6b7280;
+    background: var(--border-hover);
+    color: var(--text-muted);
 }
 
 /* Plant panel visibility */

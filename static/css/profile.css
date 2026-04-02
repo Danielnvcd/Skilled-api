@@ -1,16 +1,5 @@
 /* profile.css - Premium UI for User Profile */
-:root {
-    --primary: #4F46E5;
-    --primary-hover: #4338CA;
-    --success: #10B981;
-    --success-hover: #059669;
-    --danger: #EF4444;
-    --danger-hover: #DC2626;
-    --bg-card: #FFFFFF;
-    --text-main: #111827;
-    --text-muted: #6B7280;
-    --border: #E5E7EB;
-}
+
 
 .profile-wrapper {
     max-width: 800px;
@@ -43,10 +32,10 @@
     font-weight: 800;
     color: var(--text-main);
     margin: 0;
-    background: linear-gradient(135deg, #111827 0%, #4B5563 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-main);
+    
+    
+    
     letter-spacing: -0.02em;
 }
 
@@ -132,7 +121,7 @@
 }
 
 .role-admin {
-    background-color: #FEE2E2;
+    background: var(--bg-card);
     color: #991B1B;
     border: 1px solid #FECACA;
 }
@@ -144,15 +133,15 @@
 }
 
 .role-supervisor {
-    background-color: #F3E8FF;
+    background: var(--bg-card);
     color: #6B21A8;
     border: 1px solid #E9D5FF;
 }
 
 .role-user {
-    background-color: #F3F4F6;
-    color: #374151;
-    border: 1px solid #E5E7EB;
+    background: var(--border-hover);
+    color: var(--text-main);
+    border: 1px solid var(--border);
 }
 
 /* Forms */
@@ -171,7 +160,7 @@
 .form-group input {
     width: 100%;
     padding: 0.875rem 1rem;
-    background-color: #F9FAFB;
+    background: var(--bg-body);
     border: 1px solid #D1D5DB;
     border-radius: 10px;
     font-size: 1rem;
@@ -181,7 +170,7 @@
 }
 
 .form-group input:focus {
-    background-color: #FFFFFF;
+    background: var(--bg-card);
     border-color: var(--primary);
     box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
     outline: none;
@@ -255,7 +244,7 @@ a.btn:hover {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #F9FAFB;
+    background: var(--bg-body);
     padding: 1.5rem;
     border-radius: 12px;
     border: 1px solid var(--border);
@@ -289,7 +278,7 @@ a.btn:hover {
 }
 
 .status-inactive {
-    background-color: #FDE8E8;
+    background: var(--bg-card);
     color: #9B1C1C;
 }
 
@@ -304,7 +293,7 @@ a.btn:hover {
 }
 
 .dot-inactive {
-    background-color: #E02424;
+    background: var(--bg-card);
 }
 
 @media (max-width: 640px) {

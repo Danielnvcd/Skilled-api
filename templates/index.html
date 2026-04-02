@@ -11,7 +11,7 @@
 
     /* Summary Cards */
     .stat-card {
-        background: #ffffff;
+        background: var(--bg-card);
         border-radius: 12px;
         padding: 20px;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
@@ -48,22 +48,22 @@
     }
 
     .stat-card.blue .stat-icon {
-        background: #eff6ff;
+        background: var(--bg-card);
         color: #3b82f6;
     }
 
     .stat-card.green .stat-icon {
-        background: #ecfdf5;
+        background: var(--bg-card);
         color: #10b981;
     }
 
     .stat-card.purple .stat-icon {
-        background: #f5f3ff;
+        background: var(--bg-card);
         color: #8b5cf6;
     }
 
     .stat-card.orange .stat-icon {
-        background: #fffbeb;
+        background: var(--bg-card);
         color: #f59e0b;
     }
 
@@ -75,7 +75,7 @@
         margin: 0;
         font-size: 0.75rem;
         /* Reduced from 0.85rem */
-        color: #6b7280;
+        color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
@@ -84,13 +84,13 @@
         margin: 5px 0 0 0;
         font-size: 1.5rem;
         /* Reduced from 1.8rem */
-        color: #1f2937;
+        color: var(--text-main);
         font-weight: 700;
     }
 
     /* Panels */
     .dashboard-panel {
-        background: #ffffff;
+        background: var(--bg-card);
         border-radius: 12px;
         padding: 20px;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
@@ -100,18 +100,18 @@
         font-size: 1rem;
         /* Reduced from 1.1rem */
         font-weight: 600;
-        color: #374151;
+        color: var(--text-main);
         margin-top: 0;
         margin-bottom: 20px;
         padding-bottom: 15px;
-        border-bottom: 1px solid #f3f4f6;
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
     }
 
     .panel-title i {
         margin-right: 10px;
-        color: #6b7280;
+        color: var(--text-muted);
     }
 
     /* Lists */
@@ -130,24 +130,24 @@
         width: 35px;
         height: 35px;
         border-radius: 50%;
-        background: #f3f4f6;
+        background: var(--bg-card);
         display: flex;
         align-items: center;
         justify-content: center;
         margin-right: 12px;
-        color: #6b7280;
+        color: var(--text-muted);
     }
 
     .list-text h5 {
         margin: 0;
         font-size: 0.95rem;
-        color: #111827;
+        color: var(--text-main);
     }
 
     .list-text p {
         margin: 3px 0 0 0;
         font-size: 0.8rem;
-        color: #6b7280;
+        color: var(--text-muted);
     }
 
     /* Col spans */
@@ -192,12 +192,12 @@
     }
 
     .badge-vencido.expired {
-        background: #fef2f2;
+        background: var(--bg-card);
         color: #dc2626;
     }
 
     .badge-vencido.warning {
-        background: #fffbeb;
+        background: var(--bg-card);
         color: #d97706;
     }
 
@@ -217,17 +217,17 @@
 <div class="welcome-banner card"
     style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; padding: 25px 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
     <div>
-        <h1 style="margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; color: #1f2937;">
+        <h1 style="margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; color: var(--text-main);">
             ¡Bienvenido de nuevo, <span style="color: #3b82f6; text-transform: capitalize;">{{ session.get('user',
                 'Usuario') }}</span>!
         </h1>
-        <p style="margin: 8px 0 0 0; font-size: 0.9rem; color: #6b7280;">
+        <p style="margin: 8px 0 0 0; font-size: 0.9rem; color: var(--text-muted);">
 
         </p>
     </div>
     <div style="display: none; @media(min-width: 768px){ display: flex; } align-items: center; gap: 15px;">
         <div
-            style="width: 50px; height: 50px; background: #eff6ff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            style="width: 50px; height: 50px; background: var(--bg-card); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
             <i class="fa-solid fa-chart-line" style="color: #3b82f6; font-size: 1.3rem;"></i>
         </div>
     </div>
@@ -289,19 +289,19 @@
         <div class="list-container" style="max-height: 300px; overflow-y: auto;">
             {% for log in actividad_reciente %}
             <div class="list-item">
-                <div class="list-icon" style="background:#e0f2fe; color:#0284c7;">
+                <div class="list-icon" style="background: var(--bg-card); color:#0284c7;">
                     <i class="fa-solid fa-pencil-alt"></i>
                 </div>
                 <div class="list-text" style="flex:1;">
                     <h5>{{ log.action }}</h5>
                     <p>{{ log.user or 'Sistema' }}</p>
                 </div>
-                <div style="font-size: 0.75rem; color: #9ca3af; white-space: nowrap;">
+                <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">
                     {{ log.created_at.strftime('%d/%m/%Y %I:%M %p') }}
                 </div>
             </div>
             {% else %}
-            <p style="color: #6b7280; font-style: italic;">No hay actividad reciente registrada.</p>
+            <p style="color: var(--text-muted); font-style: italic;">No hay actividad reciente registrada.</p>
             {% endfor %}
         </div>
         <div style="text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
@@ -317,16 +317,16 @@
             {% for emp in cumpleañeros %}
             <div class="list-item">
                 <img src="{{ url_for('trabajadores.get_foto_perfil', id=emp.id) if emp.foto_perfil else url_for('static', filename='img/default-avatar.png') }}"
-                    style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 12px; border: 1px solid #e5e7eb;">
+                    style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 12px; border: 1px solid var(--border);">
                 <div class="list-text">
                     <h5 style="text-transform: uppercase;">{{ emp.nombre }} {{ emp.nombre_apellidos }}</h5>
                     <p style="color: #10b981; font-weight: 500;">Día: {{ emp.fecha_nacimiento.day }}</p>
                 </div>
             </div>
             {% else %}
-            <div style="padding: 20px; text-align: center; background: #f9fafb; border-radius: 8px;">
+            <div style="padding: 20px; text-align: center; background: var(--bg-card); border-radius: 8px;">
                 <i class="fa-solid fa-face-smile" style="font-size: 2rem; color: #d1d5db; margin-bottom: 10px;"></i>
-                <p style="color: #6b7280; font-size: 0.9rem; margin:0;">Nadie cumple años este mes.</p>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin:0;">Nadie cumple años este mes.</p>
             </div>
             {% endfor %}
         </div>
@@ -339,7 +339,7 @@
             {% for item in docs_por_vencer %}
             <div class="list-item">
                 <div class="list-icon"
-                    style="{% if item.vencido %}background:#fef2f2; color:#dc2626;{% else %}background:#fffbeb; color:#d97706;{% endif %}">
+                    style="{% if item.vencido %}background: var(--bg-card); color:#dc2626;{% else %}background: var(--bg-card); color:#d97706;{% endif %}">
                     <i
                         class="fa-solid {% if item.tipo == 'credencial' %}fa-id-card{% else %}fa-file-lines{% endif %}"></i>
                 </div>
@@ -356,9 +356,9 @@
                 </div>
             </div>
             {% else %}
-            <div style="padding: 20px; text-align: center; background: #f9fafb; border-radius: 8px;">
+            <div style="padding: 20px; text-align: center; background: var(--bg-card); border-radius: 8px;">
                 <i class="fa-solid fa-circle-check" style="font-size: 2rem; color: #10b981; margin-bottom: 10px;"></i>
-                <p style="color: #6b7280; font-size: 0.9rem; margin:0;">No hay documentos por vencer.</p>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin:0;">No hay documentos por vencer.</p>
             </div>
             {% endfor %}
         </div>
@@ -367,7 +367,7 @@
 
 <!-- Footer Info Link -->
 <div
-    style="text-align: center; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: #6b7280; font-size: 0.9rem;">
+    style="text-align: center; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem;">
     Skilled &copy; 2026.
     <a href="{{ url_for('info.index') }}"
         style="color: #1548b4; text-decoration: none; font-weight: 500; margin-left: 10px;">

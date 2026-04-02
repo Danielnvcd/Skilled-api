@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}?v=31">
 {% endblock %}
 
 {% block content %}
@@ -115,7 +115,7 @@
                                     }}</strong></td>
                             <td>
                                 <span
-                                    style="background: #E0E7FF; color: #3730A3; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
+                                    style="background: var(--bg-card); color: #3730A3; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
                                     {{ pren.tipo_pago }}
                                 </span>
                             </td>
@@ -164,7 +164,7 @@
     </div>
     {% else %}
     <div
-        style="text-align: center; padding: 4rem; background: white; border-radius: 12px; border: 1px dashed var(--border);">
+        style="text-align: center; padding: 4rem; background: var(--bg-card); border-radius: 12px; border: 1px dashed var(--border);">
         <p style="color: var(--text-muted); font-size: 1.1rem;">No se encontraron reportes cerrados de proyectos para
             esta semana.</p>
     </div>

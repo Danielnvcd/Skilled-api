@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}?v=31">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css?v=20" rel="stylesheet" />
 {% endblock %}
 
 {% block content %}
@@ -45,7 +45,7 @@
                 style="display:inline;" id="formCerrarPeriodo">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn-primary"
-                    style="background: linear-gradient(135deg, #EF4444, #F87171);">
+                    style="background: var(--bg-card);">
                     Cerrar Periodo
                 </button>
             </form>

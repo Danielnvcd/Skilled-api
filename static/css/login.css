@@ -1,16 +1,4 @@
-:root {
-    --primary-color: #455a64;
-    /* Matching base.html's gray tone */
-    --accent-blue: #0b5fb4;
-    /* Logo's blue */
-    --accent-red: #e31a1c;
-    /* Logo's red */
-    --text-main: #37474f;
-    --text-secondary: #546e7a;
-    --border-color: #cfd8dc;
-    --error-bg: #FEF2F2;
-    --error-text: #EF4444;
-}
+
 
 * {
     box-sizing: border-box;
@@ -20,7 +8,7 @@
 
 body {
     font-family: 'Inter', sans-serif;
-    background: #e2e8f0;
+    background: var(--bg-card);
     /* Soft gray backing */
     background: linear-gradient(135deg, #cfd8dc 0%, #eceff1 100%);
     display: flex;
@@ -36,7 +24,7 @@ body {
     width: 100vw;
     height: 100vh;
     max-width: none;
-    background: #ffffff;
+    background: var(--bg-card);
     border-radius: 0;
     box-shadow: none;
     overflow: hidden;
@@ -152,7 +140,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    background: #ffffff;
+    background: var(--bg-card);
     animation: slideInRight 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 

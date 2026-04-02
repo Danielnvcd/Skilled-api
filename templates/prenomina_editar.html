@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}?v=31">
 {% endblock %}
 
 {% block content %}
@@ -26,7 +26,7 @@
                     Abierta — Editable</span>
                 {% else %}
                 <span class="badge"
-                    style="background:#FEE2E2; color:#991B1B; padding: 4px 10px; border-radius:12px; font-weight:600;">🔴
+                    style="background: var(--bg-card); color:#991B1B; padding: 4px 10px; border-radius:12px; font-weight:600;">🔴
                     Cerrada</span>
                 {% endif %}
             </div>
@@ -78,7 +78,7 @@
 
                 <!-- Current Totals -->
                 <div
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; background: #F9FAFB; padding: 1rem; border-radius: 8px;">
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; background: var(--bg-card); padding: 1rem; border-radius: 8px;">
                     <div>
                         <span
                             style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total
@@ -111,13 +111,13 @@
                         </h4>
                         {% if p.trabajador_id in incidencias_por_trabajador %}
                         <div
-                            style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+                            style="background: var(--bg-card); border: 1px solid #FDE68A; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
                             {% for inc in incidencias_por_trabajador[p.trabajador_id] %}
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #FDE68A; font-size: 0.85rem;">
                                 <span><strong>{{ inc.fecha }}</strong> — {{ inc.incidencia }}</span>
                                 <button class="btn-aplicar-incidencia"
-                                    style="background: #F59E0B; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
+                                    style="background: var(--bg-card); color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
                                     data-prenomina-id="{{ p.id }}"
                                     data-concepto="{{ inc.incidencia }} ({{ inc.fecha }})" data-fecha="{{ inc.fecha }}">
                                     Descontar
@@ -136,7 +136,7 @@
                         <div id="descuentos-list-{{ p.id }}">
                             {% for d in p.descuentos_detalle %}
                             <div class="descuento-item" id="descuento-item-{{ d.id }}"
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #FEF2F2; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: var(--bg-card); border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
                                 <span><strong>{{ d.tipo }}:</strong> {{ d.concepto }}</span>
                                 <span style="display: flex; align-items: center; gap: 8px;">
                                     <strong style="color: #DC2626;">-${{ "%.2f"|format(d.monto) }}</strong>
@@ -154,7 +154,7 @@
 
                         {% if estado_actual == 'ABIERTA' %}
                         <div
-                            style="margin-top: 1rem; padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--border);">
+                            style="margin-top: 1rem; padding: 1rem; background: var(--bg-card); border-radius: 8px; border: 1px dashed var(--border);">
                             <span
                                 style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Agregar
                                 Descuento Manual</span>
@@ -182,7 +182,7 @@
                         <div id="depositos-list-{{ p.id }}">
                             {% for d in p.depositos_detalle %}
                             <div class="deposito-item" id="deposito-item-{{ d.id }}"
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #F0FDF4; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: var(--bg-card); border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
                                 <span>{{ d.concepto }}</span>
                                 <span style="display: flex; align-items: center; gap: 8px;">
                                     <strong style="color: #059669;">+${{ "%.2f"|format(d.monto) }}</strong>
@@ -200,7 +200,7 @@
 
                         {% if estado_actual == 'ABIERTA' %}
                         <div
-                            style="margin-top: 1rem; padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--border);">
+                            style="margin-top: 1rem; padding: 1rem; background: var(--bg-card); border-radius: 8px; border: 1px dashed var(--border);">
                             <span
                                 style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Agregar
                                 Depósito</span>
@@ -225,7 +225,7 @@
                         </h4>
                         {% for pr in prestamos_por_trabajador[p.trabajador_id] %}
                         <div
-                            style="padding: 8px; background: #F5F3FF; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem; display: flex; justify-content: space-between;">
+                            style="padding: 8px; background: var(--bg-card); border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem; display: flex; justify-content: space-between;">
                             <span>{{ pr.motivo or 'Préstamo' }} — Restante: ${{ "%.2f"|format(pr.monto_restante)
                                 }}</span>
                             <strong style="color: #7C3AED;">-${{ "%.2f"|format(pr.descuento_semanal) }}/sem</strong>

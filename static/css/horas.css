@@ -1,15 +1,5 @@
 /* horas.css - Premium UI for Hours Tracking */
-:root {
-    --primary: #4F46E5;
-    --primary-hover: #4338CA;
-    --success: #10B981;
-    --warning: #F59E0B;
-    --danger: #EF4444;
-    --bg-card: rgba(255, 255, 255, 0.85);
-    --text-main: #111827;
-    --text-muted: #6B7280;
-    --border: #E5E7EB;
-}
+
 
 .horas-wrapper {
     max-width: 1400px;
@@ -47,10 +37,10 @@
     font-size: 1.75rem;
     font-weight: 800;
     margin: 0;
-    background: linear-gradient(135deg, #111827 0%, #4B5563 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-main);
+    
+    
+    
     letter-spacing: -0.02em;
 }
 
@@ -82,7 +72,7 @@
 }
 
 .btn-secondary {
-    background: white;
+    background: var(--bg-card);
     border: 1px solid var(--border);
     color: var(--text-main);
     padding: 0.75rem 1.5rem;
@@ -120,7 +110,7 @@
 }
 
 .modal-content {
-    background: white;
+    background: var(--bg-card);
     width: 90%;
     max-width: 600px;
     border-radius: 16px;
@@ -141,7 +131,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #F9FAFB;
+    background: var(--bg-body);
     border-radius: 16px 16px 0 0;
 }
 
@@ -182,11 +172,11 @@
     border-radius: 8px;
     font-size: 0.95rem;
     transition: all 0.2s;
-    background: #F9FAFB;
+    background: var(--bg-body);
 }
 
 .form-control:focus {
-    background: #fff;
+    background: var(--bg-card);
     border-color: var(--primary);
     outline: none;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
@@ -198,7 +188,7 @@
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
-    background: #F9FAFB;
+    background: var(--bg-body);
     border-radius: 0 0 16px 16px;
 }
 
@@ -241,7 +231,7 @@
 }
 
 .badge.borrador {
-    background: #FEF3C7;
+    background: var(--bg-card);
     color: #D97706;
 }
 
@@ -253,7 +243,7 @@
 .reporte-dates {
     font-size: 0.9rem;
     color: var(--text-muted);
-    background: #F3F4F6;
+    background: var(--border-hover);
     padding: 0.5rem;
     border-radius: 6px;
     text-align: center;
@@ -302,7 +292,7 @@
 }
 
 .captura-form-bg {
-    background: white;
+    background: var(--bg-card);
     border-radius: 16px;
     padding: 2rem;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
@@ -360,14 +350,14 @@
 }
 
 .history-table th {
-    background: #F9FAFB;
+    background: var(--bg-body);
     font-weight: 600;
     color: var(--text-muted);
     font-size: 0.85rem;
 }
 
 .history-table tr:hover {
-    background: #F3F4F6;
+    background: var(--border-hover);
 }
 
 .delete-btn {

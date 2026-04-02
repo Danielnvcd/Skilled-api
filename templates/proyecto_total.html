@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}?v=31">
 <style>
     .summary-cards {
         display: grid;
@@ -12,7 +12,7 @@
     }
 
     .summary-card {
-        background: white;
+        background: var(--bg-card);
         border-radius: 12px;
         padding: 1.25rem;
         border: 1px solid var(--border);
@@ -65,7 +65,7 @@
     }
 
     .week-row:hover {
-        background: #f0f9ff !important;
+        background: var(--bg-card);
     }
 
     .project-toggle {
@@ -117,7 +117,7 @@
     .page-summary-bar .stat-label {
         font-size: 0.7rem;
         text-transform: uppercase;
-        color: #64748b;
+        color: var(--text-muted);
         font-weight: 600;
         letter-spacing: 0.5px;
     }
@@ -175,7 +175,7 @@
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
                 <input type="text" name="q" value="{{ q }}" placeholder="Buscar proyecto o coordinador..."
-                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
+                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
             </form>
             {# Global export removed #}
         </div>
@@ -202,7 +202,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 1rem;">
                 <span
-                    style="font-size:0.8rem; color:var(--text-muted); background: #E0E7FF; padding: 4px 12px; border-radius: 20px; font-weight:600;">
+                    style="font-size:0.8rem; color:var(--text-muted); background: var(--bg-card); padding: 4px 12px; border-radius: 20px; font-weight:600;">
                     {{ pd.num_semanas }} semana{{ 's' if pd.num_semanas > 1 else '' }}
                 </span>
                 <span class="grand-total-badge">
@@ -378,7 +378,7 @@
     {% else %}
     <div class="historico-empty">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-            stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
+            stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: var(--text-muted);">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>

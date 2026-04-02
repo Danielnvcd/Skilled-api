@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/prestamos.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prestamos.css') }}?v=31">
 {% endblock %}
 
 {% block content %}
@@ -22,7 +22,7 @@
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
                 <input type="text" name="q" value="{{ q }}" placeholder="Buscar por empleado..."
-                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none;">
+                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none;">
             </form>
             <button class="btn-primary" id="btnNuevoPrestamo">
                 <i class="fa-solid fa-plus"></i> Nuevo Préstamo
@@ -128,7 +128,7 @@
         {% else %}
         <div class="prestamos-empty">
             <i class="fa-solid fa-hand-holding-dollar"
-                style="font-size: 2.5rem; color: #9CA3AF; margin-bottom: 1rem; display: block;"></i>
+                style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 1rem; display: block;"></i>
             <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin préstamos registrados</h4>
             <p style="margin:0;">Aún no se ha registrado ningún préstamo. Presiona "Nuevo Préstamo" para comenzar.</p>
         </div>

@@ -20,7 +20,7 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: #e0f2fe;
+    background: var(--bg-card);
     color: #0284c7;
     display: flex;
     align-items: center;
@@ -64,7 +64,7 @@
     padding: 0.5rem 1rem;
     border-radius: 6px;
     border: 1px solid var(--border);
-    background: white;
+    background: var(--bg-card);
     color: var(--text-main);
     text-decoration: none;
     font-weight: 500;
@@ -72,7 +72,7 @@
 }
 
 .pagination a:hover {
-    background: #f3f4f6;
+    background: var(--border-hover);
 }
 
 .pagination .active {
@@ -82,7 +82,7 @@
 }
 
 .pagination .disabled {
-    color: #9ca3af;
-    background: #f9fafb;
+    color: var(--text-muted);
+    background: var(--bg-body);
     cursor: not-allowed;
 }

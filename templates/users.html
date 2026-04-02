@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/users.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/users.css') }}?v=31">
 
 <div class="user-management-wrapper">
     <div class="header-section">
@@ -130,16 +130,16 @@
                 <div class="pwd-strength-container" id="addPwdStrength" style="display: none; margin-top: 0.5rem;">
                     <div class="pwd-bars" style="display: flex; gap: 4px; margin-bottom: 0.25rem;">
                         <div class="pwd-bar"
-                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                            style="height: 6px; flex: 1; background: var(--bg-card); border-radius: 4px; transition: background 0.3s;">
                         </div>
                         <div class="pwd-bar"
-                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                            style="height: 6px; flex: 1; background: var(--bg-card); border-radius: 4px; transition: background 0.3s;">
                         </div>
                         <div class="pwd-bar"
-                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                            style="height: 6px; flex: 1; background: var(--bg-card); border-radius: 4px; transition: background 0.3s;">
                         </div>
                     </div>
-                    <div class="pwd-text" style="font-size: 0.8rem; color: #6B7280;">Escribe una contraseña</div>
+                    <div class="pwd-text" style="font-size: 0.8rem; color: var(--text-muted);">Escribe una contraseña</div>
                 </div>
             </div>
             <div class="form-group">
@@ -171,16 +171,16 @@
                 <div class="pwd-strength-container" id="changePwdStrength" style="display: none; margin-top: 0.5rem;">
                     <div class="pwd-bars" style="display: flex; gap: 4px; margin-bottom: 0.25rem;">
                         <div class="pwd-bar"
-                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                            style="height: 6px; flex: 1; background: var(--bg-card); border-radius: 4px; transition: background 0.3s;">
                         </div>
                         <div class="pwd-bar"
-                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                            style="height: 6px; flex: 1; background: var(--bg-card); border-radius: 4px; transition: background 0.3s;">
                         </div>
                         <div class="pwd-bar"
-                            style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;">
+                            style="height: 6px; flex: 1; background: var(--bg-card); border-radius: 4px; transition: background 0.3s;">
                         </div>
                     </div>
-                    <div class="pwd-text" style="font-size: 0.8rem; color: #6B7280;">Escribe una contraseña</div>
+                    <div class="pwd-text" style="font-size: 0.8rem; color: var(--text-muted);">Escribe una contraseña</div>
                 </div>
             </div>
             <button type="submit" class="btn-submit" id="btnSubmitChangePwd">Actualizar
@@ -227,7 +227,7 @@
                         </div>
                     </div>
                 </div>
-                <small style="color: #6B7280; font-size: 0.8rem; display: block; margin-top: 6px;">Formatos
+                <small style="color: var(--text-muted); font-size: 0.8rem; display: block; margin-top: 6px;">Formatos
                     recomendados: JPG cuadrado, PNG</small>
             </div>
 
@@ -270,7 +270,7 @@
             <div class="profile-avatar-large" id="viewProfileAvatar">A</div>
             <h3 id="viewProfileName" style="color: white; margin-bottom: 0.25rem;">Usuario</h3>
             <span id="viewProfileRoleBadge" class="role-badge"
-                style="background-color: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4);">
+                style="background: var(--bg-card); color: white; border: 1px solid rgba(255,255,255,0.4);">
                 Rol
             </span>
         </div>

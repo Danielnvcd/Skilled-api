@@ -9,7 +9,7 @@
 }
 
 .hist-card {
-    background: white;
+    background: var(--bg-card);
     padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
@@ -33,7 +33,7 @@
 }
 
 .project-card {
-    background: white;
+    background: var(--bg-card);
     border-radius: 12px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     border: 1px solid var(--border);
@@ -42,7 +42,7 @@
 }
 
 .project-header {
-    background: #F8FAFC;
+    background: var(--bg-card);
     padding: 1.5rem;
     border-bottom: 1px solid var(--border);
     display: flex;
@@ -67,7 +67,7 @@
 }
 
 .table-scroll-wrapper::-webkit-scrollbar-track {
-    background: #f1f5f9;
+    background: var(--bg-card);
 }
 
 .table-scroll-wrapper::-webkit-scrollbar-thumb {
@@ -96,7 +96,7 @@
 }
 
 .worker-table th {
-    background: #F1F5F9;
+    background: var(--bg-card);
     font-weight: 600;
     color: var(--text-main);
     position: sticky;
@@ -105,14 +105,14 @@
 }
 
 .worker-table tr:hover {
-    background-color: #F8FAFC;
+    background: var(--bg-card);
 }
 
 /* Sticky first two columns */
 .col-sticky {
     position: sticky;
     z-index: 2;
-    background: white;
+    background: var(--bg-card);
 }
 
 .col-sticky--first {
@@ -129,7 +129,7 @@
 /* Header sticky columns need higher z-index */
 .worker-table thead .col-sticky {
     z-index: 3;
-    background: #F1F5F9;
+    background: var(--bg-card);
 }
 
 /* Money columns */
@@ -156,7 +156,7 @@
 
 /* Totals footer row */
 .totals-row {
-    background: #F8FAFC !important;
+    background: var(--bg-card);
     border-top: 2px solid #CBD5E1;
     font-weight: 700;
 }
@@ -168,11 +168,11 @@
 }
 
 .totals-row .col-sticky {
-    background: #F8FAFC;
+    background: var(--bg-card);
 }
 
 .total-footer {
-    background: #E8F5E9;
+    background: var(--bg-card);
     padding: 1rem 1.5rem;
     text-align: right;
     font-weight: bold;

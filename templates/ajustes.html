@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}?v=31">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css?v=20" rel="stylesheet" />
 {% endblock %}
 
 {% block content %}
@@ -78,7 +78,7 @@
                     </thead>
                     <tbody id="tablaTrabajadores"></tbody>
                     <tfoot>
-                        <tr style="font-weight:700; background:#F9FAFB;">
+                        <tr style="font-weight:700; background: var(--bg-card);">
                             <td colspan="2">TOTAL</td>
                             <td style="text-align:right; color:#4F46E5;" id="totalMeta">$0.00</td>
                             <td></td>
@@ -107,7 +107,7 @@
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
                 <input type="text" name="q" value="{{ q }}" placeholder="Buscar periodo..."
-                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none;">
+                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none;">
             </form>
         </div>
 
