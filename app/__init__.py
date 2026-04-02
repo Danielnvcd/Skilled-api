@@ -65,7 +65,7 @@ def create_app():
     
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=15)
     is_prod = os.environ.get('FLASK_ENV') == 'production'
     app.config['SESSION_COOKIE_SECURE'] = is_prod # Set True in prod only
 
@@ -107,6 +107,7 @@ def create_app():
             '\'self\'', 
             '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 
             '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
+            '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
             'https://static.cloudflareinsights.com', 
             'https://cdnjs.cloudflare.com', 
             'https://cdn.jsdelivr.net'
@@ -122,6 +123,8 @@ def create_app():
 
     from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas
     app.register_blueprint(auth.bp)
+
+
     app.register_blueprint(main.bp)
     app.register_blueprint(users.bp)
     app.register_blueprint(trabajadores.bp)
@@ -141,7 +144,14 @@ def create_app():
 
     @app.errorhandler(CSRFError)
     def handle_csrf(e):
-        return render_template("base.html", content="<h1>Sesión expirada</h1><p>Por seguridad, el formulario ha caducado. Recarga la página e intenta de nuevo.</p>"), 400
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'error': 'Se expiró tu sesión, inicia sesión de nuevo.',
+                'redirect': url_for('auth.login')
+            }), 419
+        session.clear()
+        flash('Se expiró tu sesión, inicia sesión de nuevo.', 'warning')
+        return redirect(url_for('auth.login'))
 
     @app.errorhandler(429)
     def ratelimit_handler(e):

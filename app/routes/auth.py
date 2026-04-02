@@ -87,16 +87,18 @@ def login():
         u = User.query.filter_by(username=request.form.get('username')).first()
         
         if u and check_password_hash(u.password_hash, request.form.get('password')):
+            remember = request.form.get('remember') == 'on'
             session.clear()
             
             if u.totp_secret:
                 session['pre_2fa_user_id'] = u.id
+                session['remember'] = remember
                 return redirect(url_for('auth.verify_2fa'))
             
             session['user_id'] = u.id
             session['user'] = u.username
             session['role'] = u.role
-            session.permanent = True
+            session.permanent = remember
             u.last_seen = datetime.now()
             db.session.commit()
             log_action("Login exitoso") 
@@ -127,11 +129,13 @@ def verify_2fa():
         
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(code, valid_window=1):
+            remember = session.get('remember', False)
             session.pop('pre_2fa_user_id', None)
+            session.pop('remember', None)
             session['user_id'] = user.id
             session['user'] = user.username
             session['role'] = user.role
-            session.permanent = True
+            session.permanent = remember
             log_action(f"Login 2FA exitoso para {user.username}")
             
             if user.role == 'coordinador':
