@@ -3,7 +3,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 from app.extensions import db, limiter
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
-from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file
+from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file, validate_lengths
 from werkzeug.utils import secure_filename
 import traceback
 import json
@@ -93,6 +93,11 @@ def agregar():
         no_empleado = data.get('no_empleado', '').strip()
         if not no_empleado:
             flash('Error: El Número de Empleado es obligatorio.', 'danger')
+            return redirect(url_for('trabajadores.index'))
+            
+        errores_longitud = validate_lengths(data)
+        if errores_longitud:
+            flash("Error de longitud en los campos:<br>" + "<br>".join(errores_longitud), 'danger')
             return redirect(url_for('trabajadores.index'))
             
         # Basic validation
@@ -276,7 +281,7 @@ def procesar_importacion():
                 val = row.get(col_name, '')
                 s = str(val).strip() if pd.notna(val) else ''
                 if max_len and len(s) > max_len:
-                    return s[:max_len]
+                    row_errors.append(f"El campo '{col_name}' excede el límite de {max_len} caracteres (recibidos: {len(s)}).")
                 return s
                 
             def get_float(col_name):
@@ -301,9 +306,9 @@ def procesar_importacion():
 
             t_nuevo = Trabajador(
                 # Identificadores
-                no_empleado=no_emp[:50],
-                nombre=nombre[:250],
-                nombre_apellidos=apellidos[:250],
+                no_empleado=get_str('No. Empleado', 50),
+                nombre=get_str('Nombre(s)', 250),
+                nombre_apellidos=get_str('Apellidos', 250),
                 
                 # Laborales
                 tipo_mov=get_str('Tipo de Movimiento', 100),
@@ -491,6 +496,11 @@ def editar(id):
             flash('Error: El Número de Empleado ya existe.', 'danger')
             return redirect(url_for('trabajadores.index'))
             
+        errores_longitud = validate_lengths(data)
+        if errores_longitud:
+            flash("Error de longitud en los campos:<br>" + "<br>".join(errores_longitud), 'danger')
+            return redirect(url_for('trabajadores.index'))
+            
         t.no_empleado = new_no
         t.nombre_apellidos = data.get('nombre_apellidos')
         t.nombre = data.get('nombre')
@@ -585,12 +595,22 @@ def editar(id):
             t.credenciales = []
             
             for c_data in credenciales_data:
+                planta = str(c_data.get('planta', '')).strip().upper()
+                credencial_id = str(c_data.get('credencial_id', '')).strip()
+                
+                if len(planta) > 100 or len(credencial_id) > 40:
+                    raise ValueError(f"Longitud inválida en credencial ({len(planta)}/100, {len(credencial_id)}/40)")
+                
                 nueva_credencial = CredencialPlanta(
-                    planta=c_data.get('planta', '').upper(),
-                    credencial_id=c_data.get('credencial_id', '')[:40],
+                    planta=planta,
+                    credencial_id=credencial_id,
                     fecha_caducidad=_parse_date(c_data.get('fecha_caducidad'))
                 )
                 t.credenciales.append(nueva_credencial)
+        except ValueError as val_err:
+            current_app.logger.error(f"Validation error in credentials: {val_err}")
+            flash(f'Error validando credenciales: {val_err}', 'danger')
+            return redirect(url_for('trabajadores.index'))
         except Exception as json_err:
             current_app.logger.error(f"Error parsing credentials on edit: {json_err}")
             flash('Hubo un problema actualizando algunas credenciales.', 'warning')
@@ -626,9 +646,16 @@ def guardar_credenciales(id):
         t.credenciales = []
         
         for c_data in credenciales_data:
+            planta = str(c_data.get('planta', '')).strip().upper()
+            credencial_id = str(c_data.get('credencial_id', '')).strip()
+            
+            if len(planta) > 100 or len(credencial_id) > 40:
+                flash(f"Error: Longitud inválida en credencial. Planta max 100 (recibidos: {len(planta)}), ID max 40 (recibidos: {len(credencial_id)}).", 'danger')
+                return redirect(url_for('trabajadores.index'))
+            
             nueva_credencial = CredencialPlanta(
-                planta=c_data.get('planta', '').upper(),
-                credencial_id=c_data.get('credencial_id', '')[:40],
+                planta=planta,
+                credencial_id=credencial_id,
                 fecha_caducidad=_parse_date(c_data.get('fecha_caducidad'))
             )
             t.credenciales.append(nueva_credencial)
