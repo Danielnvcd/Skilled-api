@@ -5,10 +5,10 @@
         return _fetch.apply(this, arguments).then(function(response){
             if (response.status === 419) {
                 response.clone().json().then(function(data){
-                    alert(data.error || 'Se expiró tu sesión, inicia sesión de nuevo.');
+                    alert(data.error || 'Tu formulario expiró, inténtalo de nuevo.');
                     window.location.href = data.redirect || '/login';
                 }).catch(function(){
-                    alert('Se expiró tu sesión, inicia sesión de nuevo.');
+                    alert('Tu formulario expiró, inténtalo de nuevo.');
                     window.location.href = '/login';
                 });
             }

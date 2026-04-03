@@ -142,13 +142,31 @@ def create_app():
     app.register_blueprint(ausencias.bp)
     app.register_blueprint(metricas.bp)
 
+    # ── Handler global de CSRF ─────────────────────────────────────────
+    # Se ejecuta en TODA la app cuando un token CSRF es inválido o expiró.
+    # Cubre dos escenarios:
+    #   1) AJAX/fetch  → responde JSON 419 (interceptado por session_interceptor.js)
+    #   2) Formulario HTML →
+    #        a) Usuario logueado: flash + regresa al formulario (no destruye sesión)
+    #        b) Usuario no logueado: limpia sesión + redirect a login
+    # ─────────────────────────────────────────────────────────────────────
     @app.errorhandler(CSRFError)
     def handle_csrf(e):
+        # ── AJAX / fetch: JSON con status 419 ──
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({
-                'error': 'Se expiró tu sesión, inicia sesión de nuevo.',
+                'error': 'Tu formulario expiró, inténtalo de nuevo.',
                 'redirect': url_for('auth.login')
             }), 419
+
+        # ── Formulario HTML ──
+        if session.get('user_id'):
+            # El usuario sigue logueado; solo el token CSRF expiró.
+            # No destruir la sesión — solo redirigir de vuelta al formulario.
+            flash('Tu formulario expiró, inténtalo de nuevo.', 'warning')
+            return redirect(request.referrer or url_for('main.home'))
+
+        # Usuario no logueado: limpiar sesión y mandar a login.
         session.clear()
         flash('Se expiró tu sesión, inicia sesión de nuevo.', 'warning')
         return redirect(url_for('auth.login'))
