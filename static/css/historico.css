@@ -123,7 +123,7 @@
 .col-sticky--second {
     left: 70px;
     min-width: 180px;
-    border-right: 2px solid #E2E8F0;
+    border-right: 1px solid var(--border);
 }
 
 /* Header sticky columns need higher z-index */
@@ -140,24 +140,31 @@
 
 /* Highlighted total columns */
 .col-total-percep {
-    background-color: rgba(34, 197, 94, 0.06) !important;
-    color: #166534;
+    background-color: rgba(34, 197, 94, 0.08) !important;
+    color: #4ade80; /* Bright Green for Dark Mode */
+    font-weight: 600;
 }
 
 .col-total-deduc {
-    background-color: rgba(239, 68, 68, 0.06) !important;
-    color: #991B1B;
+    background-color: rgba(239, 68, 68, 0.08) !important;
+    color: #f87171; /* Bright Red for Dark Mode */
+    font-weight: 600;
 }
 
 .col-neto {
-    background-color: rgba(59, 130, 246, 0.06) !important;
-    color: #1e40af;
+    background-color: rgba(59, 130, 246, 0.08) !important;
+    color: #60a5fa; /* Bright Blue for Dark Mode */
+    font-weight: 700;
 }
+
+.light-theme .col-total-percep { color: #166534; }
+.light-theme .col-total-deduc { color: #991B1B; }
+.light-theme .col-neto { color: #1e40af; }
 
 /* Totals footer row */
 .totals-row {
     background: var(--bg-card);
-    border-top: 2px solid #CBD5E1;
+    border-top: 1px solid var(--border);
     font-weight: 700;
 }
 

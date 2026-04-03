@@ -176,10 +176,10 @@
 }
 
 .glass-modal-content {
-    background: var(--bg-card);
-    backdrop-filter: blur(24px) !important;
-    -webkit-backdrop-filter: blur(24px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.6) !important;
+    background: var(--bg-card-solid) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid var(--border) !important;
 }
 
 /* Modal Styles */
@@ -189,7 +189,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(17, 24, 39, 0.85);
+    background: rgba(10, 15, 25, 0.7);
 
     display: flex;
     justify-content: center;
@@ -206,7 +206,7 @@
 }
 
 .modal-content {
-    background: var(--bg-card);
+    background: var(--bg-card-solid);
     width: 90%;
     max-width: 900px;
     max-height: 90vh;
@@ -228,7 +228,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-body);
+    background: var(--bg-card-solid);
     border-radius: 16px 16px 0 0;
 }
 
@@ -328,7 +328,8 @@
     border-radius: 8px;
     font-size: 0.95rem;
     transition: all 0.2s;
-    background: var(--bg-body);
+    background: var(--bg-card-solid);
+    color: var(--text-main);
 }
 
 .form-control:focus {

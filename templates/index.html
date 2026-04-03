@@ -142,6 +142,8 @@
         margin: 0;
         font-size: 0.95rem;
         color: var(--text-main);
+        word-break: break-word; /* Prevents long filenames from breaking layout */
+        overflow-wrap: break-word; /* Modern equivalent */
     }
 
     .list-text p {
@@ -292,7 +294,7 @@
                 <div class="list-icon" style="background: var(--bg-card); color:#0284c7;">
                     <i class="fa-solid fa-pencil-alt"></i>
                 </div>
-                <div class="list-text" style="flex:1;">
+                <div class="list-text" style="flex:1; min-width: 0;"> <!-- min-width: 0 is crucial for flexbox word wrapping -->
                     <h5>{{ log.action }}</h5>
                     <p>{{ log.user or 'Sistema' }}</p>
                 </div>
@@ -377,5 +379,5 @@
 
 <!-- Scripts for Charts -->
 <script src="{{ url_for('static', filename='js/chart.js') }}"></script>
-<script src="{{ url_for('static', filename='js/home.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/home.js') }}?v=40"></script>
 {% endblock %}

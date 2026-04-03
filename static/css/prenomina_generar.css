@@ -9,7 +9,7 @@
     background: var(--bg-card);
     border-radius: 12px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 20px 25px -5px rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(226, 232, 240, 0.8);
+    border: 1px solid var(--border);
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     position: relative;
@@ -35,7 +35,7 @@
 .recibo-header {
     background: var(--bg-card);
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+    border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -148,7 +148,7 @@
     align-items: center;
     gap: 0.5rem;
     padding-bottom: 0.5rem;
-    border-bottom: 2px solid rgba(226, 232, 240, 0.5);
+    border-bottom: 1px solid var(--border);
 }
 
 .seccion-titulo.percepciones {
@@ -162,7 +162,7 @@
 .recibo-footer {
     background: var(--bg-card);
     padding: 1rem 1.5rem;
-    border-top: 1px dashed rgba(203, 213, 225, 0.8); 
+    border-top: 1px dashed var(--border); 
     display: flex;
     justify-content: space-between;
     align-items: center;

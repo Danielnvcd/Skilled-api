@@ -11,7 +11,7 @@
     padding: 30px 35px;
     margin-bottom: 24px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -43,7 +43,7 @@
     border-radius: 14px;
     padding: 24px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 16px;
@@ -114,7 +114,7 @@
     border-radius: 14px;
     padding: 28px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--border);
 }
 
 .chart-card h3 {
@@ -147,7 +147,7 @@
     border-radius: 14px;
     padding: 28px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--border);
     margin-bottom: 20px;
 }
 
@@ -229,7 +229,7 @@
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 1px solid var(--border);
 }
 
 .metrics-table tbody tr {
@@ -242,7 +242,7 @@
 
 .metrics-table tbody td {
     padding: 10px 14px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid var(--border);
     color: var(--text-main);
 }
 

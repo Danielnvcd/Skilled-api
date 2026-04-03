@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}?v=43">
 <style>
     /* Add some specific styles for the multiple select if needed */
     .participantes-container {
@@ -9,7 +9,7 @@
         padding: 10px;
         max-height: 250px;
         overflow-y: auto;
-        background: var(--bg-card);
+        background: var(--bg-card-solid);
     }
 
     .participant-item {
@@ -63,7 +63,7 @@
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
-                <input type="text" id="searchInput" placeholder="Buscar por nombre o número...">
+                <input type="text" id="searchInput" placeholder="Buscar por nombre o número..." style="background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border);">
             </div>
             <div class="filters">
                 <span style="font-size: 0.85rem; color: var(--text-muted);">Total Registros: {{ proyectos|length }}</span>
@@ -125,36 +125,36 @@
 </div>
 
 <!-- Modal Principal para Alta/Edición -->
-<div class="modal-overlay" id="proyectoModal">
-    <div class="modal-content" style="max-width: 800px;">
-        <div class="modal-header">
-            <h3>Registrar Proyecto</h3>
-            <button class="close-modal" id="btnCloseModalTop" type="button">&times;</button>
+<div class="modal-overlay" id="proyectoModal" style="background: rgba(10, 15, 25, 0.7);">
+    <div class="modal-content" style="max-width: 800px; background: var(--bg-card-solid); border: 1px solid var(--border);">
+        <div class="modal-header" style="background: var(--bg-card-solid); border-bottom: 1px solid var(--border);">
+            <h3 style="color: var(--text-main);">Registrar Proyecto</h3>
+            <button class="close-modal" id="btnCloseModalTop" type="button" style="color: var(--text-muted);">&times;</button>
         </div>
         <form id="proyectoForm" action="{{ url_for('proyectos.agregar') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <!-- Hidden input for participants JSON array -->
             <input type="hidden" name="participantes_json" id="participantesJson" value="[]">
 
-            <div class="modal-body" style="padding: 24px;">
+            <div class="modal-body" style="padding: 24px; background: var(--bg-card-solid);">
                 <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
 
                     <!-- Left Column: Core Info -->
                     <div>
                         <h4
-                            style="margin-top: 0; margin-bottom: 16px; color: var(--text-main); font-size: 1.05rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
+                            style="margin-top: 0; margin-bottom: 16px; color: var(--text-main); font-size: 1.05rem; border-bottom: 2px solid var(--border); padding-bottom: 8px;">
                             Datos Generales</h4>
                         <div class="form-group">
-                            <label>No. de Proyecto *</label>
-                            <input type="text" name="numero_proyecto" class="form-control" required>
+                            <label style="color: var(--text-main); font-weight: 600;">No. de Proyecto *</label>
+                            <input type="text" name="numero_proyecto" class="form-control" required style="background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border);">
                         </div>
                         <div class="form-group">
-                            <label>Nombre del Proyecto *</label>
-                            <input type="text" name="nombre" class="form-control" required>
+                            <label style="color: var(--text-main); font-weight: 600;">Nombre del Proyecto *</label>
+                            <input type="text" name="nombre" class="form-control" required style="background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border);">
                         </div>
                         <div class="form-group">
-                            <label>Coordinador</label>
-                            <select name="coordinador_id" class="form-control">
+                            <label style="color: var(--text-main); font-weight: 600;">Coordinador</label>
+                            <select name="coordinador_id" class="form-control" style="background: var(--bg-body); color: var(--text-main); border: 1px solid var(--border);">
                                 <option value="">--- Sin Coordinador ---</option>
                                 {% for s in coordinadores %}
                                 <option value="{{ s.id }}">{{ s.username }}</option>
@@ -164,7 +164,7 @@
 
                         <div class="form-group" style="margin-top: 20px;">
                             <label
-                                style="display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: 1rem;">
+                                style="display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: 1rem; color: var(--text-main);">
                                 <input type="checkbox" name="activo" id="checkActivo" checked
                                     style="width: 20px; height: 20px; margin-right: 10px;">
                                 Proyecto Activo
@@ -178,16 +178,16 @@
                     <!-- Right Column: Participants -->
                     <div>
                         <h4
-                            style="margin-top: 0; margin-bottom: 16px; color: var(--text-main); font-size: 1.05rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">
+                            style="margin-top: 0; margin-bottom: 16px; color: var(--text-main); font-size: 1.05rem; border-bottom: 2px solid var(--border); padding-bottom: 8px;">
                             Asignar Participantes</h4>
-                        <div class="search-box" style="margin-bottom: 10px; padding: 6px 10px;">
+                        <div class="search-box" style="margin-bottom: 10px; padding: 6px 10px; background: var(--bg-body); border: 1px solid var(--border);">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);">
                                 <circle cx="11" cy="11" r="8"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                             </svg>
                             <input type="text" id="searchParticipantes" placeholder="Filtrar empleados..."
-                                style="border:none; outline:none; font-size: 0.9rem; width: 100%; margin-left: 8px; background: transparent;">
+                                style="border:none; outline:none; font-size: 0.9rem; width: 100%; margin-left: 8px; background: transparent; color: var(--text-main);">
                         </div>
                         <div class="participantes-container" id="participantesContainer">
                             {% for t in trabajadores %}
@@ -226,7 +226,7 @@
 
             </div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="background: var(--bg-card-solid); border-top: 1px solid var(--border);">
         <button type="button" class="btn-secondary" id="btnCloseModalBottom">Cancelar</button>
         <button type="submit" class="btn-primary" id="btnSaveProyecto">Guardar Proyecto</button>
     </div>
@@ -234,5 +234,5 @@
 </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/proyectos.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/proyectos.js') }}?v=41"></script>
 {% endblock %}

@@ -21,6 +21,9 @@ document.addEventListener("DOMContentLoaded", function() {
             localStorage.setItem('theme', isLight ? 'light' : 'dark');
             
             updateToggleIcon(isLight);
+            
+            // Dispatch custom event for theme change
+            window.dispatchEvent(new CustomEvent('themeChanged', { detail: { isLight } }));
         });
     }
 

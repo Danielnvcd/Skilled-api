@@ -108,6 +108,7 @@ def create_app():
             '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 
             '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
             '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
+            '\'sha256-PWLHZbJ8n6uDY6oAz9j8kEY3GH+GN08jUaBp4DoLIng=\'',
             'https://static.cloudflareinsights.com', 
             'https://cdnjs.cloudflare.com', 
             'https://cdn.jsdelivr.net'

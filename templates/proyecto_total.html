@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=31">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=42">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}?v=41">
 <style>
     .summary-cards {
         display: grid;
@@ -40,17 +40,13 @@
         font-variant-numeric: tabular-nums;
     }
 
-    .summary-card .value.green {
-        color: #16a34a;
-    }
+    .summary-card .value.green { color: #4ade80; }
+    .summary-card .value.red { color: #f87171; }
+    .summary-card .value.blue { color: #60a5fa; }
 
-    .summary-card .value.red {
-        color: #dc2626;
-    }
-
-    .summary-card .value.blue {
-        color: #2563eb;
-    }
+    .light-theme .summary-card .value.green { color: #16a34a; }
+    .light-theme .summary-card .value.red { color: #dc2626; }
+    .light-theme .summary-card .value.blue { color: #2563eb; }
 
     .summary-card .value.indigo {
         color: #4f46e5;
@@ -389,5 +385,5 @@
     {% endif %}
 </div>
 
-<script src="{{ url_for('static', filename='js/proyecto_total.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/proyecto_total.js') }}?v=40"></script>
 {% endblock %}

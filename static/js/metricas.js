@@ -1,151 +1,160 @@
-document.addEventListener('DOMContentLoaded', function () {
+/**
+ * Métricas JS - v48 - Sincronización final de pestañas y paneles
+ */
+(function() {
+    console.log("Metricas script cargado v48");
 
-    const dataEl = document.getElementById('metricasData');
-    if (!dataEl) return;
+    function initMetricas() {
+        try {
+            const dataContainer = document.getElementById('metricasData');
+            if (!dataContainer) {
+                console.error('Error: Contenedor #metricasData no encontrado.');
+                return;
+            }
 
-    const data = {
-        plantasLabels: JSON.parse(dataEl.getAttribute('data-plantas-labels') || '[]'),
-        plantasDatos: JSON.parse(dataEl.getAttribute('data-plantas-datos') || '[]'),
-        dc3Con: parseInt(dataEl.getAttribute('data-dc3-con') || '0', 10),
-        dc3Sin: parseInt(dataEl.getAttribute('data-dc3-sin') || '0', 10)
-    };
-
-    // Color palette
-    const plantColors = [
-        '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444',
-        '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
-        '#84cc16', '#a855f7'
-    ];
-
-    // === Bar Chart: Employees by Plant ===
-    const ctxPlantas = document.getElementById('chartPlantas');
-    if (ctxPlantas && data.plantasLabels.length > 0) {
-        new Chart(ctxPlantas, {
-            type: 'bar',
-            data: {
-                labels: data.plantasLabels,
-                datasets: [{
-                    label: 'Empleados',
-                    data: data.plantasDatos,
-                    backgroundColor: data.plantasLabels.map((_, i) => plantColors[i % plantColors.length] + 'cc'),
-                    borderColor: data.plantasLabels.map((_, i) => plantColors[i % plantColors.length]),
-                    borderWidth: 2,
-                    borderRadius: 8,
-                    borderSkipped: false,
-                    barPercentage: 0.5,
-                    categoryPercentage: 0.6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: '#1f2937',
-                        titleFont: { size: 13, weight: '600' },
-                        bodyFont: { size: 12 },
-                        padding: 12,
-                        cornerRadius: 8,
-                        callbacks: {
-                            label: function (ctx) {
-                                return `  ${ctx.parsed.y} empleado${ctx.parsed.y !== 1 ? 's' : ''}`;
-                            }
-                        }
-                    }
+            // Lectura de datos desde atributos data-*
+            const chartData = {
+                plantas: {
+                    labels: JSON.parse(dataContainer.getAttribute('data-plantas-labels') || '[]'),
+                    counts: JSON.parse(dataContainer.getAttribute('data-plantas-datos') || '[]').map(n => Number(n) || 0)
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1,
-                            color: '#94a3b8',
-                            font: { size: 12 }
-                        },
-                        grid: {
-                            color: '#f1f5f9'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            color: '#475569',
-                            font: { size: 12, weight: '600' }
-                        },
-                        grid: {
-                            display: false
-                        }
-                    }
+                permisos: {
+                    registrados: Number(dataContainer.getAttribute('data-dc3-con')) || 0,
+                    faltantes: Number(dataContainer.getAttribute('data-dc3-sin')) || 0
                 }
-            }
-        });
-    }
+            };
 
-    // === Doughnut Chart: DC3 ===
-    const ctxDC3 = document.getElementById('chartDC3');
-    if (ctxDC3) {
-        new Chart(ctxDC3, {
-            type: 'doughnut',
-            data: {
-                labels: ['Con DC3', 'Sin DC3'],
-                datasets: [{
-                    data: [data.dc3Con, data.dc3Sin],
-                    backgroundColor: ['#10b981cc', '#e5e7ebcc'],
-                    borderColor: ['#10b981', '#d1d5db'],
-                    borderWidth: 2,
-                    hoverOffset: 8
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '65%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                            pointStyleWidth: 12,
-                            font: { size: 13, weight: '500' },
-                            color: '#374151'
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: '#1f2937',
-                        titleFont: { size: 13, weight: '600' },
-                        bodyFont: { size: 12 },
-                        padding: 12,
-                        cornerRadius: 8,
-                        callbacks: {
-                            label: function (ctx) {
-                                const total = data.dc3Con + data.dc3Sin;
-                                const pct = total > 0 ? Math.round(ctx.parsed / total * 100) : 0;
-                                return `  ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+            const plantColors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444'];
+            let barChart, doughnutChart;
+
+            function renderCharts() {
+                try {
+                    const isDark = !document.documentElement.classList.contains('light-theme');
+                    const textColor = isDark ? '#F8FAFC' : '#475569';
+                    const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
+
+                    console.log("Renderizando gráficas v48 - Oscuro:", !isDark);
+
+                    if (barChart) barChart.destroy();
+                    if (doughnutChart) doughnutChart.destroy();
+
+                    // Gráfica de Barras (Empleados por Planta)
+                    const ctxBar = document.getElementById('chartPlantas');
+                    if (ctxBar && typeof Chart !== 'undefined') {
+                        barChart = new Chart(ctxBar, {
+                            type: 'bar',
+                            data: {
+                                labels: chartData.plantas.labels,
+                                datasets: [{
+                                    label: 'Trabajadores',
+                                    data: chartData.plantas.counts,
+                                    backgroundColor: plantColors,
+                                    borderRadius: 6
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { 
+                                    legend: { display: false },
+                                    tooltip: {
+                                        backgroundColor: isDark ? '#1e293b' : '#fff',
+                                        titleColor: isDark ? '#fff' : '#1e293b',
+                                        bodyColor: isDark ? '#fff' : '#1e293b'
+                                    }
+                                },
+                                scales: {
+                                    y: { 
+                                        beginAtZero: true,
+                                        ticks: { color: textColor, precision: 0 }, 
+                                        grid: { color: gridColor, drawBorder: false } 
+                                    },
+                                    x: { 
+                                        ticks: { color: textColor }, 
+                                        grid: { display: false } 
+                                    }
+                                }
                             }
-                        }
+                        });
                     }
+
+                    // Gráfica de Dona (DC3)
+                    const ctxDoughnut = document.getElementById('chartDC3');
+                    if (ctxDoughnut && typeof Chart !== 'undefined') {
+                        const total = chartData.permisos.registrados + chartData.permisos.faltantes;
+                        doughnutChart = new Chart(ctxDoughnut, {
+                            type: 'doughnut',
+                            data: {
+                                labels: [`Con DC3 (${chartData.permisos.registrados})`, `Sin DC3 (${chartData.permisos.faltantes})`],
+                                datasets: [{
+                                    data: [chartData.permisos.registrados, chartData.permisos.faltantes],
+                                    backgroundColor: ['#10B981', isDark ? '#334155' : '#F1F5F9'],
+                                    borderColor: isDark ? '#1e293b' : '#fff',
+                                    borderWidth: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '75%',
+                                plugins: {
+                                    legend: { 
+                                        position: 'bottom', 
+                                        labels: { color: textColor, usePointStyle: true, padding: 15 } 
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error("Error en renderCharts:", err);
                 }
             }
-        });
+
+            // --- Lógica de Pestañas (Corregida para usar atributos data) ---
+            const plantTabs = document.querySelectorAll('.plant-tab');
+            const plantPanels = document.querySelectorAll('.plant-panel');
+
+            if (plantTabs.length > 0) {
+                plantTabs.forEach(tab => {
+                    tab.addEventListener('click', function() {
+                        const targetPlantName = this.getAttribute('data-plant');
+                        console.log("Cambiando a planta:", targetPlantName);
+                        
+                        // Quitar activo de todos los botones y paneles
+                        plantTabs.forEach(t => t.classList.remove('active'));
+                        plantPanels.forEach(p => p.classList.remove('active'));
+                        
+                        // Activar el botón clicado
+                        this.classList.add('active');
+                        
+                        // Activar el panel correspondiente usando el atributo data-plant-panel
+                        const targetPanel = document.querySelector(`.plant-panel[data-plant-panel="${targetPlantName}"]`);
+                        if (targetPanel) {
+                            targetPanel.classList.add('active');
+                        } else {
+                            console.warn(`No se encontró el panel para la planta: ${targetPlantName}`);
+                        }
+                    });
+                });
+            }
+
+            // Ejecución inicial
+            renderCharts();
+
+            window.addEventListener('themeChanged', () => {
+                renderCharts();
+            });
+
+        } catch (err) {
+            console.error("Error en initMetricas:", err);
+        }
     }
 
-    // === Plant Tabs ===
-    const tabs = document.querySelectorAll('.plant-tab');
-    const panels = document.querySelectorAll('.plant-panel');
-
-    tabs.forEach(tab => {
-        tab.addEventListener('click', function () {
-            const plant = this.getAttribute('data-plant');
-
-            // Toggle active tab
-            tabs.forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-
-            // Toggle active panel
-            panels.forEach(p => p.classList.remove('active'));
-            const targetPanel = document.querySelector(`[data-plant-panel="${plant}"]`);
-            if (targetPanel) targetPanel.classList.add('active');
-        });
-    });
-
-});
+    // Asegurar ejecución independientemente del estado de carga
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMetricas);
+    } else {
+        initMetricas();
+    }
+})();

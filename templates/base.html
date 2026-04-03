@@ -6,8 +6,8 @@
     <title>Skilled</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css?v=20">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=10">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css?v=40">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=51">
     <!-- Tema cargado preventivamente para evitar FOUC (Flash of Unstyled Content) -->
     <script src="{{ url_for('static', filename='js/theme_toggle.js') }}"></script>
     <style>
@@ -19,8 +19,10 @@
 <body>
     <div class="sidebar">
         <div class="logo">
-            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled" class="skilled-logo"
-                style="width: 180px; height: 60px; object-fit: contain; margin-bottom: 5px;">
+            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled" class="skilled-logo logo-light" 
+                 style="width: 180px; height: 60px; object-fit: contain; margin-bottom: 5px;">
+            <img src="{{ url_for('static', filename='imagenes/skilled modo oscuro.png') }}" alt="Skilled" class="skilled-logo logo-dark" 
+                 style="width: 180px; height: 60px; object-fit: contain; margin-bottom: 5px; display: none;">
         </div>
         <nav class="menu">
             {% if session.get('role') != 'coordinador' %}
@@ -120,7 +122,7 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/session_interceptor.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='js/session_interceptor.js') }}?v=40"></script>
     {% block scripts %}{% endblock %}
 </body>
 

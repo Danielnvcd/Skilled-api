@@ -7,6 +7,7 @@
     --border: rgba(255, 255, 255, 0.08);
     --border-hover: rgba(255, 255, 255, 0.15);
     
+    --bg-body: #090e17;
     --text-main: #F8FAFC;
     --text-muted: #94A3B8;
     
@@ -38,6 +39,7 @@ html.light-theme {
     --bg-sidebar: rgba(255, 255, 255, 0.85);
     --bg-card: rgba(255, 255, 255, 0.85);
     --bg-card-solid: #ffffff;
+    --bg-body: #F8FAFC;
     --border: rgba(148, 163, 184, 0.3);
     --border-hover: rgba(148, 163, 184, 0.5);
     
@@ -56,6 +58,20 @@ html.light-theme {
     word-wrap: break-word;
     scrollbar-width: thin;
     scrollbar-color: var(--primary) var(--bg-card-solid);
+}
+
+input, select, textarea {
+    background-color: var(--bg-body) !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px;
+    padding: 8px 12px;
+    outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 2px var(--primary-light) !important;
 }
 
 *::-webkit-scrollbar {
@@ -96,7 +112,22 @@ body::before {
 }
 
 html.light-theme body::before {
-    opacity: 1; /* Si es claro, el fondo se ve completo normal, o se borra el gradiente debajo */
+    opacity: 1; /* Color total en la base */
+}
+
+/* Capa blanca traslúcida para el modo claro (Velo) */
+body::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.4); /* Capa blanca sutil como en el modo oscuro */
+    z-index: -1;
+    pointer-events: none;
+    display: none;
+}
+
+html.light-theme body::after {
+    display: block;
 }
 
 /* SIDEBAR GLASSMORPHISM */
@@ -125,11 +156,21 @@ html.light-theme body::before {
     color: var(--text-main);
 }
 
-/* Invertir colores logo si estamos en tema oscuro por defecto (filter) */
-html:not(.light-theme) .logo img.skilled-logo {
-    filter: brightness(0) invert(1) drop-shadow(0 0 10px rgba(255,255,255,0.2)) !important;
-    opacity: 0.95;
-    mix-blend-mode: normal !important;
+/* Control de visibilidad del logotipo según el tema y reset de filtros */
+.logo-light, .logo-dark {
+    display: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    opacity: 1 !important;
+    margin: 0 auto !important;
+}
+
+html.light-theme .logo-light {
+    display: block !important;
+}
+
+html:not(.light-theme) .logo-dark {
+    display: block !important;
 }
 
 .menu {
