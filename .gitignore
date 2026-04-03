@@ -8,3 +8,4 @@ uploads/
 app.db
 .vscode
 .pytest_cache
+.env
