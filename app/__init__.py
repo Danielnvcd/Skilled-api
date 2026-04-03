@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import timedelta
-from flask import Flask, render_template, flash, redirect, url_for, request, jsonify
+from flask import Flask, render_template, flash, redirect, url_for, request, jsonify, session
 from flask_wtf.csrf import CSRFError
 from dotenv import load_dotenv
 from app.extensions import db, limiter, csrf, migrate
