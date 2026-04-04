@@ -116,7 +116,7 @@ class Trabajador(db.Model):
 class CredencialPlanta(db.Model):
     __tablename__ = "credenciales_plantas"
     id = db.Column(db.Integer, primary_key=True)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     planta = db.Column(db.String(100), nullable=False)
     credencial_id = db.Column(db.String(40), nullable=False)
     fecha_caducidad = db.Column(db.Date, nullable=True)
@@ -131,7 +131,7 @@ class CredencialPlanta(db.Model):
 class DocumentoTrabajador(db.Model):
     __tablename__ = "documentos_trabajador"
     id = db.Column(db.Integer, primary_key=True)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     nombre_archivo = db.Column(db.String(250), nullable=False)
     ruta_archivo = db.Column(db.String(500), nullable=False)
     tipo_documento = db.Column(db.String(100), nullable=True)
@@ -290,7 +290,7 @@ class DescuentoPrenomina(db.Model):
     __tablename__ = "descuentos_prenomina"
     id = db.Column(db.Integer, primary_key=True)
     prenomina_id = db.Column(db.Integer, db.ForeignKey('prenominas.id'), nullable=False)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     tipo = db.Column(db.String(20), nullable=False) # INCIDENCIA, MANUAL, PRESTAMO
     concepto = db.Column(db.String(250), nullable=False)
     monto = db.Column(db.Numeric(10, 2), nullable=False)
@@ -305,7 +305,7 @@ class DepositoExtra(db.Model):
     __tablename__ = "depositos_extra"
     id = db.Column(db.Integer, primary_key=True)
     prenomina_id = db.Column(db.Integer, db.ForeignKey('prenominas.id'), nullable=False)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     concepto = db.Column(db.String(250), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)

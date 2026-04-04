@@ -5,12 +5,17 @@ from app.utils import login_required, log_action, admin_required
 import traceback
 import json
 
+from sqlalchemy.orm import selectinload
+
 bp = Blueprint('proyectos', __name__, url_prefix='/proyectos')
 
 @bp.route('/', methods=['GET'])
 @login_required
 def index():
-    proyectos = Proyecto.query.all()
+    proyectos = Proyecto.query.options(
+        selectinload(Proyecto.coordinador),
+        selectinload(Proyecto.participantes)
+    ).all()
     # Para el modal, necesitamos todos los trabajadores
     trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
     coordinadores = User.query.filter(User.role.in_(['coordinador', 'admin'])).order_by(User.username).all()

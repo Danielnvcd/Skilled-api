@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from datetime import datetime, timedelta
 from decimal import Decimal
 import traceback
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
 from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
 
@@ -213,6 +213,7 @@ def imprimir_individual(fecha_str, trabajador_id):
 
 @bp.route('/guardar/<fecha_str>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def guardar(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -286,19 +287,18 @@ def editar(fecha_str):
         p.total_horas_calculadas = to_dec(total_horas)
     
     incidencias_por_trabajador = {}
-    for r in reportes:
-        for reg in r.registros:
-            if reg.incidencia and str(reg.incidencia).strip() != '':
-                if reg.trabajador_id not in incidencias_por_trabajador:
-                    incidencias_por_trabajador[reg.trabajador_id] = []
-                # Evitar duplicados exactos si hay dos registros del mismo día/incidencia (mismo proyecto a veces)
-                existe = any(i['fecha'] == reg.fecha.strftime('%Y-%m-%d') and i['incidencia'] == reg.incidencia for i in incidencias_por_trabajador[reg.trabajador_id])
-                if not existe:
-                    incidencias_por_trabajador[reg.trabajador_id].append({
-                        'fecha': reg.fecha.strftime('%Y-%m-%d'),
-                        'incidencia': reg.incidencia,
-                        'horas': float(reg.horas_productivas or 0)
-                    })
+    for reg in todos_registros:
+        if reg.incidencia and str(reg.incidencia).strip() != '':
+            if reg.trabajador_id not in incidencias_por_trabajador:
+                incidencias_por_trabajador[reg.trabajador_id] = []
+            # Evitar duplicados exactos si hay dos registros del mismo día/incidencia (mismo proyecto a veces)
+            existe = any(i['fecha'] == reg.fecha.strftime('%Y-%m-%d') and i['incidencia'] == reg.incidencia for i in incidencias_por_trabajador[reg.trabajador_id])
+            if not existe:
+                incidencias_por_trabajador[reg.trabajador_id].append({
+                    'fecha': reg.fecha.strftime('%Y-%m-%d'),
+                    'incidencia': reg.incidencia,
+                    'horas': float(reg.horas_productivas or 0)
+                })
     
     # Préstamos activos por trabajador
     prestamos_por_trabajador = {}
@@ -321,6 +321,7 @@ def editar(fecha_str):
 
 @bp.route('/cerrar/<fecha_str>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def cerrar_prenomina(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -389,6 +390,7 @@ def cerrar_prenomina(fecha_str):
 
 @bp.route('/api/descuento', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def api_agregar_descuento():
     try:
         data = request.get_json(silent=True)
@@ -441,6 +443,7 @@ def api_agregar_descuento():
 
 @bp.route('/api/descuento/<int:id>', methods=['DELETE'])
 @login_required
+@limiter.limit("10 per minute")
 def api_eliminar_descuento(id):
     try:
         desc = DescuentoPrenomina.query.get_or_404(id)
@@ -462,6 +465,7 @@ def api_eliminar_descuento(id):
 
 @bp.route('/api/deposito', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def api_agregar_deposito():
     try:
         data = request.get_json(silent=True)
@@ -508,6 +512,7 @@ def api_agregar_deposito():
 
 @bp.route('/api/deposito/<int:id>', methods=['DELETE'])
 @login_required
+@limiter.limit("10 per minute")
 def api_eliminar_deposito(id):
     try:
         dep = DepositoExtra.query.get_or_404(id)

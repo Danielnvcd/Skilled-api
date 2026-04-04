@@ -244,6 +244,15 @@ def procesar_importacion():
         flash('Formato no válido. Debe ser .xlsx o .xls', 'danger')
         return redirect(url_for('trabajadores.importar'))
         
+    # Validar magic bytes para prevenir subida de archivos maliciosos ocultos como Excel
+    import filetype
+    header = file.read(2048)
+    file.seek(0)
+    kind = filetype.guess(header)
+    if not kind or kind.extension not in ['xlsx', 'xls', 'zip', 'cfb']:
+        flash('El archivo fue rechazado por razones de seguridad: no parece ser un documento Excel válido.', 'danger')
+        return redirect(url_for('trabajadores.importar'))
+        
     # DoS protection: read file size without putting all in memory
     file.seek(0, os.SEEK_END)
     size = file.tell()

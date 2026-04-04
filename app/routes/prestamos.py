@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina, AbonoPrestamo
 from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
 from datetime import datetime
@@ -33,6 +33,7 @@ def index():
 
 @bp.route('/crear', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def crear():
     try:
         data = request.get_json(silent=True)
@@ -84,6 +85,7 @@ def crear():
 
 @bp.route('/editar/<int:id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def editar(id):
     try:
         data = request.get_json()
@@ -139,6 +141,7 @@ def editar(id):
 
 @bp.route('/abonar/<int:id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def abonar(id):
     try:
         data = request.get_json()
@@ -190,6 +193,7 @@ def abonar(id):
 
 @bp.route('/liquidar/<int:id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def liquidar(id):
     try:
         prestamo = Prestamo.query.get_or_404(id)

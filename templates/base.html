@@ -110,10 +110,14 @@
     </div>
 
     <div class="main-content">
-        {% with messages = get_flashed_messages() %}
-        {% if messages %}
-        <div class="alert">{{ messages[0] }}</div>
-        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category if category != 'message' else 'info' }}">
+                  {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}

@@ -1,8 +1,9 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, session, request
 from app.utils import login_required
 from app.models import Trabajador, Proyecto, AuditLog, DocumentoTrabajador, CredencialPlanta
 from app.extensions import db
-from sqlalchemy import func, extract, case
+from sqlalchemy import func, extract, case, or_
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta, date
 
 bp = Blueprint('main', __name__)
@@ -13,11 +14,18 @@ def home():
     current_month = datetime.now().month
     current_year = datetime.now().year
 
-    # Consolidar 4 counts en 1 sola query
+    # Consolidar conteos de trabajadores en una sola query
     stats = db.session.query(
-        func.count(Trabajador.id)
+        func.count(Trabajador.id),
+        func.count(case((
+            db.and_(
+                extract('month', Trabajador.fecha_ingreso) == current_month,
+                extract('year', Trabajador.fecha_ingreso) == current_year
+            ), 1
+        )))
     ).first()
     total_trabajadores = stats[0]
+    nuevos_ingresos = stats[1]
     
     proj_stats = db.session.query(
         func.count(Proyecto.id),
@@ -25,11 +33,6 @@ def home():
     ).first()
     total_proyectos = proj_stats[0]
     proyectos_activos = proj_stats[1]
-    
-    nuevos_ingresos = Trabajador.query.filter(
-        extract('month', Trabajador.fecha_ingreso) == current_month,
-        extract('year', Trabajador.fecha_ingreso) == current_year
-    ).count()
 
     # Gráfica: Empleados por Proyecto (agrupados por 'no_proyecto')
     # Filter out Nulls or empty strings
@@ -127,28 +130,23 @@ def home():
 @bp.route('/credenciales')
 @login_required
 def credenciales():
-    from flask import session, request
-    from sqlalchemy import or_
-    import math
-    
     user_id = session.get('user_id')
     user_role = session.get('role', 'user')
     
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str)
 
-    query = Trabajador.query
+    query = Trabajador.query.options(selectinload(Trabajador.credenciales))
 
     # Apply role-based filtering
     if user_role == 'coordinador':
         # Find all workers involved in projects managed by this coordinator
-        proyectos = Proyecto.query.filter_by(coordinador_id=user_id).all()
-        trabajador_ids = []
-        for p in proyectos:
-            for t in p.participantes:
-                trabajador_ids.append(t.id)
+        from app.models import proyecto_trabajador
+        subquery = db.session.query(proyecto_trabajador.c.trabajador_id)\
+            .join(Proyecto, Proyecto.id == proyecto_trabajador.c.proyecto_id)\
+            .filter(Proyecto.coordinador_id == user_id).subquery()
                 
-        query = query.filter(Trabajador.id.in_(trabajador_ids))
+        query = query.filter(Trabajador.id.in_(subquery))
     
     # Base filter: only active workers
     query = query.filter_by(activo=True)

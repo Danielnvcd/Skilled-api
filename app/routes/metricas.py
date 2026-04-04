@@ -33,11 +33,13 @@ def index():
     from datetime import date
     hoy = date.today()
 
-    # Detalle: trabajadores por planta
-    detalle_plantas = {}
-    for planta_name in plantas_labels:
-        trabajadores = (
+    # Detalle: trabajadores por planta (optimizado para evitar N+1)
+    detalle_plantas = {p: [] for p in plantas_labels}
+    
+    if plantas_labels:
+        trabajadores_todas_plantas = (
             db.session.query(
+                CredencialPlanta.planta,
                 Trabajador.no_empleado,
                 Trabajador.nombre,
                 Trabajador.nombre_apellidos,
@@ -45,22 +47,22 @@ def index():
                 CredencialPlanta.credencial_id,
                 CredencialPlanta.fecha_caducidad
             )
-            .join(CredencialPlanta)
-            .filter(CredencialPlanta.planta == planta_name, Trabajador.activo == True)
-            .order_by(Trabajador.nombre_apellidos)
+            .join(Trabajador, CredencialPlanta.trabajador_id == Trabajador.id)
+            .filter(CredencialPlanta.planta.in_(plantas_labels), Trabajador.activo == True)
+            .order_by(CredencialPlanta.planta, Trabajador.nombre_apellidos)
             .all()
         )
-        detalle_plantas[planta_name] = [
-            {
-                'no_empleado': t.no_empleado,
-                'nombre': f"{t.nombre_apellidos} {t.nombre}",
-                'puesto': t.puesto or 'Sin puesto',
-                'credencial_id': t.credencial_id,
-                'fecha_caducidad': t.fecha_caducidad.isoformat() if t.fecha_caducidad else None,
-                'estado_cred': 'Vencida' if (t.fecha_caducidad and t.fecha_caducidad < hoy) else ('Vigente' if t.fecha_caducidad else 'Sin fecha')
-            }
-            for t in trabajadores
-        ]
+        
+        for t in trabajadores_todas_plantas:
+            planta_name = t[0]
+            detalle_plantas[planta_name].append({
+                'no_empleado': t[1],
+                'nombre': f"{t[3]} {t[2]}",
+                'puesto': t[4] or 'Sin puesto',
+                'credencial_id': t[5],
+                'fecha_caducidad': t[6].isoformat() if t[6] else None,
+                'estado_cred': 'Vencida' if (t[6] and t[6] < hoy) else ('Vigente' if t[6] else 'Sin fecha')
+            })
 
     # --- Permisos DC3 ---
     total_activos = Trabajador.query.filter_by(activo=True).count()

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from datetime import datetime, date
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import Ausencia, SaldoVacaciones, Trabajador
 from app.utils import login_required, log_action
 import traceback
@@ -13,15 +13,17 @@ bp = Blueprint('ausencias', __name__, url_prefix='/ausencias')
 def index():
     hoy = date.today()
     
-    # Auto-crear saldos para trabajadores activos que aún no tengan registro
-    trabajadores_activos = Trabajador.query.filter_by(activo=True).all()
-    ids_con_saldo = set(s.trabajador_id for s in SaldoVacaciones.query.all())
-    nuevos = 0
-    for t in trabajadores_activos:
-        if t.id not in ids_con_saldo:
-            db.session.add(SaldoVacaciones(trabajador_id=t.id, dias_totales_asignados=0, dias_disfrutados=0))
-            nuevos += 1
-    if nuevos > 0:
+    # Auto-crear saldos para trabajadores activos que aún no tengan registro (optimizado)
+    trabajadores_sin_saldo = db.session.query(Trabajador.id).outerjoin(
+        SaldoVacaciones, Trabajador.id == SaldoVacaciones.trabajador_id
+    ).filter(
+        Trabajador.activo == True,
+        SaldoVacaciones.id == None
+    ).all()
+    
+    if trabajadores_sin_saldo:
+        for t in trabajadores_sin_saldo:
+            db.session.add(SaldoVacaciones(trabajador_id=t[0], dias_totales_asignados=0, dias_disfrutados=0))
         db.session.commit()
     
     # 1. Vacaciones pendientes por gozar (Resumen global)
@@ -97,6 +99,7 @@ def obtener_balance(trabajador_id):
 
 @bp.route('/solicitar', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def solicitar_ausencia():
     """Registra una nueva ausencia (vacación, incapacidad, permiso)."""
     try:
@@ -178,6 +181,7 @@ def solicitar_ausencia():
 
 @bp.route('/cancelar/<int:id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def cancelar_ausencia(id):
     """Cancela una ausencia y restaura el saldo de vacaciones si aplica."""
     try:
@@ -210,6 +214,7 @@ def cancelar_ausencia(id):
 
 @bp.route('/actualizar_saldo/<int:trabajador_id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def actualizar_saldo(trabajador_id):
     """Permite al administrador asignar más días de vacaciones (ajuste manual)."""
     try:

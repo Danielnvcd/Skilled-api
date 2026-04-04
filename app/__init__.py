@@ -179,6 +179,22 @@ def create_app():
         flash("Has excedido el número de intentos permitidos. Por favor espera unos minutos.", "danger")
         return redirect(url_for('main.home'))
 
+    @app.errorhandler(500)
+    @app.errorhandler(Exception)
+    def handle_500(e):
+        # We don't catch HTTPExceptions like 404 here normally, let Flask handle them if not specified
+        from werkzeug.exceptions import HTTPException
+        if isinstance(e, HTTPException) and e.code != 500:
+            return e
+            
+        app.logger.error(f"Internal Server Error: {str(e)}\n{traceback.format_exc()}")
+        
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+             return jsonify({'error': "Ocurrió un error interno en el servidor."}), 500
+        
+        flash("Ocurrió un error inesperado al procesar tu solicitud.", "danger")
+        return redirect(request.referrer or url_for('main.home'))
+
     # ── Observabilidad: logging de requests lentos y errores ──
     import time as _time
 

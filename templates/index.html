@@ -292,12 +292,12 @@
                 <div class="list-icon" style="background:#e0f2fe; color:#0284c7;">
                     <i class="fa-solid fa-pencil-alt"></i>
                 </div>
-                <div class="list-text" style="flex:1;">
-                    <h5>{{ log.action }}</h5>
-                    <p>{{ log.user or 'Sistema' }}</p>
+                <div class="list-text" style="flex:1; min-width: 0; padding-right: 10px;">
+                    <h5 style="margin: 0; font-size: 0.95rem; color: #111827; word-break: break-all; overflow-wrap: break-word;">{{ log.action }}</h5>
+                    <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: #6b7280;">{{ log.user or 'Sistema' }}</p>
                 </div>
-                <div style="font-size: 0.75rem; color: #9ca3af; white-space: nowrap;">
-                    {{ log.created_at.strftime('%d/%m/%Y %I:%M %p') }}
+                <div style="font-size: 0.75rem; color: #9ca3af; white-space: nowrap; flex-shrink: 0; text-align: right;">
+                    {{ log.created_at.strftime('%d/%m/%Y<br>%I:%M %p') | safe }}
                 </div>
             </div>
             {% else %}
@@ -339,7 +339,7 @@
             {% for item in docs_por_vencer %}
             <div class="list-item">
                 <div class="list-icon"
-                    style="{% if item.vencido %}background:#fef2f2; color:#dc2626;{% else %}background:#fffbeb; color:#d97706;{% endif %}">
+                    style="background:{{ '#fef2f2' if item.vencido else '#fffbeb' }}; color:{{ '#dc2626' if item.vencido else '#d97706' }};">
                     <i
                         class="fa-solid {% if item.tipo == 'credencial' %}fa-id-card{% else %}fa-file-lines{% endif %}"></i>
                 </div>
