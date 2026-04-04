@@ -14,10 +14,20 @@
                 toast.style.opacity = '1';
             });
             
-            // Redirect after delay
-            setTimeout(() => {
-                window.location.href = redirectUrl || '/login';
-            }, 1500);
+            if (redirectUrl) {
+                // Redirect after delay
+                setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, 1500);
+            } else {
+                // Remove toast after delay instead of redirecting
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    setTimeout(() => {
+                        if (toast.parentNode) toast.parentNode.removeChild(toast);
+                    }, 300);
+                }, 3000);
+            }
         }
     }
 
@@ -28,6 +38,7 @@
             if (responseData && responseData.error) msg = responseData.error;
             
             let url = defaultRedirect || '/login';
+            if (status === 403) url = null; // Default behavior for 403 is no redirect
             if (responseData && responseData.redirect) url = responseData.redirect;
             
             showToastAndRedirect(msg, url);

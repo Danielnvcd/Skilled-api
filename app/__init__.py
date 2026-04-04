@@ -1,5 +1,6 @@
 import os
 import logging
+import traceback
 from datetime import timedelta
 from flask import Flask, render_template, flash, redirect, url_for, request, jsonify, session
 from flask_wtf.csrf import CSRFError
@@ -182,18 +183,22 @@ def create_app():
     @app.errorhandler(500)
     @app.errorhandler(Exception)
     def handle_500(e):
-        # We don't catch HTTPExceptions like 404 here normally, let Flask handle them if not specified
-        from werkzeug.exceptions import HTTPException
-        if isinstance(e, HTTPException) and e.code != 500:
-            return e
+        try:
+            from werkzeug.exceptions import HTTPException
+            if isinstance(e, HTTPException) and e.code != 500:
+                return e
+                
+            app.logger.error(f"Internal Server Error: {str(e)}\n{traceback.format_exc()}")
             
-        app.logger.error(f"Internal Server Error: {str(e)}\n{traceback.format_exc()}")
-        
-        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-             return jsonify({'error': "Ocurrió un error interno en el servidor."}), 500
-        
-        flash("Ocurrió un error inesperado al procesar tu solicitud.", "danger")
-        return redirect(request.referrer or url_for('main.home'))
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                 return jsonify({'error': "Ocurrió un error interno en el servidor."}), 500
+            
+            flash("Ocurrió un error inesperado al procesar tu solicitud.", "danger")
+            fallback_url = request.referrer if request.referrer else url_for('main.home')
+            return redirect(fallback_url)
+        except Exception as handler_error:
+            app.logger.error(f"Critical error in 500 handler: {str(handler_error)}")
+            return "Internal Server Error", 500
 
     # ── Observabilidad: logging de requests lentos y errores ──
     import time as _time
