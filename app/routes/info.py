@@ -11,7 +11,7 @@ def index():
             "nombre": "Flask",
             "logo": "fa-brands fa-python",
             "color": "#3b82f6",
-            "descripcion": "Microframework WSGI modular desarrollado en Python. Actúa como el cerebro principal del sistema (Backend). Sus decoradores y el manejo de contextos HTTP permiten dirigir inteligentemente el tráfico de todas las pantallas, procesar cálculos de nómina pesados, autenticar usuarios y coordinar la creación y edición de horas de todos los proyectos de la constructora."
+            "descripcion": "Microframework WSGI modular desarrollado en Python. Actúa como el cerebro principal del sistema (Backend). Sus decoradores y el manejo de contextos HTTP permiten dirigir inteligentemente el tráfico de todas las pantallas, procesar cálculos de nómina pesados, autenticar usuarios y coordinar la creación y edición de horas de todos los proyectos."
         },
         {
             "nombre": "PostgreSQL",
