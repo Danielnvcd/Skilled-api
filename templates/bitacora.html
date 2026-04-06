@@ -2,7 +2,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/bitacora.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bitacora.css') }}?v=2">
 {% endblock %}
 
 {% block content %}
@@ -58,6 +58,9 @@
             </div>
             <div class="log-time">
                 {{ log.created_at.strftime('%d/%m/%Y %I:%M %p') }}
+                <div style="margin-top: 0.5rem; text-align: right;">
+                    <button class="btn-ver-detalle" data-log-id="{{ log.id }}">Ver</button>
+                </div>
             </div>
         </div>
         {% endfor %}
@@ -106,4 +109,37 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Modal -->
+<div class="bitacora-modal-overlay" id="bitacoraModal">
+    <div class="bitacora-modal-content">
+        <button class="bitacora-modal-close">&times;</button>
+        <div class="bitacora-modal-header">
+            <h3 class="bitacora-modal-title">Detalle de Actividad</h3>
+        </div>
+        
+        <div id="bitacoraModalLoading" style="display: none; text-align: center;">
+            <div class="spinner"></div>
+            <p>Obteniendo ubicación...</p>
+        </div>
+
+        <div id="bitacoraModalError" style="display: none; text-align: center; color: var(--text-muted); padding: 2rem 0;">
+            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #f59e0b; margin-bottom: 1rem; display: block;"></i>
+            <p>Ocurrió un error al cargar los detalles.</p>
+        </div>
+
+        <div class="bitacora-modal-body" id="bitacoraModalData" style="display: none;">
+            <p><strong>Acción:</strong> <span id="modalAction"></span></p>
+            <p><strong>Usuario:</strong> <span id="modalUser"></span></p>
+            <p><strong>Fecha/Hora:</strong> <span id="modalDate"></span></p>
+            <p><strong>Dirección IP:</strong> <span id="modalIp"></span></p>
+            <p><strong>Ubicación:</strong> <span id="modalLocation"></span></p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/bitacora.js') }}?v=3"></script>
 {% endblock %}
