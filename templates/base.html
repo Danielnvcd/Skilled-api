@@ -81,6 +81,10 @@
                 <img src="{{ url_for('static', filename='iconos/horario.png') }}" class="menu-icon" alt="Coordinadores">
                 Reporte de Horas
             </a>
+            <a href="https://nube.skilledmx.cloud" target="_blank">
+                <img src="{{ url_for('static', filename='iconos/nube.png') }}" class="menu-icon" alt="Nube">
+                Nube
+            </a>
             {% if session.get('role') == 'coordinador' %}
             <a href="{{ url_for('ficha.index') }}" class="{{ 'active' if request.endpoint == 'ficha.index' }}">
                 <img src="{{ url_for('static', filename='iconos/ficha tecnica.png') }}" class="menu-icon"
