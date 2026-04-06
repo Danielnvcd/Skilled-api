@@ -76,9 +76,9 @@
 }
 
 .pagination .active {
-    background: var(--primary-color);
+    background: #3b82f6;
     color: white;
-    border-color: var(--primary-color);
+    border-color: #3b82f6;
 }
 
 .pagination .disabled {
@@ -156,7 +156,7 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    border-left-color: var(--primary-color);
+    border-left-color: #3b82f6;
     animation: spin 1s linear infinite;
     margin: 2rem auto;
 }
