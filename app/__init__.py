@@ -20,9 +20,18 @@ def create_app():
                 static_folder=os.path.join(BASE_DIR, 'static'))
 
     @app.context_processor
-    def inject_now():
+    def inject_context():
         from datetime import datetime
-        return {'now': datetime.now}
+        from flask import session
+        
+        # Local import to prevent circular dependency
+        from app.models import User
+        
+        current_user = None
+        if 'user_id' in session:
+            current_user = User.query.get(session.get('user_id'))
+            
+        return {'now': datetime.now, 'current_user': current_user}
         
     @app.template_filter('fecha_es')
     def fecha_es_filter(dt, format_type='completo'):
@@ -111,7 +120,8 @@ def create_app():
             '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
             'https://static.cloudflareinsights.com', 
             'https://cdnjs.cloudflare.com', 
-            'https://cdn.jsdelivr.net'
+            'https://cdn.jsdelivr.net',
+            'https://cdn.tailwindcss.com'
         ],
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],

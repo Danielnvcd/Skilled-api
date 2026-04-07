@@ -40,9 +40,9 @@
                             data-fullname="{{ user.full_name or '' }}" data-area="{{ user.area or '' }}"
                             data-position="{{ user.position or '' }}" data-contact="{{ user.contact_info or '' }}"
                             data-profile-pic="{% if user.profile_pic and user.profile_pic != 'default.png' %}{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}{% endif %}">
-                            <div class="user-badge" {% if user.profile_pic and user.profile_pic !='default.png'
-                                %}style="background-image: url('{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}'); background-size: cover; background-position: center; color: transparent;"
-                                {% endif %}>
+                            <div class="avatar-initial" style="flex-shrink: 0; {% if user.profile_pic and user.profile_pic !='default.png'
+                                %}background-image: url('{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}'); background-size: cover; background-position: center; color: transparent;{% endif %}"
+                                >
                                 {{ user.username[0] | upper }}
                             </div>
                             {{ user.username }}

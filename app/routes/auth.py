@@ -25,15 +25,44 @@ def profile():
         new_password = request.form.get('new_password')
         confirm_password = request.form.get('confirm_password')
         
-        if new_password != confirm_password:
-            flash('Las contraseñas no coinciden.', 'danger')
-        elif not is_strong_password(new_password):
-            flash('La nueva contraseña es demasiado débil (usa mayúsculas, minúsculas, números y símbolos).', 'danger')
-        else:
-            user.password_hash = generate_password_hash(new_password)
-            db.session.commit()
-            flash('Contraseña actualizada correctamente.', 'success')
-            log_action(f"Contraseña actualizada para {user.username}")
+        if new_password:
+            if new_password != confirm_password:
+                flash('Las contraseñas no coinciden.', 'danger')
+            elif not is_strong_password(new_password):
+                flash('La nueva contraseña es demasiado débil (usa mayúsculas, minúsculas, números y símbolos).', 'danger')
+            else:
+                user.password_hash = generate_password_hash(new_password)
+                db.session.commit()
+                flash('Contraseña actualizada correctamente.', 'success')
+                log_action(f"Contraseña actualizada para {user.username}")
+            
+    if request.method == 'POST':
+        profile_pic = request.files.get('profile_pic')
+        if profile_pic and profile_pic.filename != '':
+            from werkzeug.utils import secure_filename
+            from app.utils import allowed_image_file
+            import os, uuid
+            if allowed_image_file(profile_pic):
+                ext = profile_pic.filename.rsplit('.', 1)[-1].lower() if '.' in profile_pic.filename else ''
+                filename = secure_filename(profile_pic.filename)
+                unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+                upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+                profile_pic.save(upload_path)
+                
+                if user.profile_pic and user.profile_pic != 'default.png':
+                    old_pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], user.profile_pic)
+                    if os.path.exists(old_pic_path):
+                        try:
+                            os.remove(old_pic_path)
+                        except Exception as e:
+                            current_app.logger.warning(f"No se pudo eliminar foto antigua: {e}")
+                
+                user.profile_pic = unique_filename
+                db.session.commit()
+                flash('Foto de perfil actualizada correctamente.', 'success')
+                log_action(f"Foto de perfil actualizada para {user.username}")
+            else:
+                flash('Foto rechazada: solo se permiten imágenes JPG o PNG reales.', 'warning')
             
     return render_template('profile.html', user=user)
 

@@ -40,6 +40,42 @@
 
     <div class="profile-card">
         <h3 class="card-title">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            Foto de Perfil
+        </h3>
+        <form method="POST" action="{{ url_for('auth.profile') }}" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group" style="display: flex; align-items: center; margin-bottom: 1.5rem; gap: 1rem;">
+                {% if user.profile_pic and user.profile_pic != 'default.png' %}
+                <img src="{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}" alt="Foto" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); flex-shrink: 0;">
+                {% else %}
+                <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #4F46E5, #3B82F6); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); flex-shrink: 0;">
+                    {{ user.username[:1] | upper }}
+                </div>
+                {% endif %}
+                <div style="flex: 1;">
+                    <style>
+                        .file-upload-modern::-webkit-file-upload-button {
+                            background-color: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; margin-right: 1rem;
+                        }
+                        .file-upload-modern::-webkit-file-upload-button:hover {
+                            background-color: #E0E7FF;
+                        }
+                    </style>
+                    <input type="file" name="profile_pic" accept="image/*" required class="file-upload-modern" style="width: 100%; font-size: 0.875rem; color: #6B7280; outline: none; cursor: pointer;">
+                </div>
+            </div>
+            <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">
+                Actualizar Foto
+            </button>
+        </form>
+    </div>
+
+    <div class="profile-card">
+        <h3 class="card-title">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
