@@ -1,0 +1,51 @@
+import os
+import logging
+from fastapi import Request, HTTPException, Depends
+from sqlalchemy.orm import Session
+from .database import get_db
+
+from app.models import User
+from flask import Flask
+from flask.sessions import SecureCookieSessionInterface
+
+from dotenv import load_dotenv
+load_dotenv()
+
+SECRET_KEY = os.environ.get('SECRET_KEY')
+
+# Dummy Flask app just to spin up its SecureCookieSessionInterface
+# so we decode EXACTLY as Flask encoded it.
+flask_app_decoder = Flask(__name__)
+flask_app_decoder.secret_key = SECRET_KEY
+session_interface = SecureCookieSessionInterface()
+signer = session_interface.get_signing_serializer(flask_app_decoder)
+
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    session_cookie = request.cookies.get('session')
+    if not session_cookie:
+        raise HTTPException(status_code=401, detail="No session cookie found")
+        
+    if not signer:
+        raise HTTPException(status_code=500, detail="Missing SECRET_KEY configuration")
+        
+    try:
+        # Usamos el propio signer de Flask para hacer bypass del encriptado
+        session_data = signer.loads(session_cookie, max_age=15 * 86400) # 15 days
+        
+        user_id = session_data.get('_user_id') or session_data.get('user_id')
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid session data")
+            
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+            
+        return user
+    except Exception as e:
+        logging.error(f"Error decodificando sesion de Flask en FastAPI: {e}")
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+def get_inventario_user(user: User = Depends(get_current_user)):
+    if user.role not in ['inventario', 'solicitante_material']:
+        raise HTTPException(status_code=403, detail="Forbidden: Required permissions missing")
+    return user

@@ -224,6 +224,16 @@ ROLE_PERMISSIONS = {
         'default_redirect': 'horas.index',
         'deny_message': 'Acceso denegado. Tu rol solo permite acceder a Horas, Ficha Técnica y Credenciales.',
     },
+    'inventario': {
+        'allowed': ['inventario_ui.', 'auth.', 'main.', 'users.serve_profile_pic'],
+        'default_redirect': 'inventario_ui.web',
+        'deny_message': 'Acceso denegado. Solo puedes acceder al módulo de Inventario.',
+    },
+    'solicitante_material': {
+        'allowed': ['inventario_ui.', 'auth.', 'main.', 'users.serve_profile_pic'],
+        'default_redirect': 'inventario_ui.web',
+        'deny_message': 'Acceso denegado. Solo puedes acceder al catálogo de Inventario.',
+    },
 }
 
 def login_required(f):

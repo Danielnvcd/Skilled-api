@@ -114,25 +114,29 @@ def create_app():
     csp = {
         'default-src': '\'self\'',
         'script-src': [
-            '\'self\'', 
-            '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 
+            '\'self\'',
+            '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'',
             '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
             '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
-            'https://static.cloudflareinsights.com', 
-            'https://cdnjs.cloudflare.com', 
+            '\'sha256-LR1qZhcrwqC16k6pdfx3zpaEnV1gOIHJjkFpm3G3JgU=\'',
+            'https://static.cloudflareinsights.com',
+            'https://cdnjs.cloudflare.com',
             'https://cdn.jsdelivr.net',
-            'https://cdn.tailwindcss.com'
+            'https://cdn.tailwindcss.com',
+            'https://unpkg.com',          # html5-qrcode CDN
         ],
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
-        'connect-src': ['\'self\'', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
+        # blob: y * necesarios para getUserMedia (cámara) y WebWorkers del QR scanner
+        'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
+        'media-src': ['\'self\'', 'blob:'],           # stream de cámara
+        'worker-src': ['\'self\'', 'blob:'],           # WebWorker del scanner QR
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
-        'media-src': '\'self\''
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui
     app.register_blueprint(auth.bp)
 
 
@@ -152,6 +156,7 @@ def create_app():
     app.register_blueprint(reportes.bp)
     app.register_blueprint(ausencias.bp)
     app.register_blueprint(metricas.bp)
+    app.register_blueprint(inventario_ui.bp)
 
     # ── Handler global de CSRF ─────────────────────────────────────────
     # Se ejecuta en TODA la app cuando un token CSRF es inválido o expiró.

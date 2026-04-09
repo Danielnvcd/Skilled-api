@@ -132,6 +132,15 @@ def login():
             db.session.commit()
             log_action("Login exitoso") 
             
+            is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
+            if u.role == 'inventario':
+                if is_mobile:
+                    return redirect(url_for('inventario_ui.movil'))
+                else:
+                    return redirect(url_for('inventario_ui.web'))
+            elif u.role == 'solicitante_material':
+                return redirect(url_for('inventario_ui.web'))
+                
             if u.role == 'coordinador':
                 return redirect(url_for('horas.index'))
             return redirect(url_for('main.home'))
@@ -167,6 +176,15 @@ def verify_2fa():
             session.permanent = remember
             log_action(f"Login 2FA exitoso para {user.username}")
             
+            is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
+            if user.role == 'inventario':
+                if is_mobile:
+                    return redirect(url_for('inventario_ui.movil'))
+                else:
+                    return redirect(url_for('inventario_ui.web'))
+            elif user.role == 'solicitante_material':
+                return redirect(url_for('inventario_ui.web'))
+                
             if user.role == 'coordinador':
                 return redirect(url_for('horas.index'))
             return redirect(url_for('main.home'))

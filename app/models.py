@@ -386,3 +386,86 @@ class Ausencia(db.Model):
     
     creado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
+
+# --- MÓDULO DE INVENTARIO ---
+
+class Almacen(db.Model):
+    __tablename__ = "almacenes"
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    ubicacion = db.Column(db.String(250), nullable=True)
+    qr_code = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    activo = db.Column(db.Boolean, default=True)
+    # Relación con estantes
+    estantes = db.relationship('Estante', backref='almacen', lazy='dynamic', cascade='all, delete-orphan')
+
+class Estante(db.Model):
+    """Subdivisión física dentro de un almacén (estante, rack, zona, etc.)
+    Tiene su propio QR para escanear desde el móvil. El stock sigue siendo
+    global por Producto; el estante funciona como etiqueta de ubicación.
+    """
+    __tablename__ = "estantes"
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)          # "Estante A-1", "Rack 3", etc.
+    descripcion = db.Column(db.String(250), nullable=True)       # Nota opcional
+    almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=False, index=True)
+    qr_code = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    activo = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+class Producto(db.Model):
+    __tablename__ = "productos"
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    descripcion = db.Column(db.String(250), nullable=False)
+    categoria = db.Column(db.String(100), nullable=False, index=True)
+    unidad = db.Column(db.String(50), nullable=False) # pieza, caja, kg, etc.
+    stock_actual = db.Column(db.Numeric(10, 2), default=0, nullable=False)
+    stock_minimo = db.Column(db.Numeric(10, 2), default=0, nullable=False)
+    activo = db.Column(db.Boolean, default=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+class MovimientoInventario(db.Model):
+    __tablename__ = "movimientos_inventario"
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(50), nullable=False, index=True) # ENTRADA, SALIDA, AJUSTE, TRASPASO
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=False, index=True)
+    almacen_origen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=True, index=True)
+    almacen_destino_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=True, index=True)
+    cantidad = db.Column(db.Numeric(10, 2), nullable=False)
+    motivo = db.Column(db.String(250), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    fecha = db.Column(db.DateTime, default=datetime.now, index=True)
+    
+    producto = db.relationship('Producto', backref=db.backref('movimientos', lazy=True, cascade='all, delete-orphan'))
+    almacen_origen = db.relationship('Almacen', foreign_keys=[almacen_origen_id])
+    almacen_destino = db.relationship('Almacen', foreign_keys=[almacen_destino_id])
+    usuario = db.relationship('User', foreign_keys=[usuario_id])
+
+class SolicitudMaterial(db.Model):
+    __tablename__ = "solicitudes_material"
+    id = db.Column(db.Integer, primary_key=True)
+    solicitante_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    proyecto = db.Column(db.String(200), nullable=True)
+    estatus = db.Column(db.String(50), default='PENDIENTE', nullable=False, index=True) # PENDIENTE, APROBADA, RECHAZADA, ENTREGADA
+    fecha_creacion = db.Column(db.DateTime, default=datetime.now, index=True)
+    fecha_cierre = db.Column(db.DateTime, nullable=True)
+    
+    solicitante = db.relationship('User', foreign_keys=[solicitante_id])
+
+class SolicitudMaterialDetalle(db.Model):
+    __tablename__ = "solicitudes_material_detalle"
+    id = db.Column(db.Integer, primary_key=True)
+    solicitud_id = db.Column(db.Integer, db.ForeignKey('solicitudes_material.id'), nullable=False, index=True)
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=False)
+    cantidad_solicitada = db.Column(db.Numeric(10, 2), nullable=False)
+    cantidad_aprobada = db.Column(db.Numeric(10, 2), default=0)
+    cantidad_entregada = db.Column(db.Numeric(10, 2), default=0)
+    
+    solicitud = db.relationship('SolicitudMaterial', backref=db.backref('detalles', lazy='selectin', cascade='all, delete-orphan'))
+    producto = db.relationship('Producto')
+

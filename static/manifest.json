@@ -1,0 +1,17 @@
+{
+  "name": "Skilled - Gestión de Inventario",
+  "short_name": "Skilled",
+  "start_url": "/inventario/movil",
+  "display": "standalone",
+  "background_color": "#eff6ff",
+  "theme_color": "#2563eb",
+  "description": "Sistema de gestión de inventario por QR para Skilled Proyectos Industriales.",
+  "icons": [
+    {
+      "src": "/static/imagenes/pwa-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
