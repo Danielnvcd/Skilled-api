@@ -128,11 +128,13 @@ def create_app():
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
-        # blob: y * necesarios para getUserMedia (cámara) y WebWorkers del QR scanner
+        # blob: necesario para getUserMedia (cámara) y WebWorkers del QR scanner
         'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
         'media-src': ['\'self\'', 'blob:'],           # stream de cámara
         'worker-src': ['\'self\'', 'blob:'],           # WebWorker del scanner QR
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
+        # Bloquea que esta app sea embebida en iframes de otros dominios (anti-clickjacking)
+        'frame-ancestors': '\'none\'',
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
@@ -202,8 +204,17 @@ def create_app():
             from werkzeug.exceptions import HTTPException
             if isinstance(e, HTTPException) and e.code != 500:
                 return e
-                
-            app.logger.error(f"Internal Server Error: {str(e)}\n{traceback.format_exc()}")
+
+            # En producción no exponer trazas completas (podrían revelar paths/secretos)
+            if is_prod:
+                app.logger.error(
+                    "Internal Server Error [%s]: %s",
+                    type(e).__name__, str(e)[:300]
+                )
+            else:
+                app.logger.error(
+                    "Internal Server Error: %s\n%s", str(e), traceback.format_exc()
+                )
             
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                  return jsonify({'error': "Ocurrió un error interno en el servidor."}), 500
@@ -212,7 +223,7 @@ def create_app():
             fallback_url = request.referrer if request.referrer else url_for('main.home')
             return redirect(fallback_url)
         except Exception as handler_error:
-            app.logger.error(f"Critical error in 500 handler: {str(handler_error)}")
+            app.logger.error("Critical error in 500 handler: %s", str(handler_error)[:200])
             return "Internal Server Error", 500
 
     # ── Observabilidad: logging de requests lentos y errores ──

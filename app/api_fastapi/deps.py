@@ -46,6 +46,13 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Session expired or invalid")
 
 def get_inventario_user(user: User = Depends(get_current_user)):
-    if user.role not in ['inventario', 'solicitante_material']:
+    """Permite lectura a solicitantes, inventario y admin."""
+    if user.role not in ['inventario', 'solicitante_material', 'admin']:
         raise HTTPException(status_code=403, detail="Forbidden: Required permissions missing")
+    return user
+
+def get_inventario_admin_user(user: User = Depends(get_current_user)):
+    """Solo permite roles 'inventario' y 'admin' (operaciones de escritura/borrado)."""
+    if user.role not in ['inventario', 'admin']:
+        raise HTTPException(status_code=403, detail="Se requiere rol de inventario o administrador")
     return user

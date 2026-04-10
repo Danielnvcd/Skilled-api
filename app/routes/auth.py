@@ -139,14 +139,17 @@ def login():
                 else:
                     return redirect(url_for('inventario_ui.web'))
             elif u.role == 'solicitante_material':
-                return redirect(url_for('inventario_ui.web'))
+                return redirect(url_for('inventario_ui.solicitar'))
                 
             if u.role == 'coordinador':
                 return redirect(url_for('horas.index'))
             return redirect(url_for('main.home'))
         
         flash('Credenciales incorrectas', 'danger')
-        log_action(f"Login fallido para usuario {request.form.get('username')}")
+        # Registrar fallo con IP real (Cloudflare Tunnel envía CF-Connecting-IP)
+        _attempted_user = (request.form.get('username') or '')[:80]  # truncar, nunca loguear contraseña
+        _real_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+        log_action(f"Login fallido para usuario '{_attempted_user}' desde IP {_real_ip}")
         
     return render_template('login.html')
 
@@ -183,7 +186,7 @@ def verify_2fa():
                 else:
                     return redirect(url_for('inventario_ui.web'))
             elif user.role == 'solicitante_material':
-                return redirect(url_for('inventario_ui.web'))
+                return redirect(url_for('inventario_ui.solicitar'))
                 
             if user.role == 'coordinador':
                 return redirect(url_for('horas.index'))

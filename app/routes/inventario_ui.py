@@ -17,7 +17,7 @@ def movil():
 @login_required
 def web():
     user = User.query.get(session.get('user_id'))
-    if user.role not in ['inventario', 'solicitante_material', 'admin']:
+    if user.role not in ['inventario', 'admin']:
         flash('No tienes permiso para ver esta página.', 'danger')
         return redirect(url_for('main.home'))
     # Redirigir a catálogo por defecto si alguien entra a /web
@@ -27,7 +27,7 @@ def web():
 @login_required
 def catalogo():
     user = User.query.get(session.get('user_id'))
-    if user.role not in ['inventario', 'solicitante_material', 'admin']:
+    if user.role not in ['inventario', 'admin']:
         flash('No tienes permiso.', 'danger')
         return redirect(url_for('main.home'))
     return render_template('inventario_catalogo.html', user=user)
@@ -46,7 +46,7 @@ def estantes():
 def qr_estante(estante_id):
     """Página de impresión del QR de un estante."""
     user = User.query.get(session.get('user_id'))
-    if user.role not in ['inventario', 'solicitante_material', 'admin']:
+    if user.role not in ['inventario', 'admin']:
         flash('No tienes permiso.', 'danger')
         return redirect(url_for('main.home'))
     estante = Estante.query.get_or_404(estante_id)

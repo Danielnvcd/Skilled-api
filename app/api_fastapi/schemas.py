@@ -1,26 +1,28 @@
-from pydantic import BaseModel, condecimal, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Optional, List, Literal
 from datetime import datetime
 
 # --- Pydantic Models ---
 
 class ProductoBase(BaseModel):
-    codigo: str
-    descripcion: str
-    categoria: str
-    unidad: str
-    stock_minimo: float = 0.0
+    codigo: str = Field(..., max_length=50, pattern=r'^[A-Za-z0-9\-_\.\/]+$',
+                        description="Código alfanumérico único del producto")
+    descripcion: str = Field(..., max_length=250)
+    categoria: str = Field(..., max_length=100)
+    unidad: str = Field(..., max_length=50)
+    stock_minimo: float = Field(default=0.0, ge=0, le=1_000_000)
 
 class ProductoCreate(ProductoBase):
-    stock_actual: float = 0.0
+    stock_actual: float = Field(default=0.0, ge=0, le=1_000_000)
 
 class ProductoUpdate(BaseModel):
-    codigo: Optional[str] = None
-    descripcion: Optional[str] = None
-    categoria: Optional[str] = None
-    unidad: Optional[str] = None
-    stock_actual: Optional[float] = None
-    stock_minimo: Optional[float] = None
+    codigo: Optional[str] = Field(default=None, max_length=50,
+                                  pattern=r'^[A-Za-z0-9\-_\.\/]+$')
+    descripcion: Optional[str] = Field(default=None, max_length=250)
+    categoria: Optional[str] = Field(default=None, max_length=100)
+    unidad: Optional[str] = Field(default=None, max_length=50)
+    stock_actual: Optional[float] = Field(default=None, ge=0, le=1_000_000)
+    stock_minimo: Optional[float] = Field(default=None, ge=0, le=1_000_000)
 
 class ProductoResponse(ProductoBase):
     id: int
@@ -34,15 +36,15 @@ class ProductoResponse(ProductoBase):
         from_attributes = True
 
 class EstanteBase(BaseModel):
-    nombre: str
-    descripcion: Optional[str] = None
+    nombre: str = Field(..., max_length=100)
+    descripcion: Optional[str] = Field(default=None, max_length=250)
 
 class EstanteCreate(EstanteBase):
     almacen_id: int
 
 class EstanteUpdate(BaseModel):
-    nombre: Optional[str] = None
-    descripcion: Optional[str] = None
+    nombre: Optional[str] = Field(default=None, max_length=100)
+    descripcion: Optional[str] = Field(default=None, max_length=250)
     almacen_id: Optional[int] = None
 
 class EstanteResponse(EstanteBase):
@@ -56,16 +58,16 @@ class EstanteResponse(EstanteBase):
         from_attributes = True
 
 class AlmacenBase(BaseModel):
-    nombre: str
-    ubicacion: Optional[str]
+    nombre: str = Field(..., max_length=100)
+    ubicacion: Optional[str] = Field(default=None, max_length=250)
     activo: bool = True
 
 class AlmacenCreate(AlmacenBase):
     pass
 
 class AlmacenUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ubicacion: Optional[str] = None
+    nombre: Optional[str] = Field(default=None, max_length=100)
+    ubicacion: Optional[str] = Field(default=None, max_length=250)
     activo: Optional[bool] = None
 
 class AlmacenResponse(AlmacenBase):
@@ -76,13 +78,14 @@ class AlmacenResponse(AlmacenBase):
         from_attributes = True
 
 class MovimientoCreate(BaseModel):
-    tipo: str # ENTRADA, SALIDA, AJUSTE, TRASPASO
+    tipo: Literal['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASPASO']
     producto_id: int
-    cantidad: float
+    # AJUSTE puede ser negativo (reducción); ENTRADA/SALIDA/TRASPASO deben ser > 0
+    cantidad: float = Field(..., ge=-100_000, le=100_000)
     almacen_origen_id: Optional[int] = None
     almacen_destino_id: Optional[int] = None
-    estante_id: Optional[int] = None  # Estante donde ocurre el movimiento (referencia)
-    motivo: Optional[str] = None
+    estante_id: Optional[int] = None
+    motivo: Optional[str] = Field(default=None, max_length=250)
 
 class MovimientoResponse(BaseModel):
     id: int
@@ -102,7 +105,7 @@ class MovimientoResponse(BaseModel):
 
 class SolicitudDetalleBase(BaseModel):
     producto_id: int
-    cantidad_solicitada: float
+    cantidad_solicitada: float = Field(..., gt=0, le=10_000)
 
 class SolicitudDetalleCreate(SolicitudDetalleBase):
     pass
@@ -118,10 +121,10 @@ class SolicitudDetalleResponse(SolicitudDetalleBase):
         from_attributes = True
 
 class SolicitudBase(BaseModel):
-    proyecto: Optional[str] = None
+    proyecto: Optional[str] = Field(default=None, max_length=200)
 
 class SolicitudCreate(SolicitudBase):
-    detalles: List[SolicitudDetalleCreate]
+    detalles: List[SolicitudDetalleCreate] = Field(..., min_length=1, max_length=100)
 
 class SolicitudResponse(SolicitudBase):
     id: int
@@ -136,4 +139,4 @@ class SolicitudResponse(SolicitudBase):
         from_attributes = True
 
 class SolicitudUpdateEstado(BaseModel):
-    estatus: str # APROBADA, RECHAZADA, ENTREGADA
+    estatus: Literal['APROBADA', 'RECHAZADA', 'ENTREGADA', 'PENDIENTE']

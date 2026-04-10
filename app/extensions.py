@@ -3,7 +3,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
-from flask import session
+from flask import session, request as flask_request
 import redis
 import os
 
@@ -26,8 +26,21 @@ def get_redis():
                 _redis_client = None
     return _redis_client
 
-def rate_limit_key():
-    return str(session.get("user_id", get_remote_address()))
+def get_real_client_ip_flask() -> str:
+    """
+    Devuelve la IP real del cliente considerando Cloudflare Tunnel.
+    Cloudflare añade CF-Connecting-IP con la IP real del navegador.
+    ProxyFix ya normaliza X-Forwarded-For, pero CF-Connecting-IP es más fiable
+    detrás de un tunnel donde el origen solo recibe tráfico de Cloudflare.
+    """
+    cf_ip = flask_request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+    return get_remote_address()
+
+def rate_limit_key() -> str:
+    """Clave de rate limit: user_id autenticado o IP real del cliente."""
+    return str(session.get("user_id", get_real_client_ip_flask()))
 
 limiter = Limiter(
     key_func=rate_limit_key
