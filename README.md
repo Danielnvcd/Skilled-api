@@ -178,4 +178,46 @@ SISTEMA DE NOMINAS/
 
 ---
 
+## 🌐 Producción y Despliegue (Ubuntu/Gunicorn)
+
+Para entornos de producción, se recomienda utilizar **Gunicorn** con workers de **Uvicorn** para manejar tanto Flask como FastAPI de forma simultánea.
+
+### 1. Requisitos para el Servidor
+Asegúrate de instalar las dependencias y tener `uvicorn` y `gunicorn` en tu entorno virtual:
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configuración de Systemd (`/etc/systemd/system/nominas.service`)
+Utiliza la siguiente plantilla para mantener el servidor siempre encendido:
+
+```ini
+[Unit]
+Description=Sistema de Nominas - Gunicorn (Flask + FastAPI)
+After=network.target postgresql.service redis.service
+
+[Service]
+User=sistemanominas
+Group=www-data
+WorkingDirectory=/opt/nominas
+Environment="PATH=/opt/nominas/venv/bin"
+EnvironmentFile=/opt/nominas/.env
+# Ejecución con UvicornWorker para cargar root_app (FastAPI + Flask)
+ExecStart=/opt/nominas/venv/bin/gunicorn --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:8000 --timeout 120 --access-logfile - run:root_app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 3. Comandos de Gestión
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nominas
+sudo systemctl start nominas
+sudo systemctl status nominas
+```
+
+---
+
 > _Desarrollado para mantener la contabilidad organizada, veloz e inquebrantable._
