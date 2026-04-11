@@ -9,6 +9,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}?v=2">
+    
+    <!-- PWA Config -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#2563eb">
+    
+    <!-- iOS / iPhone Specific -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Skilled">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='imagenes/pwa-icon.png') }}">
 </head>
 
 <body>
@@ -68,6 +78,16 @@
 
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
     <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(reg => console.log('SW Registered', reg))
+                    .catch(err => console.log('SW Registration failed', err));
+            });
+        }
+    </script>
 </body>
 
 </html>

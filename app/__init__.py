@@ -119,6 +119,7 @@ def create_app():
             '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
             '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
             '\'sha256-LR1qZhcrwqC16k6pdfx3zpaEnV1gOIHJjkFpm3G3JgU=\'',
+            '\'sha256-HQDTABhTJR5g6ipLHPMSZNn4Zj+TfOpaKNRLQ4+8tH0=\'',  # Tailwind CDN inline script
             'https://static.cloudflareinsights.com',
             'https://cdnjs.cloudflare.com',
             'https://cdn.jsdelivr.net',

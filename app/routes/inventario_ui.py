@@ -1,6 +1,6 @@
-from flask import Blueprint, render_template, session, redirect, url_for, flash
+from flask import Blueprint, render_template, session, redirect, url_for, flash, jsonify
 from app.utils import login_required
-from app.models import User, Estante
+from app.models import User, Estante, Proyecto
 
 bp = Blueprint('inventario_ui', __name__, url_prefix='/inventario')
 
@@ -32,6 +32,15 @@ def catalogo():
         return redirect(url_for('main.home'))
     return render_template('inventario_catalogo.html', user=user)
 
+@bp.route('/catalogo/<categoria>')
+@login_required
+def catalogo_categoria(categoria):
+    user = User.query.get(session.get('user_id'))
+    if user.role not in ['inventario', 'admin']:
+        flash('No tienes permiso.', 'danger')
+        return redirect(url_for('main.home'))
+    return render_template('inventario_categoria.html', user=user, categoria=categoria)
+
 @bp.route('/estantes')
 @login_required
 def estantes():
@@ -61,6 +70,16 @@ def solicitar():
         flash('No tienes permiso para solicitar material.', 'danger')
         return redirect(url_for('main.home'))
     return render_template('inventario_solicitar.html', user=user)
+
+@bp.route('/api/proyectos')
+@login_required
+def api_proyectos():
+    proyectos = Proyecto.query.filter_by(activo=True).order_by(Proyecto.numero_proyecto).all()
+    return jsonify([{
+        'id': p.id,
+        'numero_proyecto': p.numero_proyecto,
+        'nombre': p.nombre or ''
+    } for p in proyectos])
 
 @bp.route('/solicitudes')
 @login_required

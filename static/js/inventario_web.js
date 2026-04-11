@@ -1,8 +1,46 @@
-/* ─── inventario_web.js — Soporte para páginas separadas ─── */
+/* ─── inventario_web.js v31 ─── */
 document.addEventListener('DOMContentLoaded', async () => {
+    // Lee la categoría desde data attribute (CSP-safe, sin inline script)
+    const CATEGORIA_ACTUAL = document.getElementById('page-data')?.dataset?.categoria || null;
 
     // ─── CATEGORÍAS ─────────────────────────────────────────────
     const CATEGORIAS = ['Tornillería','Tuercas','Rondanas','Pijas','Abrazaderas','Soportería','Tubería/Accesorios'];
+
+    // ─── CONFIG VISUAL POR CATEGORÍA ────────────────────────────
+    const CATEGORIA_CONFIG = {
+        'Tornillería': {
+            color: '#4F46E5', bg: '#EEF2FF',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`
+        },
+        'Tuercas': {
+            color: '#B45309', bg: '#FFFBEB',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/><circle cx="12" cy="12" r="3"/></svg>`
+        },
+        'Rondanas': {
+            color: '#0891B2', bg: '#ECFEFF',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3.5"/></svg>`
+        },
+        'Pijas': {
+            color: '#7C3AED', bg: '#F5F3FF',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="20"/><path d="M8 6h8"/><path d="M9 10h6"/><path d="M10 14h4"/><path d="M11 18h2"/></svg>`
+        },
+        'Abrazaderas': {
+            color: '#059669', bg: '#ECFDF5',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`
+        },
+        'Soportería': {
+            color: '#DC2626', bg: '#FEF2F2',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="4" rx="1"/><rect x="2" y="10" width="20" height="4" rx="1"/><rect x="2" y="17" width="20" height="4" rx="1"/></svg>`
+        },
+        'Tubería/Accesorios': {
+            color: '#0284C7', bg: '#F0F9FF',
+            svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="22" height="12" rx="5"/><path d="M6 12h12"/></svg>`
+        }
+    };
+    const CAT_DEFAULT = {
+        color: '#6B7280', bg: '#F3F4F6',
+        svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`
+    };
 
     // ─── UTILS ──────────────────────────────────────────────────
     const openModal  = (m) => m && m.classList.remove('hidden');
@@ -50,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function cargarProductos() {
         if (!productsList) return;
         try {
-            const res = await fetch('/api/v1/productos/');
+            const res = await fetch('/api/v1/productos/?limit=9999');
             todosProductos = await res.json();
             renderizarProductos(todosProductos);
             const countLabel = document.getElementById('tab-count-catalogo');
@@ -60,64 +98,171 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    function renderizarProductos(productos) {
-        if (!productsList) return;
-        if (!productos.length) {
-            productsList.innerHTML = '<div class="col-span-full text-center py-12 text-gray-400"><p class="text-sm">No hay productos registrados.</p></div>';
-            return;
-        }
-        productsList.innerHTML = productos.map(p => {
-            const stock    = parseFloat(p.stock_actual);
-            const minimo   = parseFloat(p.stock_minimo);
-            const bajo     = stock <= minimo;
-            const pillCls  = bajo ? 'stock-pill-low' : 'stock-pill-ok';
-            const pillIcon = bajo ? '⚠' : '✔';
-            return `
-            <div class="product-item">
-                <div class="min-w-0 flex-1 pr-2">
-                    <p class="font-bold text-gray-900 text-sm mb-0.5 leading-tight truncate">${p.descripcion}</p>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-[10px] font-black bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">${p.codigo}</span>
-                        <span class="text-[11px] text-gray-400 font-medium">${p.categoria || 'Sin categoría'}</span>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    <span class="stock-pill ${pillCls}">${pillIcon} ${stock.toFixed(0)} ${p.unidad}</span>
-                    <div class="product-item-actions">
-                        <button class="action-btn action-btn-edit" data-id="${p.id}" data-action="edit-prod" title="Editar">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </button>
-                        <button class="action-btn action-btn-delete" data-id="${p.id}" data-nombre="${p.descripcion}" data-action="delete-prod" title="Eliminar">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                        </button>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
 
-        // Eventos de acciones
-        productsList.querySelectorAll('[data-action="edit-prod"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const p = todosProductos.find(x => x.id == btn.dataset.id);
-                if (p) abrirEditarProducto(p);
-            });
-        });
-        productsList.querySelectorAll('[data-action="delete-prod"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const inputId = document.getElementById('deleteProductoId');
-                const labelName = document.getElementById('deleteProductoNombre');
-                if (inputId) inputId.value = btn.dataset.id;
-                if (labelName) labelName.textContent = `"${btn.dataset.nombre}" será eliminado permanentemente.`;
-                openModal(modalDeleteProducto);
-            });
-        });
-    }
-
-    // Filtros en tiempo real
     const searchProd = document.getElementById('searchProducto');
     const filterCat = document.getElementById('filterCategoria');
     if (searchProd) searchProd.addEventListener('input', aplicarFiltros);
     if (filterCat) filterCat.addEventListener('change', aplicarFiltros);
+
+    function renderizarProductos(productos) {
+        if (!productsList) return;
+        if (!productos.length) {
+            productsList.innerHTML = `
+            <div class="flex flex-col items-center py-16 text-gray-300">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-4"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                <p class="text-sm font-semibold">No hay productos que mostrar</p>
+            </div>`;
+            return;
+        }
+
+        const btnGenHtml = (p) => `
+            <div class="product-item-actions">
+                <button class="action-btn action-btn-edit" data-id="${p.id}" data-action="edit-prod" title="Editar">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="action-btn action-btn-delete" data-id="${p.id}" data-nombre="${p.descripcion}" data-action="delete-prod" title="Eliminar">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+            </div>`;
+
+        // ── MODO 1: Vista Detallada de Categoría ──────────
+        if (CATEGORIA_ACTUAL) {
+            const cat = CATEGORIA_ACTUAL;
+            const dictCfg = CATEGORIA_CONFIG[cat] || CAT_DEFAULT;
+            const prods = productos.filter(p => p.categoria === cat);
+            
+            if (!prods.length) {
+                productsList.innerHTML = `<div class="text-center p-8 text-gray-400">No hay materiales en ${cat}</div>`;
+                return;
+            }
+
+            const itemsHTML = prods.map(p => {
+                const stock   = parseFloat(p.stock_actual);
+                const minimo  = parseFloat(p.stock_minimo);
+                const bajo    = stock <= minimo;
+                const pillCls = bajo ? 'stock-pill-low' : 'stock-pill-ok';
+                return `
+                <div class="product-card">
+                    <div class="product-card-icon" style="background:${dictCfg.bg}; color:${dictCfg.color};">
+                        ${dictCfg.svg}
+                    </div>
+                    <div class="product-card-body">
+                        <p class="product-card-name">${p.descripcion}</p>
+                        <div class="product-card-meta">
+                            <span class="sku-tag">${p.codigo}</span>
+                            <span class="cat-tag" style="color:${dictCfg.color}; background:${dictCfg.bg};">${p.unidad}</span>
+                        </div>
+                    </div>
+                    <div class="product-card-side">
+                        <span class="stock-pill ${pillCls}">${bajo ? '⚠' : '✔'} ${stock.toFixed(0)} ${p.unidad}</span>
+                        ${btnGenHtml(p)}
+                    </div>
+                </div>`;
+            }).join('');
+
+            productsList.innerHTML = `<div class="seccion-productos-grid">${itemsHTML}</div>`;
+            bindAcciones(productsList);
+            return;
+        }
+
+        // ── MODO 2: Búsqueda o filtro de categoría activo ──────────
+        const posBusqueda = (searchProd && searchProd.value.trim() !== '') || (filterCat && filterCat.value !== '');
+
+        if (posBusqueda) {
+            // Si ests buscando algo desde el dashboard principal, listar productos que coincidan
+            const itemsHTML = productos.map(p => {
+                const cfg = CATEGORIA_CONFIG[p.categoria] || CAT_DEFAULT;
+                const stock   = parseFloat(p.stock_actual);
+                const minimo  = parseFloat(p.stock_minimo);
+                const bajo    = stock <= minimo;
+                const pillCls = bajo ? 'stock-pill-low' : 'stock-pill-ok';
+                return `
+                <div class="product-card">
+                    <div class="product-card-icon" style="background:${cfg.bg}; color:${cfg.color};">
+                        ${cfg.svg}
+                    </div>
+                    <div class="product-card-body">
+                        <p class="product-card-name">${p.descripcion}</p>
+                        <div class="product-card-meta">
+                            <span class="sku-tag">${p.codigo}</span>
+                            <span class="cat-tag" style="color:${cfg.color}; background:${cfg.bg};">${p.categoria}</span>
+                        </div>
+                    </div>
+                    <div class="product-card-side">
+                        <span class="stock-pill ${pillCls}">${bajo ? '⚠' : '✔'} ${stock.toFixed(0)} ${p.unidad}</span>
+                        ${btnGenHtml(p)}
+                    </div>
+                </div>`;
+            }).join('');
+            productsList.innerHTML = `<div class="seccion-productos-grid">${itemsHTML}</div>`;
+            bindAcciones(productsList);
+            return;
+        }
+
+        // --- DIBUJAR CAJAS DE DASHBOARD ---
+        const grupos = {};
+        const ordenCats = CATEGORIAS.filter(c => productos.some(p => p.categoria === c));
+        productos.forEach(p => {
+            const cat = p.categoria || 'Sin categoría';
+            if (!grupos[cat]) grupos[cat] = [];
+            grupos[cat].push(p);
+        });
+        
+        const catOrdenadas = [
+            ...ordenCats,
+            ...Object.keys(grupos).filter(c => !CATEGORIAS.includes(c))
+        ];
+
+        const linkBase = '/inventario/catalogo/';
+        const dashHtml = `<div class="dashboard-cats-grid">` + catOrdenadas.map(cat => {
+            const prods  = grupos[cat] || [];
+            if(prods.length === 0) return '';
+            const cfg    = CATEGORIA_CONFIG[cat] || CAT_DEFAULT;
+            const bajos  = prods.filter(p => parseFloat(p.stock_actual) <= parseFloat(p.stock_minimo)).length;
+            const ok     = prods.length - bajos;
+            
+            return `
+            <a href="${linkBase}${encodeURIComponent(cat)}" class="dash-cat-card" style="--base-color:${cfg.color};">
+                <div class="dash-cat-bg-icon">
+                    ${cfg.svg}
+                </div>
+                <div class="dash-cat-content">
+                    <h3>${cat}</h3>
+                    <div class="dash-cat-metrics">
+                        ${prods.length} <span class="text-sm font-normal opacity-80">Items</span>
+                    </div>
+                </div>
+                <div class="dash-cat-footer">
+                    ${ok > 0 ? `<span class="stat-badge ok">✔ ${ok} estables</span>` : ''}
+                    ${bajos > 0 ? `<span class="stat-badge danger">⚠ ${bajos} por reponer</span>` : ''}
+                </div>
+            </a>`;
+        }).join('') + `</div>`;
+
+        productsList.innerHTML = dashHtml;
+    }
+
+    function bindAcciones(container) {
+        container.querySelectorAll('[data-action="edit-prod"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const p = todosProductos.find(x => x.id == btn.dataset.id);
+                if (p) abrirEditarProducto(p);
+            });
+        });
+        container.querySelectorAll('[data-action="delete-prod"]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const inputId   = document.getElementById('deleteProductoId');
+                const labelName = document.getElementById('deleteProductoNombre');
+                if (inputId)   inputId.value = btn.dataset.id;
+                if (labelName) labelName.textContent = '"' + btn.dataset.nombre + '" será eliminado permanentemente.';
+                openModal(modalDeleteProducto);
+            });
+        });
+    }
 
     function aplicarFiltros() {
         const q   = searchProd ? searchProd.value.toLowerCase() : '';
@@ -129,6 +274,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         renderizarProductos(filtrado);
     }
+
+
 
     // ─── Nuevo/Editar Producto ─────────────────────────────────────────
     const btnOpenProd = document.getElementById('btnOpenModalProducto');
@@ -230,10 +377,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // Paleta de colores para bodegas (cíclico)
+    const BODEGA_COLORS = [
+        { gradient: 'from-emerald-500 to-teal-600', icon: '#059669', bg: '#ECFDF5', light: 'rgba(16,185,129,0.08)' },
+        { gradient: 'from-indigo-500 to-violet-600', icon: '#4F46E5', bg: '#EEF2FF', light: 'rgba(79,70,229,0.08)' },
+        { gradient: 'from-amber-500 to-orange-600', icon: '#D97706', bg: '#FFFBEB', light: 'rgba(217,119,6,0.08)' },
+        { gradient: 'from-sky-500 to-blue-600', icon: '#0284C7', bg: '#F0F9FF', light: 'rgba(2,132,199,0.08)' },
+        { gradient: 'from-rose-500 to-pink-600', icon: '#DC2626', bg: '#FEF2F2', light: 'rgba(220,38,38,0.08)' },
+    ];
+
     async function renderizarAlmacenes(almacenes) {
         if (!almacenesList) return;
         if (!almacenes.length) {
-            almacenesList.innerHTML = '<div class="text-center py-12 text-gray-400"><p class="text-sm">No hay bodegas registradas.</p></div>';
+            almacenesList.innerHTML = `
+            <div class="flex flex-col items-center py-16 text-gray-300">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-4"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <p class="text-sm font-semibold">No hay bodegas registradas</p>
+            </div>`;
             return;
         }
 
@@ -243,19 +403,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (r.ok) estantesMap[alm.id] = await r.json();
         }));
 
-        almacenesList.innerHTML = almacenes.map(alm => {
-            const estantes = estantesMap[alm.id] || [];
+        almacenesList.innerHTML = almacenes.map((alm, idx) => {
+            const estantes  = estantesMap[alm.id] || [];
+            const pal       = BODEGA_COLORS[idx % BODEGA_COLORS.length];
             const estantesHTML = estantes.length
-                ? estantes.map(est => `
-                    <div class="shelf-item">
-                        <div class="min-w-0 pr-4">
-                            <p class="text-[13px] font-bold text-gray-700 leading-tight">${est.nombre}</p>
-                            ${est.descripcion ? `<p class="text-[11px] text-gray-400 font-medium truncate mt-0.5">${est.descripcion}</p>` : ''}
+                ? estantes.map(est => {
+                    const catCfg = CATEGORIA_CONFIG[est.descripcion] || CAT_DEFAULT;
+                    return `
+                    <div class="shelf-item-enhanced">
+                        <div class="shelf-item-icon" style="background:${catCfg.bg}; color:${catCfg.color};">
+                            ${catCfg.svg}
                         </div>
-                        <div class="flex items-center gap-2 shrink-0">
+                        <div class="min-w-0 flex-1 pr-3">
+                            <p class="text-[13px] font-bold text-gray-800 leading-tight">${est.nombre}</p>
+                            ${est.descripcion ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style="color:${catCfg.color}; background:${catCfg.bg};">${est.descripcion}</span>` : ''}
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
                             <a href="/inventario/qr/estante/${est.id}" target="_blank"
-                                class="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+                                class="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
                                 QR
                             </a>
                             <div class="shelf-item-actions">
@@ -267,32 +433,47 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 </button>
                             </div>
                         </div>
-                    </div>`).join('')
-                : '<div class="py-4 text-center border-2 border-dashed border-gray-100 rounded-xl"><p class="text-xs text-gray-400 font-medium">Sin estantes registrados</p></div>';
+                    </div>`;
+                }).join('')
+                : `<div class="col-span-full py-6 text-center border-2 border-dashed border-gray-100 rounded-xl">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" class="mx-auto mb-2"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>
+                    <p class="text-xs text-gray-400 font-medium">Sin estantes registrados</p>
+                </div>`;
 
             return `
-            <div class="border border-gray-100/50 rounded-2xl overflow-hidden bg-white/40 shadow-sm transition-all hover:bg-white/60">
-                <div class="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-gray-50/80 to-transparent border-b border-gray-100/40">
-                    <div>
-                        <h3 class="font-bold text-gray-900 leading-tight">${alm.nombre}</h3>
-                        ${alm.ubicacion ? `<p class="text-[11px] font-semibold text-gray-400 uppercase tracking-tighter mt-0.5">${alm.ubicacion}</p>` : ''}
+            <div class="bodega-card">
+                <div class="bodega-card-header bg-gradient-to-r ${pal.gradient}">
+                    <div class="bodega-card-header-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                            <polyline points="9 22 9 12 15 12 15 22"/>
+                        </svg>
+                    </div>
+                    <div class="bodega-card-header-info">
+                        <h3 class="bodega-card-title">${alm.nombre}</h3>
+                        ${alm.ubicacion ? `<p class="bodega-card-location"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>${alm.ubicacion}</p>` : ''}
                     </div>
                     <div class="almacen-header-actions">
-                        <button class="action-btn action-btn-edit" data-id="${alm.id}" data-nombre="${alm.nombre}" data-ubicacion="${alm.ubicacion || ''}" data-action="edit-almacen" title="Editar bodega">
+                        <button class="action-btn action-btn-edit bodega-edit-btn" data-id="${alm.id}" data-nombre="${alm.nombre}" data-ubicacion="${alm.ubicacion || ''}" data-action="edit-almacen" title="Editar bodega">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
-                        <button class="action-btn action-btn-delete" data-id="${alm.id}" data-nombre="${alm.nombre}" data-tipo="bodega" data-action="delete-shelf" title="Eliminar bodega">
+                        <button class="action-btn action-btn-delete bodega-del-btn" data-id="${alm.id}" data-nombre="${alm.nombre}" data-tipo="bodega" data-action="delete-shelf" title="Eliminar bodega">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                         </button>
-                        <button class="btn-add-estante inline-flex items-center gap-1.5 text-[11px] font-black px-3 py-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all active:scale-95"
-                            data-almacen-id="${alm.id}" data-almacen-nombre="${alm.nombre}">
+                        <button class="btn-add-estante" data-almacen-id="${alm.id}" data-almacen-nombre="${alm.nombre}">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             NUEVO ESTANTE
                         </button>
                     </div>
                 </div>
-                <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    ${estantesHTML}
+                <div class="bodega-card-shelves">
+                    <div class="bodega-shelves-count">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>
+                        ${estantes.length} ${estantes.length === 1 ? 'estante' : 'estantes'}
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-3">
+                        ${estantesHTML}
+                    </div>
                 </div>
             </div>`;
         }).join('');

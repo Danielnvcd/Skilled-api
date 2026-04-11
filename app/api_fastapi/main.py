@@ -19,7 +19,7 @@ from .deps import get_current_user, get_inventario_user, get_inventario_admin_us
 from . import schemas
 from app.models import (
     Almacen, Estante, Producto, MovimientoInventario,
-    SolicitudMaterial, SolicitudMaterialDetalle, User, AuditLog
+    SolicitudMaterial, SolicitudMaterialDetalle, User, AuditLog, Proyecto
 )
 
 
@@ -451,5 +451,10 @@ def create_movimiento(
     db.commit()
     db.refresh(nuevo_mov)
     return nuevo_mov
+
+@router.get("/proyectos/")
+def get_proyectos(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    proyectos = db.query(Proyecto).filter(Proyecto.activo == True).order_by(Proyecto.numero_proyecto).all()
+    return [{'id': p.id, 'numero_proyecto': p.numero_proyecto, 'nombre': p.nombre or ''} for p in proyectos]
 
 app_fastapi.include_router(router, prefix="/v1")

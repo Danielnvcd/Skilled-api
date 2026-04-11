@@ -112,6 +112,12 @@ def update_last_seen():
 @bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("5 per 1 minutes", methods=['POST'])
 def login():
+    # Si ya tiene sesión activa, regresarlo a donde estaba o al home
+    if 'user_id' in session:
+        flash('Ya tienes una sesión activa.', 'info')
+        fallback = request.referrer if request.referrer and '/login' not in request.referrer else url_for('main.home')
+        return redirect(fallback)
+        
     if request.method == 'POST':
         u = User.query.filter_by(username=request.form.get('username')).first()
         

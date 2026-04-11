@@ -3,47 +3,136 @@
 {% block title %}Gestión de Solicitudes — Skilled{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=7">
 <style>
-    .status-badge {
-        font-[10px] font-black uppercase tracking-tighter px-2.5 py-1 rounded-lg border;
-    }
-    .status-pendiente { background: #FFFBEB; color: #92400E; border-color: #FEF3C7; }
-    .status-aprobada { background: #ECFDF5; color: #065F46; border-color: #D1FAE5; }
-    .status-rechazada { background: #FEF2F2; color: #991B1B; border-color: #FEE2E2; }
-    .status-entregada { background: #EFF6FF; color: #1E40AF; border-color: #DBEAFE; }
+/* ── Gestión de Solicitudes: estilos específicos ── */
+.status-badge {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 0.3rem 0.7rem; border-radius: 999px;
+}
+.status-pendiente  { background:#FFFBEB; color:#92400E; border: 1px solid #FEF3C7; }
+.status-aprobada   { background:#ECFDF5; color:#065F46; border: 1px solid #D1FAE5; }
+.status-rechazada  { background:#FEF2F2; color:#991B1B; border: 1px solid #FEE2E2; }
+.status-entregada  { background:#EFF6FF; color:#1E40AF; border: 1px solid #DBEAFE; }
 
-    .request-card {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .request-card:hover {
-        transform: translateY(-2px);
-        background-color: rgba(255, 255, 255, 0.8) !important;
-    }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot-pendiente  { background: #F59E0B; }
+.dot-aprobada   { background: #10B981; }
+.dot-rechazada  { background: #EF4444; }
+.dot-entregada  { background: #3B82F6; }
+
+.request-card {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.25rem; background: white; border: 1.5px solid #F1F5F9;
+    border-radius: 14px; cursor: pointer; transition: all 0.2s;
+    border-left-width: 4px;
+}
+.request-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.07); transform: translateY(-1px); background: #FAFAFA; }
+.request-card.border-pendiente  { border-left-color: #F59E0B; }
+.request-card.border-aprobada   { border-left-color: #10B981; }
+.request-card.border-rechazada  { border-left-color: #EF4444; }
+.request-card.border-entregada  { border-left-color: #3B82F6; }
+
+.filter-tab {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.78rem;
+    font-weight: 700; cursor: pointer; border: 1.5px solid transparent;
+    transition: all 0.2s; white-space: nowrap; background: transparent;
+}
+.filter-tab:hover { background: #F9FAFB; }
+.filter-tab.active { background: #111827; color: white; }
+.filter-tab.active .tab-dot { background: white !important; }
+
+.stat-card {
+    background: white; border-radius: 14px; padding: 1rem 1.25rem;
+    border: 1px solid #F1F5F9; display: flex; align-items: center; gap: 0.85rem;
+    flex: 1; min-width: 0;
+}
+.stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stat-val  { font-size: 1.6rem; font-weight: 900; color: #111827; line-height: 1; }
+.stat-lbl  { font-size: 0.68rem; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+
+.sol-toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+    padding: 0.85rem 1.5rem; border-radius: 12px; font-weight: 700;
+    font-size: 0.9rem; color: white; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+    animation: fadeIn .3s ease;
+}
+
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="inventory-management-wrapper">
+
+    <!-- Header -->
     <div class="header-section">
         <div class="header-titles">
-            <h1 class="main-title">Solicitudes Pendientes</h1>
-            <p class="subtitle">Gestiona las peticiones de material realizadas por el personal de campo</p>
+            <h1 class="main-title">Gestión de Solicitudes</h1>
+            <p class="subtitle">Revisa, aprueba o rechaza pedidos de material del personal</p>
         </div>
-        <div class="flex gap-4">
-            <button class="btn-glow btn-glow-blue flex items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        <!-- Ilustración decorativa -->
+        <div class="header-illustration">
+            <svg width="155" height="85" viewBox="0 0 155 85" fill="none">
+                <!-- Pila de documentos -->
+                <rect x="40" y="20" width="75" height="58" rx="6" fill="#E0E7FF" stroke="#A5B4FC" stroke-width="1.5"/>
+                <rect x="35" y="15" width="75" height="58" rx="6" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+                <rect x="30" y="10" width="75" height="58" rx="6" fill="white" stroke="#E0E7FF" stroke-width="1.5"/>
+                <!-- Líneas del documento -->
+                <rect x="42" y="22" width="50" height="3.5" rx="1.5" fill="#C7D2FE"/>
+                <rect x="42" y="30" width="35" height="3" rx="1.5" fill="#DDE6FF"/>
+                <rect x="42" y="37" width="44" height="3" rx="1.5" fill="#DDE6FF"/>
+                <rect x="42" y="44" width="30" height="3" rx="1.5" fill="#DDE6FF"/>
+                <!-- Check verde grande -->
+                <circle cx="103" cy="58" r="16" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5"/>
+                <path d="M95 58 l5 5 9-9" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- Estrella pendiente -->
+                <circle cx="26" cy="28" r="9" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1.5"/>
+                <path d="M26 23 l1.5 3.5 3.5 0.5 -2.5 2.5 0.5 3.5 -3-1.5 -3 1.5 0.5-3.5 -2.5-2.5 3.5-0.5z" fill="#F59E0B"/>
+                <!-- Detalles -->
+                <circle cx="145" cy="20" r="2" fill="#A5B4FC"/>
+                <circle cx="15" cy="58" r="1.5" fill="#6EE7B7"/>
+                <circle cx="140" cy="72" r="1" fill="#FCD34D"/>
+            </svg>
+        </div>
+        <div class="flex gap-3">
+            <button id="btnRefresh" class="btn-glow btn-glow-blue flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
                 Actualizar
             </button>
         </div>
     </div>
 
+    <!-- Stats -->
+    <div id="statsRow" class="flex flex-wrap gap-3 mb-5">
+        <!-- Se renderizan via JS -->
+        <div class="stat-card animate-pulse"><div class="stat-icon bg-gray-100"></div><div><div class="h-7 w-8 bg-gray-100 rounded mb-1"></div><div class="h-3 w-20 bg-gray-100 rounded"></div></div></div>
+    </div>
+
+    <!-- Filtros y búsqueda -->
+    <div class="glass-card mb-4 py-3 px-4">
+        <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <!-- Tabs de estado -->
+            <div id="filterTabs" class="flex flex-wrap gap-1.5 flex-1">
+                <!-- Se renderizan via JS -->
+            </div>
+            <!-- Buscador -->
+            <div class="search-container" style="min-width:220px; max-width:260px;">
+                <div class="search-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+                <input id="searchSolicitudes" type="text" placeholder="Buscar solicitante..." class="premium-search" style="padding: 0.75rem 1rem 0.75rem 2.75rem !important; font-size: 0.85rem;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de solicitudes -->
     <div class="glass-card">
-        <div id="requestsContainer" class="space-y-4">
-            <!-- Cargando solicitudes... -->
-            <div class="text-center py-20 text-gray-400">
+        <div id="requestsContainer" class="space-y-3">
+            <div class="text-center py-16 text-gray-400">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                <p class="font-medium">Consultando solicitudes con el servidor...</p>
+                <p class="font-medium text-sm">Cargando solicitudes...</p>
             </div>
         </div>
     </div>
@@ -51,46 +140,73 @@
 
 <!-- Modal Detalle Solicitud -->
 <div id="modalDetail" class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
-    <div class="modal-content-premium w-full max-w-2xl">
-        <div class="flex justify-between items-center p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-50/10 to-transparent">
+    <div class="modal-content-premium w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+
+        <!-- Header del modal -->
+        <div class="flex justify-between items-start p-6 border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur-sm z-10">
             <div>
-                <h3 id="detailTitle" class="font-bold text-xl text-gray-800">Detalles de Solicitud</h3>
-                <p id="detailSubtitle" class="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1">ID: #000 · Proyecto: XXX</p>
+                <div class="flex items-center gap-2 mb-1">
+                    <span id="detailStatusBadge" class="status-badge status-pendiente"><span class="status-dot dot-pendiente"></span>PENDIENTE</span>
+                </div>
+                <h3 id="detailTitle" class="font-bold text-xl text-gray-800">Solicitud #—</h3>
+                <p id="detailSubtitle" class="text-xs text-gray-400 font-semibold mt-0.5">—</p>
             </div>
-            <button id="btnCloseDetail" class="text-2xl text-gray-400 hover:text-gray-700">&times;</button>
+            <div class="flex items-center gap-2">
+                <button id="btnPrintDetail" title="Imprimir / PDF"
+                    class="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+                    PDF
+                </button>
+                <button id="btnCloseDetail" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-xl font-light">&times;</button>
+            </div>
         </div>
-        
-        <div class="p-8">
-            <div class="overflow-hidden border border-gray-100 rounded-2xl mb-8">
+
+        <!-- Info de la solicitud -->
+        <div id="detailInfoGrid" class="grid grid-cols-2 gap-4 px-6 pt-5 pb-3 border-b border-gray-50">
+            <!-- Se rellena via JS -->
+        </div>
+
+        <!-- Tabla de materiales -->
+        <div class="px-6 py-4">
+            <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Materiales Solicitados</h4>
+            <div class="overflow-hidden border border-gray-100 rounded-xl mb-6">
                 <table class="w-full text-left">
                     <thead class="bg-gray-50/80">
                         <tr>
-                            <th class="px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Material / Código</th>
-                            <th class="px-5 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Solicitado</th>
+                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">#</th>
+                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Material</th>
+                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Código</th>
+                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Cantidad</th>
                         </tr>
                     </thead>
                     <tbody id="detailTableBody" class="divide-y divide-gray-50 bg-white">
-                        <!-- Items via JS -->
                     </tbody>
                 </table>
             </div>
 
-            <div id="actionButtons" class="flex gap-4">
-                <button id="btnReject" class="flex-1 px-6 py-4 rounded-xl text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95">
-                    DENEGAR SOLICITUD
+            <!-- Acciones (solo si PENDIENTE) -->
+            <div id="actionButtons" class="flex gap-3">
+                <button id="btnReject"
+                    class="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95 border border-rose-100">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    RECHAZAR
                 </button>
-                <button id="btnApprove" class="flex-1 px-6 py-4 rounded-xl text-sm font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-95">
-                    APROBAR PEDIDO
+                <button id="btnApprove"
+                    class="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-95 border border-emerald-100">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    APROBAR
                 </button>
             </div>
-            <div id="doneMessage" class="hidden text-center py-4 bg-gray-50 rounded-xl">
-                <p class="text-gray-500 font-bold text-sm">Esta solicitud ya ha sido procesada.</p>
+            <div id="doneMessage" class="hidden flex items-center justify-center gap-2 py-4 bg-gray-50 rounded-xl text-gray-500 font-bold text-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+                Esta solicitud ya fue procesada.
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_solicitudes.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/inventario_solicitudes.js') }}?v=3"></script>
 {% endblock %}

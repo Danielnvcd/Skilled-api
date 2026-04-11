@@ -236,7 +236,7 @@
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
 
-/* ─── TAB NAVIGATION ──────────────────────────────────── */
+/* â”€â”€â”€ TAB NAVIGATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tab-nav {
     display: flex;
     gap: 0.5rem;
@@ -296,7 +296,7 @@
 .tab-panel { animation: fadeIn 0.3s ease-out; }
 .tab-panel.hidden { display: none; }
 
-/* ─── PANEL TOOLBAR ──────────────────────────────────── */
+/* â”€â”€â”€ PANEL TOOLBAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .panel-toolbar {
     display: flex;
     gap: 1rem;
@@ -304,16 +304,110 @@
     margin-bottom: 1.5rem;
 }
 
-/* ─── PRODUCTS GRID ──────────────────────────────────── */
+/* â”€â”€â”€ PRODUCTS GRID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 0.75rem;
-    max-height: 68vh;
-    overflow-y: auto;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 0.85rem;
     padding-right: 4px;
 }
 
+/* â”€â”€â”€ PRODUCT CARD (enhanced) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.product-card {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.9rem 1rem;
+    background: white;
+    border: 1px solid #F1F5F9;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+    cursor: default;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.07);
+    border-color: rgba(99,102,241,0.2);
+}
+
+.product-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    shrink: 0;
+    flex-shrink: 0;
+    padding: 9px;
+}
+
+.product-card-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.product-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.product-card-name {
+    font-size: 0.83rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.3;
+    margin: 0 0 0.35rem 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.product-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.sku-tag {
+    font-size: 0.65rem;
+    font-weight: 800;
+    background: #F3F4F6;
+    color: #6B7280;
+    padding: 0.15rem 0.5rem;
+    border-radius: 5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.cat-tag {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+}
+
+.product-card-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.product-item-actions {
+    display: flex;
+    gap: 0.3rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.product-card:hover .product-item-actions { opacity: 1; }
+
+/* Legacy .product-item kept for compatibility */
 .product-item {
     display: flex;
     align-items: center;
@@ -330,13 +424,6 @@
     background: white;
     box-shadow: 0 4px 12px rgba(0,0,0,0.04);
     border-color: rgba(79, 70, 229, 0.2);
-}
-
-.product-item-actions {
-    display: flex;
-    gap: 0.4rem;
-    opacity: 0;
-    transition: opacity 0.2s;
 }
 
 .product-item:hover .product-item-actions { opacity: 1; }
@@ -358,7 +445,7 @@
 .action-btn-delete { color: #EF4444; }
 .action-btn-delete:hover { background: #FEF2F2; }
 
-/* ─── SHELF CARDS ─────────────────────────────────────── */
+/* â”€â”€â”€ SHELF CARDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .shelf-item {
     display: flex;
     align-items: center;
@@ -385,9 +472,412 @@
 
 .shelf-item:hover .shelf-item-actions { opacity: 1; }
 
+/* â”€â”€â”€ SHELF ITEM ENHANCED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.shelf-item-enhanced {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.75rem 0.85rem;
+    background: #FAFAFA;
+    border-radius: 10px;
+    border: 1px solid #F1F5F9;
+    transition: all 0.2s;
+}
+
+.shelf-item-enhanced:hover {
+    background: white;
+    border-color: #DDD6FE;
+    box-shadow: 0 2px 10px rgba(124,58,237,0.06);
+}
+
+.shelf-item-enhanced:hover .shelf-item-actions { opacity: 1; }
+
+.shelf-item-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 7px;
+}
+
+.shelf-item-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* â”€â”€â”€ BODEGA CARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bodega-card {
+    border-radius: 18px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.04);
+    transition: all 0.25s ease;
+    margin-bottom: 0.5rem;
+}
+
+.bodega-card:hover {
+    box-shadow: 0 8px 28px rgba(0,0,0,0.09);
+    transform: translateY(-2px);
+}
+
+.bodega-card-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.1rem 1.4rem;
+    position: relative;
+}
+
+.bodega-card-header-icon {
+    width: 46px;
+    height: 46px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+.bodega-card-header-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: white;
+}
+
+.bodega-card-header-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.bodega-card-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: white;
+    margin: 0;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.bodega-card-location {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.75);
+    margin: 0.25rem 0 0 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.bodega-card-location svg {
+    stroke: rgba(255,255,255,0.75);
+}
+
 .almacen-header-actions {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
+    flex-shrink: 0;
 }
 
+.bodega-edit-btn, .bodega-del-btn {
+    background: rgba(255,255,255,0.15) !important;
+    border-radius: 8px !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+}
+
+.bodega-edit-btn:hover { background: rgba(255,255,255,0.25) !important; }
+.bodega-del-btn:hover { background: rgba(239,68,68,0.4) !important; }
+
+.btn-add-estante {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 0.5rem 0.85rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.03em;
+}
+
+.btn-add-estante:hover {
+    background: rgba(255,255,255,0.28);
+}
+
+.btn-add-estante:active { transform: scale(0.96); }
+
+.bodega-card-shelves {
+    padding: 1rem 1.2rem 1.2rem;
+}
+
+.bodega-shelves-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* â”€â”€â”€ HEADER ILLUSTRATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.header-illustration {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .header-illustration { display: none; }
+}
+
+
+
+/* --- CATALOGO: SECCIONES POR CATEGORIA --- */
+
+.catalogo-secciones {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.seccion-cat {
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    border: 1px solid #F1F5F9;
+    flex-shrink: 0;
+    transition: box-shadow .2s, transform .2s;
+}
+.seccion-cat:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    transform: translateY(-1px);
+}
+
+.seccion-cat-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    padding: 0.65rem 0;
+}
+
+.seccion-color-bar {
+    width: 5px;
+    align-self: stretch;
+    flex-shrink: 0;
+    border-radius: 0 3px 3px 0;
+}
+
+.seccion-cat-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0 1rem;
+    min-width: 0;
+}
+
+.seccion-cat-icon-wrap {
+    width: 52px;
+    height: 52px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 11px;
+}
+.seccion-cat-icon-wrap svg {
+    width: 100%;
+    height: 100%;
+}
+
+.seccion-cat-text {
+    flex: 1;
+    min-width: 0;
+}
+.seccion-cat-nombre {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #111827;
+    margin: 0 0 .15rem;
+    letter-spacing: -.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.seccion-cat-count {
+    font-size: .78rem;
+    font-weight: 600;
+    color: #9CA3AF;
+    margin: 0;
+}
+
+.seccion-cat-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: .2rem;
+    padding: 0 .5rem 0 0;
+    flex-shrink: 0;
+}
+.seccion-stat-chip {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: .22rem .65rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.seccion-stat-ok  { background: #ECFDF5; color: #059669; }
+.seccion-stat-low { background: #FFF1F2; color: #E11D48; }
+
+.seccion-toggle-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #F3F4F6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin: 0 .85rem;
+    transition: background .2s;
+}
+.seccion-cat-header:hover .seccion-toggle-icon { background: #E5E7EB; }
+.seccion-toggle-icon svg { transition: transform .3s ease; }
+.seccion-cat.expanded .seccion-toggle-icon svg { transform: rotate(180deg); }
+
+.seccion-cat-body {
+    border-top: 1px solid #F1F5F9;
+    padding: .85rem 1rem 1rem;
+    display: none;
+    animation: fadeIn .2s ease;
+}
+.seccion-cat.expanded .seccion-cat-body { display: block; }
+
+.seccion-productos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: .6rem;
+}
+.seccion-empty {
+    text-align: center;
+    padding: 1.5rem;
+    color: #9CA3AF;
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .seccion-cat-stats     { display: none; }
+    .seccion-cat-nombre    { font-size: .95rem; }
+    .seccion-cat-icon-wrap { width: 40px; height: 40px; padding: 8px; }
+}
+
+/* --- DASHBOARD GRIDS --- */
+.dashboard-cats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    padding: 0.5rem 0;
+}
+
+.dash-cat-card {
+    position: relative;
+    background: var(--base-color, #4F46E5);
+    color: #ffffff;
+    border-radius: 18px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none !important;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dash-cat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+    color: #ffffff;
+}
+
+.dash-cat-bg-icon {
+    position: absolute;
+    right: -20px;
+    bottom: -20px;
+    width: 140px;
+    height: 140px;
+    opacity: 0.15;
+    transform: rotate(-15deg);
+    pointer-events: none;
+    color: #ffffff;
+}
+.dash-cat-bg-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.dash-cat-content {
+    position: relative;
+    z-index: 2;
+}
+
+.dash-cat-content h3 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.dash-cat-metrics {
+    margin-top: 0.5rem;
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.dash-cat-footer {
+    position: relative;
+    z-index: 2;
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.dash-cat-footer .stat-badge {
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.15);
+    white-space: nowrap;
+}
+.dash-cat-footer .stat-badge.danger {
+    background: rgba(239, 68, 68, 0.85); /* Tailwind red-500 */
+    border-color: rgba(239, 68, 68, 1);
+    color: white;
+}

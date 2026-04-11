@@ -3,7 +3,7 @@
 {% block title %}Dashboard de Inventario — Skilled{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=28">
 {% endblock %}
 
 {% block content %}
@@ -84,7 +84,7 @@
             </div>
 
             <!-- Lista de productos -->
-            <div id="productos-list" class="products-grid custom-scrollbar">
+            <div id="productos-list" class="catalogo-secciones custom-scrollbar" style="max-height:68vh;overflow-y:auto;padding-right:4px;">
                 <div class="flex flex-col items-center py-12 text-gray-400">
                     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
                     <p class="text-sm">Sincronizando inventario...</p>
@@ -341,5 +341,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=12"></script>
+<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=28"></script>
 {% endblock %}
