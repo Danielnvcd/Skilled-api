@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Literal
 from datetime import datetime
 
@@ -25,15 +25,14 @@ class ProductoUpdate(BaseModel):
     stock_minimo: Optional[float] = Field(default=None, ge=0, le=1_000_000)
 
 class ProductoResponse(ProductoBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     stock_actual: float
     activo: bool
     created_at: datetime
     updated_at: datetime
     created_by_id: Optional[int]
-
-    class Config:
-        from_attributes = True
 
 class EstanteBase(BaseModel):
     nombre: str = Field(..., max_length=100)
@@ -48,14 +47,13 @@ class EstanteUpdate(BaseModel):
     almacen_id: Optional[int] = None
 
 class EstanteResponse(EstanteBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     almacen_id: int
     qr_code: str
     activo: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class AlmacenBase(BaseModel):
     nombre: str = Field(..., max_length=100)
@@ -71,11 +69,10 @@ class AlmacenUpdate(BaseModel):
     activo: Optional[bool] = None
 
 class AlmacenResponse(AlmacenBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     qr_code: str
-
-    class Config:
-        from_attributes = True
 
 class MovimientoCreate(BaseModel):
     tipo: Literal['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASPASO']
@@ -88,6 +85,8 @@ class MovimientoCreate(BaseModel):
     motivo: Optional[str] = Field(default=None, max_length=250)
 
 class MovimientoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     tipo: str
     producto_id: int
@@ -97,9 +96,6 @@ class MovimientoResponse(BaseModel):
     almacen_destino_id: Optional[int]
     usuario_id: int
     motivo: Optional[str]
-
-    class Config:
-        from_attributes = True
 
 # --- Solicitudes de Material ---
 
@@ -111,14 +107,14 @@ class SolicitudDetalleCreate(SolicitudDetalleBase):
     pass
 
 class SolicitudDetalleResponse(SolicitudDetalleBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     cantidad_aprobada: float
     cantidad_entregada: float
     producto_descripcion: Optional[str] = None
     producto_codigo: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+    producto_unidad: Optional[str] = None
 
 class SolicitudBase(BaseModel):
     proyecto: Optional[str] = Field(default=None, max_length=200)
@@ -127,6 +123,8 @@ class SolicitudCreate(SolicitudBase):
     detalles: List[SolicitudDetalleCreate] = Field(..., min_length=1, max_length=100)
 
 class SolicitudResponse(SolicitudBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     solicitante_id: int
     estatus: str
@@ -134,9 +132,6 @@ class SolicitudResponse(SolicitudBase):
     fecha_cierre: Optional[datetime] = None
     solicitante_nombre: Optional[str] = None
     detalles: List[SolicitudDetalleResponse]
-
-    class Config:
-        from_attributes = True
 
 class SolicitudUpdateEstado(BaseModel):
     estatus: Literal['APROBADA', 'RECHAZADA', 'ENTREGADA', 'PENDIENTE']

@@ -106,6 +106,7 @@
 
             {% if session.get('role') in ['solicitante_material'] %}
             {{ menu_link('inventario_ui.solicitar', false, 'fas fa-plus-circle', 'Solicitar Material', true) }}
+            {{ menu_link('inventario_ui.mis_pedidos', false, 'fas fa-list-check', 'Mis Pedidos', true) }}
             {% endif %}
 
             {% endif %}

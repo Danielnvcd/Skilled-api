@@ -1,4 +1,4 @@
-/* ─── inventario_solicitar.js v5 ─── */
+/* ─── inventario_solicitar.js v7 ─── */
 document.addEventListener('DOMContentLoaded', () => {
     const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -67,10 +67,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#fff;padding:
 .notes-label{font-size:9px;font-weight:900;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
 .notes-text{font-size:12px;color:#374151;line-height:1.5}
 .status-box{display:inline-block;padding:4px 14px;border-radius:4px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.07em;margin-top:6px;border:1.5px solid #111}
-.status-pendiente{color:#92400E;border-color:#D97706;background:#FFFBEB}
-.status-aprobada{color:#065F46;border-color:#10B981;background:#ECFDF5}
-.status-rechazada{color:#991B1B;border-color:#EF4444;background:#FEF2F2}
-.status-entregada{color:#1E40AF;border-color:#3B82F6;background:#EFF6FF}
+.status-pendiente,.status-PENDIENTE{color:#92400E;border-color:#D97706;background:#FFFBEB}
+.status-aprobada,.status-APROBADA{color:#065F46;border-color:#10B981;background:#ECFDF5}
+.status-rechazada,.status-RECHAZADA{color:#991B1B;border-color:#EF4444;background:#FEF2F2}
+.status-entregada,.status-ENTREGADA{color:#1E40AF;border-color:#3B82F6;background:#EFF6FF}
 .section-title{font-size:10px;font-weight:900;color:#6B7280;text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px}
 .table-wrap{border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;margin-bottom:28px}
 table{width:100%;border-collapse:collapse;font-size:12px}

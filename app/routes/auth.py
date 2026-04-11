@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
+from urllib.parse import urlparse, urljoin
 from app.extensions import db, limiter, get_redis
 from app.models import User
 from app.utils import log_action, login_required, is_strong_password
@@ -8,6 +9,12 @@ import qrcode
 import io
 import base64
 from datetime import datetime
+
+def _is_safe_url(target):
+    """Verifica que el URL de redirección sea del mismo dominio (anti open-redirect)."""
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 bp = Blueprint('auth', __name__)
 
@@ -32,7 +39,11 @@ def profile():
                 flash('La nueva contraseña es demasiado débil (usa mayúsculas, minúsculas, números y símbolos).', 'danger')
             else:
                 user.password_hash = generate_password_hash(new_password)
+                # Incrementar versión invalida todas las sesiones abiertas en otros dispositivos
+                user.password_version = (user.password_version or 1) + 1
                 db.session.commit()
+                # Actualizar la versión en la sesión activa para no desloguear al propio usuario
+                session['password_version'] = user.password_version
                 flash('Contraseña actualizada correctamente.', 'success')
                 log_action(f"Contraseña actualizada para {user.username}")
             
@@ -115,7 +126,11 @@ def login():
     # Si ya tiene sesión activa, regresarlo a donde estaba o al home
     if 'user_id' in session:
         flash('Ya tienes una sesión activa.', 'info')
-        fallback = request.referrer if request.referrer and '/login' not in request.referrer else url_for('main.home')
+        next_url = request.args.get('next') or request.referrer
+        if next_url and _is_safe_url(next_url) and '/login' not in next_url:
+            fallback = next_url
+        else:
+            fallback = url_for('main.home')
         return redirect(fallback)
         
     if request.method == 'POST':
@@ -133,10 +148,11 @@ def login():
             session['user_id'] = u.id
             session['user'] = u.username
             session['role'] = u.role
+            session['password_version'] = u.password_version or 1
             session.permanent = remember
             u.last_seen = datetime.now()
             db.session.commit()
-            log_action("Login exitoso") 
+            log_action("Login exitoso")
             
             is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
             if u.role == 'inventario':
@@ -182,6 +198,7 @@ def verify_2fa():
             session['user_id'] = user.id
             session['user'] = user.username
             session['role'] = user.role
+            session['password_version'] = user.password_version or 1
             session.permanent = remember
             log_action(f"Login 2FA exitoso para {user.username}")
             

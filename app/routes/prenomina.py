@@ -137,9 +137,11 @@ def imprimir(fecha_str):
         flash("Hubo un error interno al generar el PDF.", "danger")
         return redirect(url_for('prenomina.generar', fecha_str=fecha_str))
         
+    from werkzeug.utils import secure_filename as _secure
     response = make_response(pdf.getvalue())
     response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=Prenomina_Consolidada_{fecha_obj.strftime("%d%m")}.pdf'
+    nombre_arch_consolidado = _secure(f'Prenomina_Consolidada_{fecha_obj.strftime("%d%m")}.pdf')
+    response.headers['Content-Disposition'] = f'inline; filename="{nombre_arch_consolidado}"'
     return response
 
 @bp.route('/imprimir_individual/<fecha_str>/<int:trabajador_id>', methods=['GET'])
@@ -199,16 +201,17 @@ def imprimir_individual(fecha_str, trabajador_id):
         flash("Hubo un error interno al generar el PDF.", "danger")
         return redirect(url_for('prenomina.generar', fecha_str=fecha_str))
         
+    from werkzeug.utils import secure_filename as _secure
     response = make_response(pdf.getvalue())
     response.headers['Content-Type'] = 'application/pdf'
-    
+
     # Nombre del archivo con Nombre del Trabajador, Fecha y Hora exacta de descarga
     ahora = datetime.now()
     nombre_limpio = prenomina.trabajador.nombre_apellidos.replace(' ', '_')
     timestamp = ahora.strftime("%Y-%m-%d_%H-%M-%S")
-    nombre_archivo = f'Recibo_{nombre_limpio}_{timestamp}.pdf'
-    
-    response.headers['Content-Disposition'] = f'inline; filename={nombre_archivo}'
+    nombre_archivo = _secure(f'Recibo_{nombre_limpio}_{timestamp}.pdf')
+
+    response.headers['Content-Disposition'] = f'inline; filename="{nombre_archivo}"'
     return response
 
 @bp.route('/guardar/<fecha_str>', methods=['POST'])
@@ -392,6 +395,9 @@ def cerrar_prenomina(fecha_str):
 @login_required
 @limiter.limit("10 per minute")
 def api_agregar_descuento():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         data = request.get_json(silent=True)
         if not data:
@@ -445,6 +451,9 @@ def api_agregar_descuento():
 @login_required
 @limiter.limit("10 per minute")
 def api_eliminar_descuento(id):
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         desc = DescuentoPrenomina.query.get_or_404(id)
         prenomina = desc.prenomina
@@ -467,6 +476,9 @@ def api_eliminar_descuento(id):
 @login_required
 @limiter.limit("10 per minute")
 def api_agregar_deposito():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         data = request.get_json(silent=True)
         if not data:
@@ -514,6 +526,9 @@ def api_agregar_deposito():
 @login_required
 @limiter.limit("10 per minute")
 def api_eliminar_deposito(id):
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         dep = DepositoExtra.query.get_or_404(id)
         prenomina = dep.prenomina

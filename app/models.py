@@ -1,6 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from app.extensions import db
+
+def _now_utc():
+    """Retorna el datetime actual en UTC con tzinfo. Usar como default en modelos."""
+    return datetime.now(timezone.utc)
 
 class User(db.Model):
     __tablename__ = "users"
@@ -9,7 +13,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='user')
     totp_secret = db.Column(db.String(32), nullable=True)
-    
+    # Incrementado cada vez que se cambia la contraseña; invalida todas las sesiones anteriores.
+    password_version = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+
     # Profile Fields
     full_name = db.Column(db.String(150), nullable=True)
     area = db.Column(db.String(100), nullable=True)
@@ -23,8 +29,8 @@ class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user = db.Column(db.String(80))
     action = db.Column(db.String(200))
-    ip = db.Column(db.String(45))
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    ip = db.Column(db.String(45), index=True)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
 class Trabajador(db.Model):
     __tablename__ = "trabajadores"
@@ -135,7 +141,7 @@ class DocumentoTrabajador(db.Model):
     nombre_archivo = db.Column(db.String(250), nullable=False)
     ruta_archivo = db.Column(db.String(500), nullable=False)
     tipo_documento = db.Column(db.String(100), nullable=True)
-    fecha_subida = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_subida = db.Column(db.DateTime, default=_now_utc)
     
     fecha_inicio = db.Column(db.Date, nullable=True)
     fecha_fin = db.Column(db.Date, nullable=True)
@@ -168,7 +174,7 @@ class Proyecto(db.Model):
     
     participantes = db.relationship('Trabajador', secondary=proyecto_trabajador, backref=db.backref('proyectos', lazy='dynamic'))
     
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
 class ReporteSemanal(db.Model):
     __tablename__ = "reportes_semanales"
@@ -180,7 +186,7 @@ class ReporteSemanal(db.Model):
     proyecto = db.relationship('Proyecto')
     estado = db.Column(db.String(20), default='BORRADOR', index=True) # 'BORRADOR' o 'TERMINADO'
     creado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
 class RegistroDiarioHoras(db.Model):
     __tablename__ = "registros_diarios_horas"
@@ -268,7 +274,7 @@ class Prestamo(db.Model):
     fecha_inicio = db.Column(db.Date, nullable=True)
     estado = db.Column(db.String(20), default='ACTIVO', index=True) # ACTIVO, LIQUIDADO
     activo = db.Column(db.Boolean, default=True)
-    creado_en = db.Column(db.DateTime, default=datetime.now)
+    creado_en = db.Column(db.DateTime, default=_now_utc)
 
 class AbonoPrestamo(db.Model):
     """Registro individual de cada pago realizado a un préstamo, ya sea automático por prenómina o abono manual."""
@@ -295,7 +301,7 @@ class DescuentoPrenomina(db.Model):
     concepto = db.Column(db.String(250), nullable=False)
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     fecha_incidencia = db.Column(db.Date, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
     
     prenomina = db.relationship('Prenomina', backref=db.backref('descuentos_detalle', lazy=True, cascade='all, delete-orphan'))
     trabajador = db.relationship('Trabajador')
@@ -308,7 +314,7 @@ class DepositoExtra(db.Model):
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     concepto = db.Column(db.String(250), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
     
     prenomina = db.relationship('Prenomina', backref=db.backref('depositos_detalle', lazy=True, cascade='all, delete-orphan'))
     trabajador = db.relationship('Trabajador')
@@ -321,7 +327,7 @@ class AjustePeriodo(db.Model):
     fecha_inicio = db.Column(db.Date, nullable=False)
     fecha_fin = db.Column(db.Date, nullable=False)
     estado = db.Column(db.String(20), default='ABIERTO', index=True)  # ABIERTO, CERRADO
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
 class AjusteTrabajadorPeriodo(db.Model):
     """Vincula un trabajador a un periodo de ajuste con su monto meta (depósito adelantado)."""
@@ -344,7 +350,7 @@ class AjusteDescuento(db.Model):
     fecha_descuento = db.Column(db.Date, nullable=False)
     notas = db.Column(db.String(250), nullable=True)
     cobrado = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
     periodo = db.relationship('AjustePeriodo', backref=db.backref('descuentos', lazy=True, cascade='all, delete-orphan'))
     trabajador = db.relationship('Trabajador')
@@ -363,7 +369,7 @@ class SaldoVacaciones(db.Model):
     dias_totales_asignados = db.Column(db.Integer, default=0, nullable=False)
     dias_disfrutados = db.Column(db.Integer, default=0, nullable=False)
     
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
 
 class Ausencia(db.Model):
     """
@@ -385,7 +391,7 @@ class Ausencia(db.Model):
     motivo = db.Column(db.Text, nullable=True)
     
     creado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
 # --- MÓDULO DE INVENTARIO ---
 
@@ -411,7 +417,7 @@ class Estante(db.Model):
     almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=False, index=True)
     qr_code = db.Column(db.String(100), unique=True, nullable=False, index=True)
     activo = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
 
 class Producto(db.Model):
     __tablename__ = "productos"
@@ -423,8 +429,8 @@ class Producto(db.Model):
     stock_actual = db.Column(db.Numeric(10, 2), default=0, nullable=False)
     stock_minimo = db.Column(db.Numeric(10, 2), default=0, nullable=False)
     activo = db.Column(db.Boolean, default=True, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = db.Column(db.DateTime, default=_now_utc)
+    updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     
     created_by = db.relationship('User', foreign_keys=[created_by_id])
@@ -439,7 +445,7 @@ class MovimientoInventario(db.Model):
     cantidad = db.Column(db.Numeric(10, 2), nullable=False)
     motivo = db.Column(db.String(250), nullable=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    fecha = db.Column(db.DateTime, default=datetime.now, index=True)
+    fecha = db.Column(db.DateTime, default=_now_utc, index=True)
     
     producto = db.relationship('Producto', backref=db.backref('movimientos', lazy=True, cascade='all, delete-orphan'))
     almacen_origen = db.relationship('Almacen', foreign_keys=[almacen_origen_id])
@@ -452,7 +458,7 @@ class SolicitudMaterial(db.Model):
     solicitante_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     proyecto = db.Column(db.String(200), nullable=True)
     estatus = db.Column(db.String(50), default='PENDIENTE', nullable=False, index=True) # PENDIENTE, APROBADA, RECHAZADA, ENTREGADA
-    fecha_creacion = db.Column(db.DateTime, default=datetime.now, index=True)
+    fecha_creacion = db.Column(db.DateTime, default=_now_utc, index=True)
     fecha_cierre = db.Column(db.DateTime, nullable=True)
     
     solicitante = db.relationship('User', foreign_keys=[solicitante_id])

@@ -6,8 +6,9 @@
 <div class="user-management-wrapper">
     <div class="header-section">
         <div class="header-titles">
-            <h1 class="main-title">Gestión de Usuarios</h1>
-            <p class="subtitle">Administra el acceso y roles del sistema con altos estándares de seguridad</p>
+            <h1 class="main-title"><i class="fas fa-user-shield" style="color:#6366f1; margin-right:10px;"></i>Gestión
+                de Usuarios</h1>
+            <p class="subtitle">Administra el acceso y roles del sistema.</p>
         </div>
         <button id="btnAddUser" class="btn-glow">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -40,9 +41,9 @@
                             data-fullname="{{ user.full_name or '' }}" data-area="{{ user.area or '' }}"
                             data-position="{{ user.position or '' }}" data-contact="{{ user.contact_info or '' }}"
                             data-profile-pic="{% if user.profile_pic and user.profile_pic != 'default.png' %}{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}{% endif %}">
-                            <div class="avatar-initial" style="flex-shrink: 0; {% if user.profile_pic and user.profile_pic !='default.png'
-                                %}background-image: url('{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}'); background-size: cover; background-position: center; color: transparent;{% endif %}"
-                                >
+                            <div class="avatar-initial"
+                                style="flex-shrink: 0; {% if user.profile_pic and user.profile_pic !='default.png'
+                                %}background-image: url('{{ url_for('users.serve_profile_pic', filename=user.profile_pic) }}'); background-size: cover; background-position: center; color: transparent;{% endif %}">
                                 {{ user.username[0] | upper }}
                             </div>
                             {{ user.username }}

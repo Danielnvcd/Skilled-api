@@ -26,16 +26,19 @@ from app.models import (
 def get_real_ip(request: Request) -> str:
     """
     Devuelve la IP real del cliente detrás de Cloudflare Tunnel.
-    CF-Connecting-IP contiene la IP original del navegador.
+    Solo confía en CF-Connecting-IP si la conexión directa proviene de un IP de Cloudflare,
+    evitando spoofing del header por parte de atacantes externos.
     Fallback: X-Forwarded-For → request.client.host.
     """
+    from app.extensions import is_cloudflare_ip
+    remote = request.client.host if request.client else ""
     cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
+    if cf_ip and is_cloudflare_ip(remote):
         return cf_ip.strip()
     xff = request.headers.get("X-Forwarded-For")
     if xff:
         return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return remote or "unknown"
 
 # ─── Configuración de la app ───────────────────────────────────────────────────
 _is_prod = os.environ.get('FLASK_ENV') == 'production'
@@ -87,9 +90,11 @@ def create_solicitud(
     db.add(nueva)
     db.flush() # Para obtener el ID de la solicitud
 
+    ids_invalidos = []
     for det in sol.detalles:
-        producto = db.query(Producto).filter(Producto.id == det.producto_id).first()
+        producto = db.query(Producto).filter(Producto.id == det.producto_id, Producto.activo == True).first()
         if not producto:
+            ids_invalidos.append(det.producto_id)
             continue
         nuevo_det = SolicitudMaterialDetalle(
             solicitud_id=nueva.id,
@@ -97,7 +102,14 @@ def create_solicitud(
             cantidad_solicitada=Decimal(str(det.cantidad_solicitada))
         )
         db.add(nuevo_det)
-    
+
+    if ids_invalidos:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Los siguientes producto_id no existen o están inactivos: {ids_invalidos}"
+        )
+
     _audit(db, current_user, f"Nueva solicitud de material — proyecto: {sol.proyecto or 'Sin proyecto'}", request)
     db.commit()
     db.refresh(nueva)
@@ -120,8 +132,9 @@ def get_solicitudes(db: Session = Depends(get_db), current_user = Depends(get_cu
         s.solicitante_nombre = s.solicitante.username if s.solicitante else "Desconocido"
         for d in s.detalles:
             d.producto_descripcion = d.producto.descripcion if d.producto else "Producto eliminado"
-            d.producto_codigo = d.producto.codigo if d.producto else "---"
-            
+            d.producto_codigo     = d.producto.codigo      if d.producto else "---"
+            d.producto_unidad     = d.producto.unidad      if d.producto else "pza"
+
     return solicitudes
 
 @router.patch("/solicitudes/{sol_id}/estado", response_model=schemas.SolicitudResponse)
@@ -136,7 +149,9 @@ def update_solicitud_estado(
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     
     solicitud.estatus = up.estatus
-    if up.estatus != 'PENDIENTE':
+    if up.estatus == 'PENDIENTE':
+        solicitud.fecha_cierre = None   # Reabrir: limpiar fecha de cierre
+    else:
         solicitud.fecha_cierre = datetime.datetime.now()
     
     db.commit()

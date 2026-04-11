@@ -8,9 +8,18 @@ from werkzeug.utils import secure_filename
 import traceback
 import json
 import os
+import re
 import time
 from datetime import datetime as dt
 import pandas as pd
+
+_CURP_RE = re.compile(r'^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$')
+_RFC_RE  = re.compile(r'^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$')
+
+TIPOS_DOCUMENTO_VALIDOS = [
+    'Contrato', 'INE', 'CURP', 'RFC', 'NSS',
+    'ComprobanteDomicilio', 'CV', 'Otro'
+]
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
 
@@ -99,7 +108,15 @@ def agregar():
         if errores_longitud:
             flash("Error de longitud en los campos:<br>" + "<br>".join(errores_longitud), 'danger')
             return redirect(url_for('trabajadores.index'))
-            
+
+        # Validación de formato CURP y RFC (advertencia, no bloqueo, por registros históricos)
+        _curp_val = (data.get('curp') or '').strip().upper()
+        _rfc_val  = (data.get('rfc') or '').strip().upper()
+        if _curp_val and not _CURP_RE.match(_curp_val):
+            flash('Advertencia: El formato de CURP no es válido. Verifica antes de continuar.', 'warning')
+        if _rfc_val and not _RFC_RE.match(_rfc_val):
+            flash('Advertencia: El formato de RFC no es válido. Verifica antes de continuar.', 'warning')
+
         # Basic validation
         if Trabajador.query.filter_by(no_empleado=no_empleado).first():
             flash('Error: El Número de Empleado ya existe.', 'danger')
@@ -286,9 +303,14 @@ def procesar_importacion():
             # Flags for current row errors
             row_errors = []
 
+            _FORMULA_CHARS = ('=', '+', '-', '@', '\t', '\r')
+
             def get_str(col_name, max_len=None):
                 val = row.get(col_name, '')
                 s = str(val).strip() if pd.notna(val) else ''
+                # Sanitizar formula injection: remover caracteres de inicio de fórmula CSV/Excel
+                if s and s[0] in _FORMULA_CHARS:
+                    s = s.lstrip('=+-@\t\r')
                 if max_len and len(s) > max_len:
                     row_errors.append(f"El campo '{col_name}' excede el límite de {max_len} caracteres (recibidos: {len(s)}).")
                 return s
@@ -497,8 +519,13 @@ def get_trabajador(id):
 def editar(id):
     try:
         t = Trabajador.query.get_or_404(id)
+
+        if not is_authorized_for_worker(t):
+            flash('Acceso denegado.', 'danger')
+            return redirect(url_for('trabajadores.index'))
+
         data = request.form
-        
+
         # Check uniqueness of no_empleado if it changed
         new_no = data.get('no_empleado')
         if new_no != t.no_empleado and Trabajador.query.filter_by(no_empleado=new_no).first():
@@ -509,7 +536,15 @@ def editar(id):
         if errores_longitud:
             flash("Error de longitud en los campos:<br>" + "<br>".join(errores_longitud), 'danger')
             return redirect(url_for('trabajadores.index'))
-            
+
+        # Validación de formato CURP y RFC (advertencia, no bloqueo, por registros históricos)
+        _curp_val = (data.get('curp') or '').strip().upper()
+        _rfc_val  = (data.get('rfc') or '').strip().upper()
+        if _curp_val and not _CURP_RE.match(_curp_val):
+            flash('Advertencia: El formato de CURP no es válido. Verifica antes de continuar.', 'warning')
+        if _rfc_val and not _RFC_RE.match(_rfc_val):
+            flash('Advertencia: El formato de RFC no es válido. Verifica antes de continuar.', 'warning')
+
         t.no_empleado = new_no
         t.nombre_apellidos = data.get('nombre_apellidos')
         t.nombre = data.get('nombre')
@@ -679,6 +714,7 @@ def guardar_credenciales(id):
 
 @bp.route('/eliminar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def eliminar(id):
     try:
         from datetime import date
@@ -702,6 +738,7 @@ def eliminar(id):
 
 @bp.route('/reactivar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def reactivar(id):
     try:
         t = Trabajador.query.get_or_404(id)
@@ -754,8 +791,10 @@ def upload_documento(id):
         f_inicio = _parse_date(fecha_inicio_str) if fecha_inicio_str else None
         f_fin = _parse_date(fecha_fin_str) if fecha_fin_str else None
         
-        # Parse optional tipo_documento
+        # Parse optional tipo_documento — validar contra lista blanca
         tipo_doc = request.form.get('tipo_documento', '').strip() or None
+        if tipo_doc and tipo_doc not in TIPOS_DOCUMENTO_VALIDOS:
+            return jsonify({'error': 'Tipo de documento no válido'}), 400
         
         # Relate to DB path
         db_path = f"trabajadores/{t.id}/{unique_filename}"

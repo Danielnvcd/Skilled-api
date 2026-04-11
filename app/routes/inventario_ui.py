@@ -90,3 +90,13 @@ def solicitudes():
         flash('Acceso restringido a personal de inventario.', 'danger')
         return redirect(url_for('main.home'))
     return render_template('inventario_solicitudes.html', user=user)
+
+@bp.route('/mis-pedidos')
+@login_required
+def mis_pedidos():
+    """Historial de pedidos del solicitante."""
+    user = User.query.get(session.get('user_id'))
+    if user.role not in ['solicitante_material', 'admin', 'inventario']:
+        flash('No tienes permiso para ver esta página.', 'danger')
+        return redirect(url_for('main.home'))
+    return render_template('inventario_mis_pedidos.html', user=user)

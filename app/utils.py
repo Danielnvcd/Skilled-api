@@ -89,7 +89,7 @@ def log_action(action):
         ip = request.headers.get("CF-Connecting-IP", request.remote_addr)
         log = AuditLog(
             user=session.get('user', 'anon'),
-            action=action,
+            action=str(action)[:200],  # Limitar a 200 chars para coincidir con la columna del modelo
             ip=ip
         )
         db.session.add(log)
@@ -240,6 +240,21 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            return redirect(url_for('auth.login'))
+
+        # Verificar que la versión de contraseña en sesión coincide con la BD.
+        # Si el usuario cambió su contraseña desde otro dispositivo, esta sesión queda inválida.
+        from app.models import User
+        db_user = User.query.get(session['user_id'])
+        if db_user is None:
+            session.clear()
+            flash('Tu sesión ya no es válida.', 'danger')
+            return redirect(url_for('auth.login'))
+        db_version = db_user.password_version or 1
+        session_version = session.get('password_version', 1)
+        if session_version != db_version:
+            session.clear()
+            flash('Tu contraseña fue cambiada. Inicia sesión de nuevo.', 'warning')
             return redirect(url_for('auth.login'))
 
         role = session.get('role', '')

@@ -30,7 +30,8 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         
     try:
         # Usamos el propio signer de Flask para hacer bypass del encriptado
-        session_data = signer.loads(session_cookie, max_age=15 * 86400) # 15 days
+        from app.constants import SESSION_LIFETIME_SECONDS
+        session_data = signer.loads(session_cookie, max_age=SESSION_LIFETIME_SECONDS)
         
         user_id = session_data.get('_user_id') or session_data.get('user_id')
         if not user_id:

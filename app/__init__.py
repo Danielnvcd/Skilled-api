@@ -74,7 +74,7 @@ def create_app():
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000 # 1 año de caché para estáticos
     
     app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=15)
     is_prod = os.environ.get('FLASK_ENV') == 'production'
     app.config['SESSION_COOKIE_SECURE'] = is_prod # Set True in prod only
@@ -126,6 +126,10 @@ def create_app():
             'https://cdn.tailwindcss.com',
             'https://unpkg.com',          # html5-qrcode CDN
         ],
+        # SEGURIDAD: 'unsafe-inline' en style-src es necesario temporalmente porque varios
+        # templates usan atributos style="" inline en el HTML. Para eliminarlo hay que mover
+        # todos los estilos inline a archivos .css externos (tracked en issue de seguridad).
+        # Prioridad: media. No bloquea funcionalidad actual.
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
         'img-src': ['\'self\'', 'data:', 'blob:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
