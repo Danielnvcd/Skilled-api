@@ -1,0 +1,53 @@
+AUDITORÍA DE MEJORAS: SISTEMA DE NÓMINAS
+==========================================
+Fecha: 2026-04-11
+Contexto: Stack Flask + FastAPI + PostgreSQL + Redis + Nginx + Cloudflare Tunnel
+
+---
+1. SEGURIDAD (HARDENING)
+---
+[ ] MIGRACIÓN A UUIDs (Universal Unique Identifiers):
+    - Problema: Los IDs numéricos son enumerables (IDOR). Un usuario puede probar /trabajadores/foto/1, /2, /3 y extraer datos.
+    - Mejora: Usar UUID4 para todas las rutas públicas y de API.
+
+[ ] SESIONES SERVICE-SIDE CON REDIS:
+    - Problema: Las sesiones actuales están en Cookies (Client-side). Si la clave SECRET_KEY se filtra, las sesiones son vulnerables.
+    - Mejora: Implementar Flask-Session para almacenar los datos de sesión en Redis. El navegador solo ve un ID aleatorio.
+
+[ ] HSTS Y SEGURIDAD DE TRANSPORTE:
+    - Mejora: Configurar Talisman con 'force_https=True' y 'strict_transport_security=True'. Esto evita ataques de downgrade (SSL Stripping).
+
+[ ] POLÍTICA DE CONTRASEÑAS GUBERNAMENTAL:
+    - Mejora: Implementar un historial de contraseñas (no repetir las últimas 3) y forzar cambio cada 90 días en la tabla User.
+
+[ ] VALIDACIÓN DE ESQUEMAS EN FASTAPI:
+    - Mejora: Asegurar que todos los modelos de Pydantic tengan 'extra="forbid"' para evitar Inyección de Parámetros Masivos (Mass Assignment).
+
+---
+2. RENDIMIENTO (PERFORMANCE)
+---
+[ ] RESOLUCIÓN DE CONSULTAS N+1:
+    - Problema: Las relaciones en SQLAlchemy (como trabajadores -> documentos) están como lazy=True. En bucles de Jinja2, esto dispara una consulta SQL por cada empleado.
+    - Mejora: Usar .options(joinedload(...)) o selectinload(...) en los controladores críticos.
+
+[ ] ÍNDICES DE BASE DE DATOS (PostgreSQL):
+    - Mejora: Agregar índices B-Tree en columnas de búsqueda frecuente:
+      - trabajadores.nombre_apellidos
+      - productos.descripcion
+      - movimientos_inventario.fecha
+      - audit_log.created_at
+
+[ ] CACHÉ DE FRAGMENTOS (Redis):
+    - Mejora: Implementar Flask-Caching para guardar fragmentos de HTML pesados (como el Dashboard de métricas o el Proyecto Total) que no cambian en cada segundo.
+
+[ ] PROCESAMIENTO DE IMÁGENES:
+    - Problema: Las imágenes se guardan con el peso original.
+    - Mejora: Al subir fotos, usar Pillow para redimensionar (Square crop 400x400) y convertir a WebP, reduciendo el peso de 5MB a ~40KB sin pérdida visual notable.
+
+[ ] PAGINACIÓN SERVER-SIDE:
+    - Problema: Cargar todos los productos o trabajadores a la vez consume mucha RAM en el navegador.
+    - Mejora: Implementar paginación real (Limit/Offset) en las rutas de lista de materiales y trabajadores.
+
+---
+RECOMENDACIÓN PRIORITARIA:
+Implementar la resolución de N+1 queries y el caché en Redis para los reportes, ya que son los puntos que más impactarán en la percepción de velocidad del usuario final.
