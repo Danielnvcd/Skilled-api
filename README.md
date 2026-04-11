@@ -218,6 +218,52 @@ sudo systemctl start nominas
 sudo systemctl status nominas
 ```
 
+### 4. Configuración de Nginx (`/etc/nginx/sites-available/default`)
+Para un correcto funcionamiento (especialmente con HTTPS/Cloudflare), asegúrate de que tu bloque de Nginx tenga los encabezados de proxy adecuados:
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+    client_max_body_size 50M;
+
+    # Compresión gzip
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Archivos estáticos
+    location /static/ {
+        alias /opt/nominas/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Proxy Principal
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # IMPORTANTE para FastAPI: respetar el protocolo original (HTTPS)
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+
+        # Soporte para WebSockets
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        proxy_read_timeout 120s;
+    }
+}
+```
+
+### 💡 ¿Por qué es necesaria esta configuración?
+
+- **ASGI + WSGI**: Gunicorn por defecto solo entiende Flask (WSGI). Al agregar `uvicorn.workers.UvicornWorker`, le permitimos procesar también FastAPI (ASGI) de forma eficiente.
+- **Protocolo HTTPS (X-Forwarded-Proto)**: FastAPI es estricto con la seguridad. Sin el encabezado `$http_x_forwarded_proto`, la documentación de la API (`/api/docs`) y las redirecciones intentarían usar `http`, provocando errores de **Contenido Mixto** que el navegador bloquearía.
+- **WebSockets**: Los encabezados de `Upgrade` y `Connection` permiten que FastAPI maneje conexiones persistentes en tiempo real si se requieren en el futuro.
+
 ---
 
 > _Desarrollado para mantener la contabilidad organizada, veloz e inquebrantable._
