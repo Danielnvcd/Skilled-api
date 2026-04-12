@@ -203,13 +203,9 @@ def agregar():
                 if not allowed_image_file(file):
                     flash('Foto de perfil rechazada: solo se permiten imágenes JPG o PNG reales.', 'danger')
                     return redirect(url_for('trabajadores.index'))
-                filename = secure_filename(file.filename)
-                unique_filename = f"pp_{int(time.time())}_{filename}"
+                unique_filename = f"pp_{int(time.time())}_{secure_filename(file.filename)}"
                 pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
-                os.makedirs(pp_folder, exist_ok=True)
-                file_path = os.path.join(pp_folder, unique_filename)
-                file.save(file_path)
-                nuevo_trabajador.foto_perfil = f"perfiles/{unique_filename}"
+                nuevo_trabajador.foto_perfil = _save_profile_picture(file, pp_folder, unique_filename)
         
         # Parse Credentials JSON
         try:
@@ -426,27 +422,104 @@ def procesar_importacion():
 
     return redirect(url_for('trabajadores.importar'))
 
+def _generate_thumbnail(original_path: str, thumb_path: str, size: tuple = (100, 100)) -> None:
+    """Genera un thumbnail JPEG de `size` px a partir de `original_path`."""
+    from PIL import Image
+    with Image.open(original_path) as img:
+        img = img.convert('RGB')
+        img.thumbnail(size, Image.LANCZOS)
+        img.save(thumb_path, 'JPEG', quality=85, optimize=True)
+
+
+def _save_profile_picture(file, pp_folder: str, unique_filename: str) -> str:
+    """
+    Guarda la foto original y genera su thumbnail.
+    Devuelve la ruta relativa al UPLOAD_FOLDER de la imagen original
+    (p.ej. 'perfiles/pp_123_foto.jpg').
+    El thumbnail se guarda como 'perfiles/thumb_pp_123_foto.jpg'.
+    """
+    os.makedirs(pp_folder, exist_ok=True)
+    original_path = os.path.join(pp_folder, unique_filename)
+    file.save(original_path)
+
+    thumb_filename = f"thumb_{unique_filename}"
+    thumb_path = os.path.join(pp_folder, thumb_filename)
+    try:
+        _generate_thumbnail(original_path, thumb_path)
+    except Exception as e:
+        current_app.logger.warning(f"No se pudo generar thumbnail para {unique_filename}: {e}")
+
+    return f"perfiles/{unique_filename}"
+
+
+def _delete_profile_picture(foto_perfil_rel: str) -> None:
+    """Elimina la foto original y su thumbnail dado el path relativo almacenado en BD."""
+    from flask import current_app
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    original_path = os.path.join(upload_folder, foto_perfil_rel)
+    try:
+        if os.path.exists(original_path):
+            os.remove(original_path)
+    except Exception as e:
+        current_app.logger.error(f"Error eliminando foto original: {e}")
+
+    # thumb vive en la misma carpeta con prefijo 'thumb_'
+    folder, filename = os.path.split(original_path)
+    thumb_path = os.path.join(folder, f"thumb_{filename}")
+    try:
+        if os.path.exists(thumb_path):
+            os.remove(thumb_path)
+    except Exception as e:
+        current_app.logger.error(f"Error eliminando thumbnail: {e}")
+
+
+def _mask_pii(value: str, visible: int = 4) -> str:
+    """Oculta los caracteres centrales de un campo PII, dejando `visible` al inicio y al final."""
+    if not value or len(value) <= visible * 2:
+        return value
+    return value[:visible] + '*' * (len(value) - visible * 2) + value[-visible:]
+
+
 @bp.route('/get/<int:id>')
 @login_required
 def get_trabajador(id):
-    t = Trabajador.query.get_or_404(id)
+    from flask import session
+    t = (Trabajador.query
+         .options(
+             selectinload(Trabajador.credenciales),
+             selectinload(Trabajador.documentos),
+             # proyectos usa lazy='dynamic' (query object), no es compatible con selectinload
+         )
+         .filter_by(id=id)
+         .first_or_404())
+
     credenciales = [{'planta': c.planta, 'credencial_id': c.credencial_id, 'fecha_caducidad': c.fecha_caducidad.isoformat() if c.fecha_caducidad else None} for c in t.credenciales]
     documentos = [d.to_dict() for d in t.documentos]
-    
+
     # Extraer coordinadores de los proyectos activos asignados
     coordinadores_set = set()
     for p in t.proyectos:
         if p.activo and p.coordinador:
             coordinadores_set.add(p.coordinador.full_name or p.coordinador.username)
-            
+
     coordinadores_asignados = ", ".join(coordinadores_set) if coordinadores_set else "Ninguno asignado"
-    
+
+    # Solo admin y super_admin ven PII completa; otros roles reciben datos enmascarados
+    is_admin = session.get('role') in ('admin', 'super_admin')
+    curp = t.curp or ''
+    rfc  = t.rfc  or ''
+    nss  = t.nss  or ''
+    if not is_admin:
+        curp = _mask_pii(curp)
+        rfc  = _mask_pii(rfc)
+        nss  = _mask_pii(nss)
+
     data = {
         'id': t.id,
         'no_empleado': t.no_empleado,
         'nombre_apellidos': t.nombre_apellidos,
         'nombre': t.nombre,
-        
+
         # Laborales
         'tipo_mov': t.tipo_mov or '',
         'tipo_cont': t.tipo_cont or '',
@@ -458,11 +531,11 @@ def get_trabajador(id):
         'inicio': t.inicio.isoformat() if t.inicio else '',
         'termino_prueba': t.termino_prueba.isoformat() if t.termino_prueba else '',
         'fecha_baja': t.fecha_baja.isoformat() if t.fecha_baja else '',
-        
+
         # Generales
-        'curp': t.curp or '',
-        'rfc': t.rfc or '',
-        'nss': t.nss or '',
+        'curp': curp,
+        'rfc': rfc,
+        'nss': nss,
         'fecha_nacimiento': t.fecha_nacimiento.isoformat() if t.fecha_nacimiento else '',
         'sexo': t.sexo or '',
         'estado_civil': t.estado_civil or '',
@@ -614,22 +687,11 @@ def editar(id):
                 if not allowed_image_file(file):
                     flash('Foto de perfil rechazada: solo se permiten imágenes JPG o PNG reales.', 'danger')
                     return redirect(url_for('trabajadores.index'))
-                # Delete old profile picture if exists
                 if t.foto_perfil:
-                    old_pp_path = os.path.join(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
-                    try:
-                        if os.path.exists(old_pp_path):
-                            os.remove(old_pp_path)
-                    except Exception as e:
-                        current_app.logger.error(f"Error deleting old profile pic: {e}")
-                
-                filename = secure_filename(file.filename)
-                unique_filename = f"pp_{int(time.time())}_{filename}"
+                    _delete_profile_picture(t.foto_perfil)
+                unique_filename = f"pp_{int(time.time())}_{secure_filename(file.filename)}"
                 pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
-                os.makedirs(pp_folder, exist_ok=True)
-                file_path = os.path.join(pp_folder, unique_filename)
-                file.save(file_path)
-                t.foto_perfil = f"perfiles/{unique_filename}"
+                t.foto_perfil = _save_profile_picture(file, pp_folder, unique_filename)
         
         # Update credentials
         try:
@@ -831,6 +893,23 @@ def get_foto_perfil(id):
     if not t.foto_perfil:
         return jsonify({'error': 'No encontrado'}), 404
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
+
+
+@bp.route('/foto/<int:id>/thumb', methods=['GET'])
+@login_required
+def get_foto_perfil_thumb(id):
+    t = Trabajador.query.get_or_404(id)
+    if not is_authorized_for_worker(t):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not t.foto_perfil:
+        return jsonify({'error': 'No encontrado'}), 404
+    folder, filename = os.path.split(t.foto_perfil)
+    thumb_rel = os.path.join(folder, f"thumb_{filename}").replace('\\', '/')
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    if os.path.exists(os.path.join(upload_folder, thumb_rel)):
+        return send_from_directory(upload_folder, thumb_rel)
+    # Fallback a la imagen original si el thumbnail no existe (fotos pre-migración)
+    return send_from_directory(upload_folder, t.foto_perfil)
     
 @bp.route('/documento/<int:doc_id>', methods=['DELETE'])
 @login_required

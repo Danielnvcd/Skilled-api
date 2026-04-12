@@ -317,7 +317,7 @@
             {% for emp in cumpleañeros %}
             <div class="dash-list-item">
                 {% if emp.foto_perfil %}
-                <img src="{{ url_for('trabajadores.get_foto_perfil', id=emp.id) }}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 12px; border: 1px solid #e5e7eb; flex-shrink: 0;">
+                <img src="{{ url_for('trabajadores.get_foto_perfil_thumb', id=emp.id) }}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 12px; border: 1px solid #e5e7eb; flex-shrink: 0;">
                 {% else %}
                 <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #06b6d4, #0284c7); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem; margin-right: 12px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     {{ emp.nombre[:1] | upper }}
