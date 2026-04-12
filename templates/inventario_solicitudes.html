@@ -184,8 +184,8 @@
                 </table>
             </div>
 
-            <!-- Acciones (solo si PENDIENTE) -->
-            <div id="actionButtons" class="flex gap-3">
+            <!-- Acciones según estado -->
+            <div id="actionButtons" class="hidden flex gap-3">
                 <button id="btnReject"
                     class="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95 border border-rose-100">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -195,6 +195,13 @@
                     class="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-95 border border-emerald-100">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     APROBAR
+                </button>
+            </div>
+            <div id="deliverButton" class="hidden">
+                <button id="btnDeliver"
+                    class="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 border border-blue-100">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    MARCAR COMO ENTREGADA
                 </button>
             </div>
             <div id="doneMessage" class="hidden flex items-center justify-center gap-2 py-4 bg-gray-50 rounded-xl text-gray-500 font-bold text-sm">
@@ -208,5 +215,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_solicitudes.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/inventario_solicitudes.js') }}?v=4"></script>
 {% endblock %}

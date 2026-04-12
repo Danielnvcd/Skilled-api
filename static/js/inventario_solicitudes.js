@@ -1,4 +1,4 @@
-/* ─── inventario_solicitudes.js v2 ─── */
+/* ─── inventario_solicitudes.js v3 ─── */
 document.addEventListener('DOMContentLoaded', () => {
     const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCloseDetail    = document.getElementById('btnCloseDetail');
     const btnApprove        = document.getElementById('btnApprove');
     const btnReject         = document.getElementById('btnReject');
+    const btnDeliver        = document.getElementById('btnDeliver');
+    const deliverButton     = document.getElementById('deliverButton');
     const btnRefresh        = document.getElementById('btnRefresh');
     const statsRow          = document.getElementById('statsRow');
     const filterTabsEl      = document.getElementById('filterTabs');
@@ -223,10 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
             </td>
         </tr>`).join('');
 
-        // Botones de acción
-        const isPending = estatus === 'PENDIENTE';
+        // Botones de acción según estado
+        const isPending   = estatus === 'PENDIENTE';
+        const isAprobada  = estatus === 'APROBADA';
+        const isDone      = estatus === 'RECHAZADA' || estatus === 'ENTREGADA';
         document.getElementById('actionButtons').classList.toggle('hidden', !isPending);
-        document.getElementById('doneMessage').classList.toggle('hidden', isPending);
+        deliverButton.classList.toggle('hidden', !isAprobada);
+        document.getElementById('doneMessage').classList.toggle('hidden', !isDone);
 
         modalDetail.classList.remove('hidden');
     }
@@ -348,10 +353,16 @@ ${bodyHTML}
     });
 
     // ─── APROBAR / RECHAZAR ────────────────────────────────────
+    const STATUS_TOAST = {
+        'APROBADA':  'aprobada ✓',
+        'RECHAZADA': 'rechazada',
+        'ENTREGADA': 'marcada como entregada ✓',
+    };
+
     async function updateStatus(newStatus) {
         if (!activeRequest) return;
         try {
-            btnApprove.disabled = btnReject.disabled = true;
+            btnApprove.disabled = btnReject.disabled = btnDeliver.disabled = true;
             const res = await fetch(`/api/v1/solicitudes/${activeRequest.id}/estado`, {
                 method:  'PATCH',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
@@ -359,7 +370,7 @@ ${bodyHTML}
             });
             if (res.ok) {
                 modalDetail.classList.add('hidden');
-                showToast(`Solicitud #${activeRequest.id} ${newStatus === 'APROBADA' ? 'aprobada ✓' : 'rechazada'}`);
+                showToast(`Solicitud #${activeRequest.id} ${STATUS_TOAST[newStatus] || newStatus}`);
                 await loadRequests();
             } else {
                 showToast('No se pudo actualizar el estado.', 'error');
@@ -367,15 +378,16 @@ ${bodyHTML}
         } catch(e) {
             showToast('Error de conexión.', 'error');
         } finally {
-            btnApprove.disabled = btnReject.disabled = false;
+            btnApprove.disabled = btnReject.disabled = btnDeliver.disabled = false;
         }
     }
 
     // ─── EVENT LISTENERS ───────────────────────────────────────
     if (btnRefresh)     btnRefresh.addEventListener('click', loadRequests);
     if (btnCloseDetail) btnCloseDetail.addEventListener('click', () => modalDetail.classList.add('hidden'));
-    if (btnApprove)     btnApprove.addEventListener('click', () => updateStatus('APROBADA'));
-    if (btnReject)      btnReject.addEventListener('click',  () => updateStatus('RECHAZADA'));
+    if (btnApprove)     btnApprove.addEventListener('click',  () => updateStatus('APROBADA'));
+    if (btnReject)      btnReject.addEventListener('click',   () => updateStatus('RECHAZADA'));
+    if (btnDeliver)     btnDeliver.addEventListener('click',  () => updateStatus('ENTREGADA'));
     modalDetail.addEventListener('click', (e) => { if (e.target === modalDetail) modalDetail.classList.add('hidden'); });
 
     // ─── INIT ──────────────────────────────────────────────────

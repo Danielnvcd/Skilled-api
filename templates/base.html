@@ -135,7 +135,7 @@
                 </div>
             </div>
 
-            <form method="POST" action="{{ url_for('auth.logout') }}" class="w-full">
+            <form id="logout-form" method="POST" action="{{ url_for('auth.logout') }}" class="w-full">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit"
                     class="group w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100/80 text-rose-600 hover:text-rose-700 rounded-xl font-bold text-[0.95rem] transition-all duration-300 border-none shadow-sm hover:shadow-md hover:-translate-y-0.5">
@@ -162,6 +162,7 @@
 
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
     <script src="{{ url_for('static', filename='js/session_interceptor.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='js/logout-confirm.js') }}?v=1"></script>
     {% block scripts %}{% endblock %}
 </body>
 
