@@ -5,89 +5,632 @@
     <meta charset="UTF-8">
     <title>Skilled | Iniciar Sesión</title>
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="description" content="Skilled — Iniciar sesión">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}?v=2">
-    
-    <!-- PWA Config -->
+
+    <!-- PWA -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <meta name="theme-color" content="#2563eb">
-    
-    <!-- iOS / iPhone Specific -->
+    <meta name="theme-color" content="#1e40af">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Skilled">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='imagenes/pwa-icon.png') }}">
+
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        /* ════════════════════════════════════
+           ANIMATED BACKGROUND
+        ════════════════════════════════════ */
+        .bg-scene {
+            position: fixed;
+            inset: 0;
+            background: #ffffff;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        /* Morphing blobs */
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(70px);
+            opacity: 0.55;
+            animation: blobMove var(--dur, 12s) ease-in-out infinite alternate;
+        }
+
+        .blob-1 {
+            width: 520px;
+            height: 520px;
+            background: radial-gradient(circle, #bfdbfe, #dbeafe);
+            top: -180px;
+            left: -120px;
+            --dur: 14s;
+        }
+
+        .blob-2 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, #fef3c7, #fde68a);
+            bottom: -100px;
+            right: -80px;
+            --dur: 11s;
+            animation-delay: -4s;
+        }
+
+        .blob-3 {
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, #e0e7ff, #c7d2fe);
+            top: 40%;
+            right: 15%;
+            --dur: 16s;
+            animation-delay: -7s;
+        }
+
+        .blob-4 {
+            width: 240px;
+            height: 240px;
+            background: radial-gradient(circle, #d1fae5, #a7f3d0);
+            bottom: 20%;
+            left: 10%;
+            --dur: 10s;
+            animation-delay: -2s;
+        }
+
+        @keyframes blobMove {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(40px, -30px) scale(1.08);
+            }
+
+            66% {
+                transform: translate(-20px, 50px) scale(0.94);
+            }
+
+            100% {
+                transform: translate(30px, 20px) scale(1.05);
+            }
+        }
+
+        /* Animated dots grid */
+        .dots-grid {
+            position: absolute;
+            inset: 0;
+            background-image: radial-gradient(circle, rgba(30, 64, 175, 0.12) 1.5px, transparent 1.5px);
+            background-size: 36px 36px;
+            animation: gridDrift 25s linear infinite;
+        }
+
+        @keyframes gridDrift {
+            from {
+                background-position: 0 0;
+            }
+
+            to {
+                background-position: 72px 72px;
+            }
+        }
+
+        /* Floating lines / electric sparks */
+        .spark {
+            position: absolute;
+            width: 2px;
+            border-radius: 999px;
+            opacity: 0;
+            animation: sparkFall var(--spd, 8s) ease-in-out infinite;
+            background: linear-gradient(to bottom, transparent, rgba(29, 78, 216, 0.6), transparent);
+        }
+
+        @keyframes sparkFall {
+            0% {
+                opacity: 0;
+                transform: translateY(-60px) scaleY(0.5);
+            }
+
+            20% {
+                opacity: 1;
+            }
+
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(100vh) scaleY(1.2);
+            }
+        }
+
+        /* ════════════════════════════════════
+           CARD
+        ════════════════════════════════════ */
+        .wrapper {
+            position: relative;
+            z-index: 10;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .card {
+            display: flex;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-radius: 28px;
+            overflow: hidden;
+            width: 100%;
+            max-width: 860px;
+            min-height: 500px;
+            box-shadow:
+                0 2px 4px rgba(0, 0, 0, 0.04),
+                0 12px 40px rgba(0, 0, 0, 0.10),
+                0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+            animation: cardIn 0.7s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+        }
+
+        @keyframes cardIn {
+            from {
+                opacity: 0;
+                transform: translateY(28px) scale(0.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* ─── LEFT: Brand ─── */
+        .brand-side {
+            width: 44%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 52px 40px;
+            text-align: center;
+            position: relative;
+            border-right: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* Thin animated top bar */
+        .brand-side::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 10%;
+            right: 10%;
+            height: 3px;
+            border-radius: 0 0 6px 6px;
+            background: linear-gradient(90deg, #1d4ed8, #f92e0a, #1d4ed8);
+            background-size: 200% 100%;
+            animation: barSlide 3s linear infinite;
+        }
+
+        @keyframes barSlide {
+            from {
+                background-position: 200% 0;
+            }
+
+            to {
+                background-position: -200% 0;
+            }
+        }
+
+        .brand-logo {
+            max-width: 190px;
+            width: 100%;
+            margin-bottom: 28px;
+            filter: drop-shadow(0 6px 18px rgba(29, 78, 216, 0.18));
+        }
+
+        @keyframes logoFloat {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .brand-tagline {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.65;
+            max-width: 220px;
+            font-weight: 400;
+        }
+
+        .brand-divider {
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(90deg, #1d4ed8, #f59e0b);
+            border-radius: 999px;
+            margin: 20px auto;
+        }
+
+        .brand-company {
+            font-size: 11px;
+            color: #94a3b8;
+            letter-spacing: 0.5px;
+            margin-top: 28px;
+        }
+
+        /* ─── RIGHT: Form ─── */
+        .form-side {
+            flex: 1;
+            padding: 52px 48px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        /* Stagger in */
+        .fi {
+            opacity: 0;
+            animation: fadeUp 0.5s ease forwards;
+        }
+
+        .fi-1 {
+            animation-delay: .1s;
+        }
+
+        .fi-2 {
+            animation-delay: .2s;
+        }
+
+        .fi-3 {
+            animation-delay: .3s;
+        }
+
+        .fi-4 {
+            animation-delay: .42s;
+        }
+
+        .fi-5 {
+            animation-delay: .54s;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .form-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+        }
+
+        .form-sub {
+            font-size: 13.5px;
+            color: #64748b;
+            margin-bottom: 32px;
+        }
+
+        .field {
+            margin-bottom: 20px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 7px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .field-wrap {
+            position: relative;
+        }
+
+        .field-icon {
+            position: absolute;
+            top: 50%;
+            left: 14px;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            font-size: 13px;
+            pointer-events: none;
+        }
+
+        .field-input {
+            width: 100%;
+            padding: 12px 14px 12px 40px;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            color: #111827;
+            background: #f9fafb;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        .field-input:focus {
+            border-color: #1d4ed8;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
+        }
+
+        .field-input::placeholder {
+            color: #9ca3af;
+            font-weight: 300;
+        }
+
+        .eye-btn {
+            position: absolute;
+            top: 50%;
+            right: 12px;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #9ca3af;
+            padding: 4px;
+            transition: color 0.2s;
+            font-size: 13px;
+        }
+
+        .eye-btn:hover {
+            color: #475569;
+        }
+
+        .remember-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 26px;
+        }
+
+        .remember-row input {
+            width: 15px;
+            height: 15px;
+            accent-color: #1d4ed8;
+            cursor: pointer;
+        }
+
+        .remember-row label {
+            font-size: 13px;
+            color: #6b7280;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: #fff;
+            font-size: 14.5px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            letter-spacing: 0.2px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-forgot {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            padding: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'Inter', sans-serif;
+            color: #64748b;
+            background: transparent;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: border-color 0.2s, color 0.2s;
+        }
+
+        .btn-forgot:hover {
+            border-color: #f59e0b;
+            color: #b45309;
+        }
+
+        .alert-err {
+            margin-top: 16px;
+            padding: 11px 14px;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-left: 4px solid #ef4444;
+            color: #b91c1c;
+            font-size: 13px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Responsive */
+        @media (max-width: 680px) {
+
+            html,
+            body {
+                overflow: auto;
+            }
+
+            .brand-side {
+                display: none;
+            }
+
+            .form-side {
+                padding: 40px 28px;
+            }
+
+            .card {
+                max-width: 96%;
+                min-height: auto;
+                border-radius: 20px;
+            }
+
+            .wrapper {
+                align-items: flex-start;
+                padding-top: 40px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-    <div class="login-wrapper">
-        <!-- Left Brand Panel -->
-        <div class="brand-panel">
-            <h2>Bienvenido a</h2>
-            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}"
-                alt="Skilled Proyectos Industriales">
-            <p>Sistema integral de administración de personal, control de asistencia, nóminas y gestión de proyectos.
-            </p>
-        </div>
 
-        <!-- Right Form Panel -->
-        <div class="form-panel">
-            <h3>Ingresa a tu cuenta</h3>
+    <!-- ════════ BACKGROUND SCENE ════════ -->
+    <div class="bg-scene">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="blob blob-4"></div>
+        <div class="dots-grid"></div>
 
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <!-- Animated sparks / electric lines -->
+        <div class="spark" style="left:8%; height:80px; --spd:9s; animation-delay:0s;"></div>
+        <div class="spark" style="left:22%; height:55px; --spd:12s; animation-delay:-3s;"></div>
+        <div class="spark" style="left:38%; height:100px; --spd:7s; animation-delay:-5s; opacity-start:.4;"></div>
+        <div class="spark" style="left:55%; height:65px; --spd:11s; animation-delay:-1.5s;"></div>
+        <div class="spark" style="left:71%; height:90px; --spd:8s; animation-delay:-6s;"></div>
+        <div class="spark" style="left:85%; height:70px; --spd:14s; animation-delay:-2s;"></div>
+        <div class="spark" style="left:93%; height:50px; --spd:10s; animation-delay:-8s;"></div>
+    </div>
 
-                <div class="input-group">
-                    <label for="username">Usuario</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="username" name="username" placeholder="Ingresa tu nombre de usuario"
-                            required autofocus>
+    <!-- ════════ CARD ════════ -->
+    <div class="wrapper">
+        <div class="card">
+
+            <!-- ── BRAND SIDE ── -->
+            <div class="brand-side">
+                <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled"
+                    class="brand-logo">
+
+                <div class="brand-divider"></div>
+
+                <p class="brand-tagline">
+                    Sistema ERP de Skilled.
+                </p>
+
+                <p class="brand-company">© 2026 Skilled Proyectos Industriales</p>
+            </div>
+
+            <!-- ── FORM SIDE ── -->
+            <div class="form-side">
+
+                <div class="fi fi-1">
+                    <h2 class="form-title">Iniciar Sesión</h2>
+                    <p class="form-sub">Ingresa tus credenciales para acceder.</p>
+                </div>
+
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="field fi fi-2">
+                        <label for="username">Usuario</label>
+                        <div class="field-wrap">
+                            <i class="fa-regular fa-user field-icon"></i>
+                            <input type="text" id="username" name="username" class="field-input"
+                                placeholder="Nombre de usuario" required autofocus>
+                        </div>
                     </div>
-                </div>
 
-                <div class="input-group">
-                    <label for="password">Contraseña</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="password" name="password" placeholder="Ingresa tu contraseña"
-                            required>
+                    <div class="field fi fi-3">
+                        <label for="password">Contraseña</label>
+                        <div class="field-wrap">
+                            <i class="fa-solid fa-lock field-icon" style="font-size:12px;"></i>
+                            <input type="password" id="password" name="password" class="field-input"
+                                placeholder="••••••••" required style="padding-right:42px;">
+                            <button type="button" class="eye-btn" id="toggle-pwd">
+                                <i id="eye-icon" class="fa-regular fa-eye"></i>
+                            </button>
+                        </div>
                     </div>
-                </div>
 
-                <div class="checkbox-group">
-                    <input type="checkbox" id="remember" name="remember">
-                    <label for="remember" style="margin:0; font-weight: normal;">Recordarme en este equipo</label>
-                </div>
+                    <div class="remember-row fi fi-4">
+                        <input type="checkbox" id="remember" name="remember">
+                        <label for="remember">Recordarme en este equipo</label>
+                    </div>
 
-                <div class="buttons-container">
-                    <button type="submit" class="btn-login">Iniciar Sesión</button>
-                    <!-- Simulated secondary action fitting the reference image's "Sign Up" button style -->
-                    <a href="#" id="contact-admin" class="btn-link">¿Olvidaste tu contraseña?</a>
-                </div>
-            </form>
+                    <div class="fi fi-5">
+                        <button type="submit" id="btn-login" class="btn-login">
+                            <i class="fa-solid fa-arrow-right-to-bracket" style="margin-right:7px;"></i>
+                            Iniciar Sesión
+                        </button>
+                        <a href="#" id="contact-admin" class="btn-forgot">
+                            <i class="fa-solid fa-circle-question" style="font-size:12px;"></i>
+                            ¿Olvidaste tu contraseña?
+                        </a>
+                    </div>
+                </form>
 
-            {% with messages = get_flashed_messages() %}
-            {% if messages %}
-            <div class="alert-message"><i class="fa-solid fa-circle-exclamation" style="margin-right:5px;"></i> {{
-                messages[0] }}</div>
-            {% endif %}
-            {% endwith %}
+                {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                <div class="alert-err">
+                    <i class="fa-solid fa-circle-exclamation" style="flex-shrink:0;"></i>
+                    <span>{{ messages[0] }}</span>
+                </div>
+                {% endif %}
+                {% endwith %}
+
+            </div>
         </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
-    
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/static/sw.js')
-                    .then(reg => console.log('SW Registered', reg))
-                    .catch(err => console.log('SW Registration failed', err));
-            });
-        }
-    </script>
+    <script src="{{ url_for('static', filename='js/login.js') }}?v=4"></script>
+
 </body>
 
 </html>

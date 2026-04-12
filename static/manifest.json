@@ -1,7 +1,8 @@
 {
-  "name": "Skilled - Gestión de Inventario",
+  "name": "Skilled - ERP",
   "short_name": "Skilled",
-  "start_url": "/inventario/movil",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#eff6ff",
   "theme_color": "#2563eb",
