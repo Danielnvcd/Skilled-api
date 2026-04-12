@@ -29,22 +29,28 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Missing SECRET_KEY configuration")
         
     try:
-        # Usamos el propio signer de Flask para hacer bypass del encriptado
+        # Usamos el propio signer de Flask para decodificar exactamente como Flask lo codificó.
         from app.constants import SESSION_LIFETIME_SECONDS
         session_data = signer.loads(session_cookie, max_age=SESSION_LIFETIME_SECONDS)
-        
-        user_id = session_data.get('_user_id') or session_data.get('user_id')
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid session data")
-            
-        user = db.query(User).filter(User.id == int(user_id)).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-            
-        return user
     except Exception as e:
-        logging.error(f"Error decodificando sesion de Flask en FastAPI: {e}")
+        logging.warning("Cookie de sesión inválida o expirada en FastAPI: %s", e)
         raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+    user_id = session_data.get('_user_id') or session_data.get('user_id')
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid session data")
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    # Verificar password_version: si el usuario cambió su contraseña la cookie
+    # vieja queda inválida aunque siga firmada correctamente (igual que Flask).
+    session_pw_ver = int(session_data.get('password_version', 1))
+    if session_pw_ver != (user.password_version or 1):
+        raise HTTPException(status_code=401, detail="Session invalidated by password change")
+
+    return user
 
 def get_inventario_user(user: User = Depends(get_current_user)):
     """Permite lectura a solicitantes, inventario y admin."""

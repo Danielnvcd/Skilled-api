@@ -25,6 +25,22 @@ class User(db.Model):
     profile_pic = db.Column(db.String(255), nullable=True, default='default.png')
     last_seen = db.Column(db.DateTime, nullable=True, default=None)
 
+class RefreshToken(db.Model):
+    """Token de refresco de sesión (HttpOnly cookie 'rt').
+    Solo se almacena el hash SHA-256; nunca el token crudo.
+    Al hacer logout o cambiar contraseña se revoca.
+    """
+    __tablename__ = "refresh_tokens"
+    id = db.Column(db.Integer, primary_key=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    revoked = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now_utc)
+
+    user = db.relationship('User', backref=db.backref('refresh_tokens', lazy=True, cascade='all, delete-orphan'))
+
+
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user = db.Column(db.String(80))

@@ -9,10 +9,11 @@ import io
 import qrcode
 from PIL import Image
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from limits import parse as _parse_limit
+from limits.strategies import MovingWindowRateLimiter as _MovingWindow
 
 from .database import get_db
 from .deps import get_current_user, get_inventario_user, get_inventario_admin_user
@@ -42,6 +43,7 @@ def get_real_ip(request: Request) -> str:
 
 # ─── Configuración de la app ───────────────────────────────────────────────────
 _is_prod = os.environ.get('FLASK_ENV') == 'production'
+_redis_url = os.environ.get('REDIS_URL', 'memory://')
 
 app_fastapi = FastAPI(
     title="Inventario API",
@@ -51,10 +53,57 @@ app_fastapi = FastAPI(
 )
 
 # ─── Rate limiting (SlowAPI) ───────────────────────────────────────────────────
-limiter = Limiter(key_func=get_real_ip, default_limits=["120/minute"])
+# - key_func: IP real (respeta Cloudflare Tunnel, anti-spoofing).
+# - storage_uri: Redis compartido con Flask-Limiter → contadores persistentes entre workers.
+# - default_limits: 60 req/min por IP para toda la API; los endpoints sensibles tienen límites propios.
+limiter = Limiter(
+    key_func=get_real_ip,
+    default_limits=["60/minute"],
+    storage_uri=_redis_url,
+)
 app_fastapi.state.limiter = limiter
-app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app_fastapi.add_middleware(SlowAPIMiddleware)
+
+
+def _json_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Devuelve 429 JSON en lugar del texto plano del handler por defecto."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"error": "Demasiadas solicitudes. Espera un momento e intenta de nuevo."},
+        headers={"Retry-After": str(exc.retry_after) if hasattr(exc, "retry_after") else "60"},
+    )
+
+
+app_fastapi.add_exception_handler(RateLimitExceeded, _json_rate_limit_handler)
+
+
+def _strict_limit(limit_str: str):
+    """
+    Dependencia FastAPI: aplica un rate limit estricto por IP ANTES del auth.
+
+    Por qué no usar @limiter.limit en rutas con Depends(auth):
+      SlowAPI's middleware exime las rutas marcadas con @limiter.limit esperando
+      que el decorador las maneje internamente. Pero el decorador envuelve el cuerpo
+      de la función; si Depends(get_current_user) lanza 401 primero, el cuerpo
+      nunca corre → el contador nunca incrementa → sin protección real.
+    Esta dependencia corre ANTES del auth (se declara primero en la firma) y usa
+    el mismo storage Redis del limiter global para contadores compartidos entre workers.
+    """
+    _parsed = _parse_limit(limit_str)
+
+    async def _dep(request: Request):
+        ip = get_real_ip(request)
+        strategy = _MovingWindow(limiter._storage)
+        if not strategy.hit(_parsed, ip):
+            raise HTTPException(
+                status_code=429,
+                detail="Demasiadas solicitudes. Espera un momento e intenta de nuevo.",
+                headers={"Retry-After": "60"},
+            )
+
+    return Depends(_dep)
+
 
 router = APIRouter()
 
@@ -71,12 +120,12 @@ def _audit(db: Session, user: User, action: str, request: Request | None = None)
 
 # ─── Solicitudes ──────────────────────────────────────────────────────────────
 @router.post("/solicitudes/", response_model=schemas.SolicitudResponse)
-@limiter.limit("10/minute")
 def create_solicitud(
     request: Request,
     sol: schemas.SolicitudCreate,
+    _rl: None = _strict_limit("10/minute"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
 ):
     # Sólo solicitantes o admin pueden crear
     if current_user.role not in ['solicitante_material', 'admin', 'inventario']:
@@ -404,12 +453,12 @@ def get_estante_qr_image(estante_id: int, db: Session = Depends(get_db), current
 
 # ─── Movimientos ──────────────────────────────────────────────────────────────
 @router.post("/movimientos/", response_model=schemas.MovimientoResponse)
-@limiter.limit("20/minute")
 def create_movimiento(
     request: Request,
     mov: schemas.MovimientoCreate,
+    _rl: None = _strict_limit("20/minute"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_inventario_user)
+    current_user = Depends(get_inventario_user),
 ):
     # ENTRADA/SALIDA/TRASPASO deben ser cantidades positivas
     if mov.tipo in ['ENTRADA', 'SALIDA', 'TRASPASO'] and mov.cantidad <= 0:

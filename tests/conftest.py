@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import pytest
 from werkzeug.security import generate_password_hash
 from app import create_app
@@ -16,14 +18,18 @@ def app():
     os.environ['SECRET_KEY'] = 'test-secret-key-do-not-use-in-prod'
     os.environ['DATABASE_URL'] = 'sqlite://'  # In-memory SQLite
 
+    # Directorio temporal aislado para uploads: evita contaminar uploads/ de producción
+    tmp_upload = tempfile.mkdtemp(prefix='test_uploads_')
+
     application = create_app()
     application.config.update({
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,   # Desactivar CSRF en tests
         'RATELIMIT_ENABLED': False,  # Desactivar Limiter en tests
         'SERVER_NAME': 'localhost',
+        'UPLOAD_FOLDER': tmp_upload,
     })
-    
+
     # Asegurar que el limiter esté apagado durante toda la ejecución
     from app.extensions import limiter
     limiter.enabled = False
@@ -35,6 +41,9 @@ def app():
 
     with application.app_context():
         _db.drop_all()
+
+    # Limpiar todos los archivos generados durante los tests
+    shutil.rmtree(tmp_upload, ignore_errors=True)
 
 
 @pytest.fixture(scope='function')
