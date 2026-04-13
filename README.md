@@ -188,7 +188,21 @@ Asegúrate de instalar las dependencias y tener `uvicorn` y `gunicorn` en tu ent
 pip install -r requirements.txt
 ```
 
-### 2. Configuración de Systemd (`/etc/systemd/system/nominas.service`)
+### 2. Compilar Tailwind CSS
+El archivo `static/css/tailwind.css` **no se incluye en el repositorio** (está en `.gitignore`) porque se genera a partir del código fuente. Debes compilarlo en el servidor antes de arrancar la aplicación:
+
+```bash
+# Generar el CSS minificado de producción
+python build_tailwind.py
+```
+
+Esto escanea todos los templates HTML y archivos JS, y genera `static/css/tailwind.css` (~40 KB minificado).
+
+> Si en el futuro modificas clases de Tailwind en los templates, vuelve a ejecutar `python build_tailwind.py` y reinicia el servidor.
+>
+> Para desarrollo local con recarga automática al guardar cambios: `python build_tailwind.py --watch`
+
+### 3. Configuración de Systemd (`/etc/systemd/system/nominas.service`)
 Utiliza la siguiente plantilla para mantener el servidor siempre encendido:
 
 ```ini
@@ -210,7 +224,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-### 3. Comandos de Gestión
+### 4. Comandos de Gestión
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable nominas
@@ -218,7 +232,7 @@ sudo systemctl start nominas
 sudo systemctl status nominas
 ```
 
-### 4. Configuración de Nginx (`/etc/nginx/sites-available/default`)
+### 5. Configuración de Nginx (`/etc/nginx/sites-available/default`)
 Para un correcto funcionamiento (especialmente con HTTPS/Cloudflare), asegúrate de que tu bloque de Nginx tenga los encabezados de proxy adecuados:
 
 ```nginx

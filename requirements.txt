@@ -24,3 +24,4 @@ fastapi==0.110.1
 uvicorn==0.29.0
 pydantic==2.6.4
 slowapi==0.1.9
+pytailwindcss==0.3.0
