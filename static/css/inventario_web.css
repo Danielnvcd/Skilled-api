@@ -877,7 +877,168 @@
     white-space: nowrap;
 }
 .dash-cat-footer .stat-badge.danger {
-    background: rgba(239, 68, 68, 0.85); /* Tailwind red-500 */
+    background: rgba(239, 68, 68, 0.85);
     border-color: rgba(239, 68, 68, 1);
     color: white;
 }
+
+/* ─── DASH CAT CARD EMPTY (sin productos) ────────────────────── */
+.dash-cat-card-empty {
+    opacity: 0.65;
+    filter: saturate(0.5);
+}
+.dash-cat-card-empty:hover {
+    opacity: 1;
+    filter: saturate(1);
+}
+
+/* ─── DASH ADD CATEGORY CARD ─────────────────────────────────── */
+.dash-add-cat-card {
+    background: white !important;
+    border: 2px dashed #E0E7FF !important;
+    box-shadow: none !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    border-radius: 18px;
+    text-decoration: none !important;
+    padding: 1.5rem;
+}
+
+.dash-add-cat-card:hover {
+    border-color: #818CF8 !important;
+    background: #F5F3FF !important;
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(99,102,241,.1) !important;
+}
+
+.dash-add-cat-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.dash-add-cat-icon {
+    width: 52px;
+    height: 52px;
+    background: #EEF2FF;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6366F1;
+    transition: all 0.2s;
+}
+
+.dash-add-cat-card:hover .dash-add-cat-icon {
+    background: #6366F1;
+    color: white;
+}
+
+.dash-add-cat-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #6B7280;
+    margin: 0;
+}
+
+.dash-add-cat-card:hover .dash-add-cat-label { color: #6366F1; }
+
+/* ─── PRODUCT CARD IMAGE ─────────────────────────────────────── */
+.product-card-img {
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid #F1F5F9;
+    background: #F9FAFB;
+}
+
+.product-card-img img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* ─── MODAL IMAGEN PREVIEW ───────────────────────────────────── */
+.prod-img-preview-thumb {
+    max-height: 80px;
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+    object-fit: contain;
+}
+
+/* ─── ICON PICKER ────────────────────────────────────────────── */
+.icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 0.5rem;
+}
+
+@media (max-width: 480px) {
+    .icon-picker-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+.icon-pick-btn {
+    width: 44px;
+    height: 44px;
+    border: 2px solid #F1F5F9;
+    border-radius: 10px;
+    background: #F9FAFB;
+    color: #6B7280;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    transition: all 0.15s;
+}
+
+.icon-pick-btn svg { width: 100%; height: 100%; }
+
+.icon-pick-btn:hover {
+    border-color: #C7D2FE;
+    background: #EEF2FF;
+    color: #4F46E5;
+    transform: scale(1.08);
+}
+
+.icon-pick-btn.selected {
+    border-color: #6366F1;
+    background: #EEF2FF;
+    color: #4F46E5;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.2);
+}
+
+/* ─── COLOR PICKER ───────────────────────────────────────────── */
+.color-picker-grid {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.color-pick-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.color-pick-btn:hover { transform: scale(1.15); }
+
+.color-pick-btn.selected {
+    border-color: white;
+    box-shadow: 0 0 0 3px currentColor, 0 0 0 5px rgba(0,0,0,.1);
+    transform: scale(1.1);
+}
+

@@ -444,11 +444,12 @@ class Producto(db.Model):
     unidad = db.Column(db.String(50), nullable=False) # pieza, caja, kg, etc.
     stock_actual = db.Column(db.Numeric(10, 2), default=0, nullable=False)
     stock_minimo = db.Column(db.Numeric(10, 2), default=0, nullable=False)
+    imagen_url = db.Column(db.String(500), nullable=True)
     activo = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime, default=_now_utc)
     updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    
+
     created_by = db.relationship('User', foreign_keys=[created_by_id])
 
 class MovimientoInventario(db.Model):

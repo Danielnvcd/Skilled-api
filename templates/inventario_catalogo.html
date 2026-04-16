@@ -3,7 +3,7 @@
 {% block title %}Catálogo de Materiales — Skilled{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=31">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=34">
 {% endblock %}
 
 {% block content %}
@@ -18,36 +18,35 @@
         <!-- Ilustración decorativa -->
         <div class="header-illustration">
             <svg width="160" height="90" viewBox="0 0 160 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Caja grande izquierda -->
                 <rect x="8" y="30" width="44" height="44" rx="6" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
                 <path d="M8 44 L30 52 L52 44" stroke="#A5B4FC" stroke-width="1.5" fill="none"/>
                 <line x1="30" y1="30" x2="30" y2="52" stroke="#A5B4FC" stroke-width="1.5"/>
                 <text x="30" y="66" text-anchor="middle" font-size="8" fill="#6366F1" font-family="system-ui" font-weight="700">SKU</text>
-                <!-- Caja mediana centro -->
                 <rect x="60" y="42" width="36" height="36" rx="5" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5"/>
                 <path d="M60 54 L78 61 L96 54" stroke="#6EE7B7" stroke-width="1.5" fill="none"/>
                 <line x1="78" y1="42" x2="78" y2="61" stroke="#6EE7B7" stroke-width="1.5"/>
                 <text x="78" y="72" text-anchor="middle" font-size="7" fill="#059669" font-family="system-ui" font-weight="700">MAT</text>
-                <!-- Caja pequeña derecha -->
                 <rect x="104" y="52" width="28" height="28" rx="4" fill="#FFF7ED" stroke="#FED7AA" stroke-width="1.5"/>
                 <path d="M104 61 L118 67 L132 61" stroke="#FBB97A" stroke-width="1.5" fill="none"/>
                 <line x1="118" y1="52" x2="118" y2="67" stroke="#FBB97A" stroke-width="1.5"/>
-                <!-- Línea base (plataforma) -->
                 <line x1="4" y1="80" x2="152" y2="80" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
-                <!-- Ruedas de paleta -->
                 <circle cx="22" cy="83" r="3" fill="#D1D5DB"/>
                 <circle cx="40" cy="83" r="3" fill="#D1D5DB"/>
-                <!-- Estrellas decorativas -->
                 <circle cx="148" cy="20" r="2" fill="#A5B4FC"/>
                 <circle cx="6" cy="18" r="1.5" fill="#6EE7B7"/>
                 <circle cx="138" cy="36" r="1.5" fill="#FBB97A"/>
             </svg>
         </div>
         <div class="flex gap-3">
+            <button id="btnOpenModalCategoria" class="btn-glow" style="background:linear-gradient(135deg,#7C3AED 0%,#6366F1 100%);box-shadow:0 4px 14px rgba(124,58,237,.35);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>
+                </svg>
+                Nueva Categoría
+            </button>
             <button id="btnOpenModalProducto" class="btn-glow btn-glow-blue">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
                 Nuevo Producto
             </button>
@@ -61,31 +60,19 @@
             <div class="panel-toolbar">
                 <div class="search-container" style="flex:1;">
                     <div class="search-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5">
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.3-4.3" />
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
                         </svg>
                     </div>
-                    <input id="searchProducto" type="text" placeholder="Buscar material por nombre o SKU..."
-                        class="premium-search">
+                    <input id="searchProducto" type="text" placeholder="Buscar material por nombre o SKU..." class="premium-search">
                 </div>
                 <select id="filterCategoria" class="premium-input" style="min-width:200px;">
                     <option value="">Todas las categorías</option>
-                    <option value="Tornillería">Tornillería</option>
-                    <option value="Tuercas">Tuercas</option>
-                    <option value="Rondanas">Rondanas</option>
-                    <option value="Pijas">Pijas</option>
-                    <option value="Abrazaderas">Abrazaderas</option>
-                    <option value="Soportería">Soportería</option>
-                    <option value="Tubería/Accesorios">Tubería/Accesorios</option>
                 </select>
             </div>
 
-            <!-- Secciones por categoría -->
-            <div id="productos-list" class="catalogo-secciones custom-scrollbar"
-                 style="padding-right:4px;">
-                <!-- Spinner inicial -->
+            <!-- Lista/Grid de productos o categorías -->
+            <div id="productos-list" style="padding-right:4px;">
                 <div class="flex flex-col items-center py-12 text-gray-400">
                     <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
                     <p class="text-sm">Sincronizando inventario...</p>
@@ -97,113 +84,130 @@
 </div>
 
 <!-- ═══ MODAL: Nuevo Producto ═══ -->
-<div id="modalProducto"
-    class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
+<div id="modalProducto" class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
     <div class="modal-content-premium w-full max-w-lg">
-        <div
-            class="flex justify-between items-center p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-50/50 to-transparent">
+        <div class="flex justify-between items-center p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-50/50 to-transparent">
             <h3 class="font-bold text-xl text-gray-800 flex items-center gap-3">
                 <div class="bg-indigo-600 p-1.5 rounded-lg text-white shrink-0">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <path
-                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                     </svg>
                 </div>
                 <span id="titleModalProducto">Registrar Nuevo Producto</span>
             </h3>
-            <button id="btnCloseModalProducto"
-                class="border-none bg-transparent hover:bg-black/5 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 transition-colors text-2xl font-light cursor-pointer">&times;</button>
+            <button id="btnCloseModalProducto" class="border-none bg-transparent hover:bg-black/5 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 transition-colors text-2xl font-light cursor-pointer">&times;</button>
         </div>
-        <form id="formProducto" class="p-8 space-y-6">
+        <form id="formProducto" class="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
             <input type="hidden" id="prodId">
-            <div class="grid grid-cols-2 gap-6">
+            <div class="grid grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Código
-                        (SKU)</label>
+                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Código (SKU)</label>
                     <input type="text" id="prodCodigo" required placeholder="Ej. SKU-001" class="w-full premium-input">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Categoría</label>
-                    <select id="prodCat" required class="w-full premium-input bg-white cursor-pointer">
+                    <select id="prodCat" required class="w-full premium-input bg-white cursor-pointer select-categoria">
                         <option value="">Seleccione Categoría</option>
-                        <option value="Tornillería">Tornillería</option>
-                        <option value="Tuercas">Tuercas</option>
-                        <option value="Rondanas">Rondanas</option>
-                        <option value="Pijas">Pijas</option>
-                        <option value="Abrazaderas">Abrazaderas</option>
-                        <option value="Soportería">Soportería</option>
-                        <option value="Tubería/Accesorios">Tubería/Accesorios</option>
                     </select>
                 </div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Descripción
-                    Completa</label>
-                <input type="text" id="prodDesc" required placeholder="Nombre o descripción del material"
-                    class="w-full premium-input text-lg">
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Descripción Completa</label>
+                <input type="text" id="prodDesc" required placeholder="Nombre o descripción del material" class="w-full premium-input text-lg">
             </div>
-            <div class="grid grid-cols-3 gap-6">
+            <div class="grid grid-cols-3 gap-4">
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Unidad</label>
                     <input type="text" id="prodUnidad" value="Pza" required class="w-full premium-input">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Stock
-                        Inicial</label>
-                    <input type="number" step="0.01" id="prodStock" value="0" required
-                        class="w-full premium-input font-mono">
+                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Stock Inicial</label>
+                    <input type="number" step="0.01" id="prodStock" value="0" required class="w-full premium-input font-mono">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Stock
-                        Min.</label>
-                    <input type="number" step="0.01" id="prodMin" value="5" required
-                        class="w-full premium-input font-mono text-red-600 bg-red-50/50">
+                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Stock Mín.</label>
+                    <input type="number" step="0.01" id="prodMin" value="5" required class="w-full premium-input font-mono text-red-600 bg-red-50/50">
                 </div>
             </div>
-            <div class="pt-6 border-t border-gray-100 flex justify-end gap-3 mt-4">
-                <button type="button" id="btnCancelProducto"
-                    class="border-none bg-transparent px-6 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100 transition-colors cursor-pointer">Cancelar</button>
-                <button type="submit" id="btnSubmitProducto"
-                    class="border-none bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-indigo-200 transition-all cursor-pointer">
-                    Guardar Producto
-                </button>
+            <!-- Foto del producto -->
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Foto del Producto <span class="font-normal normal-case text-gray-400">(URL de imagen — opcional)</span></label>
+                <input type="text" id="prodImagenUrl" placeholder="https://ejemplo.com/imagen.jpg" class="w-full premium-input">
+                <div id="prodImgPreview" class="mt-2"></div>
+            </div>
+            <div class="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" id="btnCancelProducto" class="border-none bg-transparent px-6 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100 transition-colors cursor-pointer">Cancelar</button>
+                <button type="submit" id="btnSubmitProducto" class="border-none bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-indigo-200 transition-all cursor-pointer">Guardar Producto</button>
             </div>
         </form>
     </div>
 </div>
 
 <!-- ═══ MODAL: Confirmar Eliminar Producto ═══ -->
-<div id="modalDeleteProducto"
-    class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
+<div id="modalDeleteProducto" class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
     <div class="modal-content-premium w-full max-w-sm">
         <div class="p-8 text-center">
             <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2.5">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    <path d="M10 11v6" />
-                    <path d="M14 11v6" />
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6"/><path d="M14 11v6"/>
                 </svg>
             </div>
             <h3 class="font-bold text-xl text-gray-800 mb-2">¿Eliminar Producto?</h3>
-            <p id="deleteProductoNombre" class="text-gray-500 text-sm mb-8">Este producto será eliminado
-                permanentemente.</p>
+            <p id="deleteProductoNombre" class="text-gray-500 text-sm mb-8">Este producto será eliminado permanentemente.</p>
             <input type="hidden" id="deleteProductoId">
             <div class="flex gap-3 justify-center">
-                <button id="btnCancelDeleteProducto"
-                    class="border-none bg-gray-100 hover:bg-gray-200 px-6 py-3 rounded-xl text-sm font-bold text-gray-600 cursor-pointer transition-colors">Cancelar</button>
-                <button id="btnConfirmDeleteProducto"
-                    class="border-none bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-red-100 transition-all cursor-pointer">Sí,
-                    Eliminar</button>
+                <button id="btnCancelDeleteProducto" class="border-none bg-gray-100 hover:bg-gray-200 px-6 py-3 rounded-xl text-sm font-bold text-gray-600 cursor-pointer transition-colors">Cancelar</button>
+                <button id="btnConfirmDeleteProducto" class="border-none bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-red-100 transition-all cursor-pointer">Sí, Eliminar</button>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- ═══ MODAL: Nueva Categoría ═══ -->
+<div id="modalCategoria" class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
+    <div class="modal-content-premium w-full max-w-xl">
+        <div class="flex justify-between items-center p-6 border-b border-gray-100 bg-gradient-to-r from-violet-50/50 to-transparent">
+            <h3 class="font-bold text-xl text-gray-800 flex items-center gap-3">
+                <div class="bg-violet-600 p-1.5 rounded-lg text-white shrink-0">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>
+                    </svg>
+                </div>
+                Nueva Categoría
+            </h3>
+            <button id="btnCloseModalCategoria" class="border-none bg-transparent hover:bg-black/5 flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 transition-colors text-2xl font-light cursor-pointer">&times;</button>
+        </div>
+        <form id="formCategoria" class="p-6 space-y-5">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nombre de la Categoría</label>
+                <input type="text" id="catNombre" required placeholder="Ej. Herramientas, Cables, Pintura..." class="w-full premium-input text-lg">
+            </div>
+            <!-- Picker de icono -->
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Icono</label>
+                <div id="catIconGrid" class="icon-picker-grid"></div>
+            </div>
+            <!-- Picker de color -->
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Color</label>
+                <div id="catColorGrid" class="color-picker-grid"></div>
+            </div>
+            <!-- Preview -->
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Vista Previa</label>
+                <div id="catPreview"></div>
+            </div>
+            <div class="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" id="btnCancelCategoria" class="border-none bg-transparent px-6 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100 transition-colors cursor-pointer">Cancelar</button>
+                <button type="submit" class="border-none bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-violet-200 transition-all cursor-pointer">Crear Categoría</button>
+            </div>
+        </form>
     </div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=31"></script>
+<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=34"></script>
 {% endblock %}
-

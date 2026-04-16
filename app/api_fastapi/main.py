@@ -232,6 +232,7 @@ def create_producto(
         unidad=prod.unidad,
         stock_actual=Decimal(str(prod.stock_actual)),
         stock_minimo=Decimal(str(prod.stock_minimo)),
+        imagen_url=prod.imagen_url or None,
         created_by_id=current_user.id
     )
     db.add(nuevo)
@@ -263,6 +264,7 @@ def update_producto(
         prod.descripcion = data.descripcion
     if data.categoria  is not None: prod.categoria  = data.categoria
     if data.unidad     is not None: prod.unidad     = data.unidad
+    if data.imagen_url is not None: prod.imagen_url = data.imagen_url or None
     if data.stock_actual  is not None:
         cambios.append(f"stock_actual: {prod.stock_actual}→{data.stock_actual}")
         prod.stock_actual  = Decimal(str(data.stock_actual))

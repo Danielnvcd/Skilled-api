@@ -132,7 +132,7 @@ def create_app():
         # todos los estilos inline a archivos .css externos (tracked en issue de seguridad).
         # Prioridad: media. No bloquea funcionalidad actual.
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
-        'img-src': ['\'self\'', 'data:', 'blob:'],
+        'img-src': ['\'self\'', 'data:', 'blob:', 'https:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
         # blob: necesario para getUserMedia (cámara) y WebWorkers del QR scanner
         'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],

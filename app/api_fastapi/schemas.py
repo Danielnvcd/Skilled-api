@@ -11,6 +11,7 @@ class ProductoBase(BaseModel):
     categoria: str = Field(..., max_length=100)
     unidad: str = Field(..., max_length=50)
     stock_minimo: float = Field(default=0.0, ge=0, le=1_000_000)
+    imagen_url: Optional[str] = Field(default=None, max_length=500)
 
 class ProductoCreate(ProductoBase):
     stock_actual: float = Field(default=0.0, ge=0, le=1_000_000)
@@ -23,6 +24,7 @@ class ProductoUpdate(BaseModel):
     unidad: Optional[str] = Field(default=None, max_length=50)
     stock_actual: Optional[float] = Field(default=None, ge=0, le=1_000_000)
     stock_minimo: Optional[float] = Field(default=None, ge=0, le=1_000_000)
+    imagen_url: Optional[str] = Field(default=None, max_length=500)
 
 class ProductoResponse(ProductoBase):
     model_config = ConfigDict(from_attributes=True)
