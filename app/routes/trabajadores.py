@@ -1,5 +1,6 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory
-from sqlalchemy import or_
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory, send_file
+import io
+from sqlalchemy import or_, func
 from sqlalchemy.orm import selectinload
 from app.extensions import db, limiter
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
@@ -53,8 +54,8 @@ def index():
     query = Trabajador.query.options(
         selectinload(Trabajador.credenciales),
         selectinload(Trabajador.documentos)
-    ).filter_by(activo=True)
-    
+    ).filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
+
     if q:
         query = query.filter(or_(
             Trabajador.nombre.ilike(f'%{q}%'),
@@ -62,10 +63,10 @@ def index():
             Trabajador.no_empleado.ilike(f'%{q}%'),
             Trabajador.rfc.ilike(f'%{q}%')
         ))
-        
-    pagination = query.order_by(Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+
+    pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
     trabajadores = pagination.items
-    
+
     return render_template('trabajadores.html', trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/bajas', methods=['GET'])
@@ -73,11 +74,11 @@ def index():
 def bajas():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
-    
+
     query = Trabajador.query.options(
         selectinload(Trabajador.credenciales),
         selectinload(Trabajador.documentos)
-    ).filter_by(activo=False)
+    ).filter(or_(Trabajador.activo == False, Trabajador.fecha_baja != None))
     
     if q:
         query = query.filter(or_(
@@ -87,9 +88,9 @@ def bajas():
             Trabajador.rfc.ilike(f'%{q}%')
         ))
         
-    pagination = query.order_by(Trabajador.fecha_baja.desc().nulls_last(), Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+    pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
     trabajadores = pagination.items
-    
+
     return render_template('trabajadores_bajas.html', trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/agregar', methods=['POST'])
@@ -819,6 +820,282 @@ def reactivar(id):
         flash('Ocurrió un error al reactivar el trabajador.', 'danger')
         
     return redirect(url_for('trabajadores.bajas'))
+
+
+@bp.route('/exportar/<int:id>', methods=['GET'])
+@login_required
+def exportar_excel(id):
+    from openpyxl import Workbook
+    from openpyxl.styles import (PatternFill, Font, Alignment, Border, Side,
+                                  GradientFill)
+    from openpyxl.utils import get_column_letter
+    from flask import session
+
+    t = (Trabajador.query
+         .options(selectinload(Trabajador.credenciales))
+         .filter_by(id=id).first_or_404())
+
+    is_admin = session.get('role') in ('admin', 'super_admin')
+
+    def fmt_date(d):
+        return d.strftime('%d/%m/%Y') if d else '---'
+
+    def fmt_money(v):
+        return f"${float(v):,.2f}" if v else '---'
+
+    def mask(val):
+        if not val or is_admin:
+            return val or '---'
+        return val[:3] + '***' + val[-2:] if len(val) > 5 else '***'
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ficha Empleado"
+
+    # ── Colores ──────────────────────────────────────────────────────────────
+    AZUL_OSC   = PatternFill("solid", fgColor="1E3A5F")
+    AZUL_MED   = PatternFill("solid", fgColor="2563EB")
+    AZUL_CLAR  = PatternFill("solid", fgColor="DBEAFE")
+    GRIS_CLAR  = PatternFill("solid", fgColor="F8FAFC")
+    VERDE_OSC  = PatternFill("solid", fgColor="065F46")
+    VERDE_CLAR = PatternFill("solid", fgColor="D1FAE5")
+    AMBAR_OSC  = PatternFill("solid", fgColor="92400E")
+    AMBAR_CLAR = PatternFill("solid", fgColor="FEF3C7")
+    ROJO_OSC   = PatternFill("solid", fgColor="7F1D1D")
+    ROJO_CLAR  = PatternFill("solid", fgColor="FEE2E2")
+    MORA_OSC   = PatternFill("solid", fgColor="4C1D95")
+    MORA_CLAR  = PatternFill("solid", fgColor="EDE9FE")
+    BLANCO     = PatternFill("solid", fgColor="FFFFFF")
+
+    FONT_W  = Font(name="Calibri", color="FFFFFF", bold=True)
+    FONT_B  = Font(name="Calibri", color="1E3A5F", bold=True)
+    FONT_N  = Font(name="Calibri", color="374151")
+    FONT_SM = Font(name="Calibri", color="6B7280", size=9)
+
+    thin = Side(style="thin", color="CBD5E1")
+    thick = Side(style="medium", color="1E3A5F")
+    BORDER_THIN  = Border(left=thin, right=thin, top=thin, bottom=thin)
+    BORDER_THICK = Border(left=thick, right=thick, top=thick, bottom=thick)
+
+    CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+
+    # ── Anchos de columna ────────────────────────────────────────────────────
+    ws.column_dimensions['A'].width = 28
+    ws.column_dimensions['B'].width = 35
+    ws.column_dimensions['C'].width = 28
+    ws.column_dimensions['D'].width = 35
+
+    # ── Fila 1: Título principal ──────────────────────────────────────────────
+    ws.row_dimensions[1].height = 50
+    ws.merge_cells('A1:D1')
+    c = ws['A1']
+    c.value = "FICHA DEL EMPLEADO"
+    c.fill = AZUL_OSC
+    c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=20)
+    c.alignment = CENTER
+    c.border = BORDER_THICK
+
+    # ── Fila 2: Nombre y número ───────────────────────────────────────────────
+    ws.row_dimensions[2].height = 36
+    ws.merge_cells('A2:B2')
+    c = ws['A2']
+    c.value = f"{t.nombre} {t.nombre_apellidos}".upper()
+    c.fill = AZUL_MED
+    c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=13)
+    c.alignment = CENTER
+    c.border = BORDER_THICK
+
+    ws.merge_cells('C2:D2')
+    c = ws['C2']
+    c.value = f"No. Empleado: {t.no_empleado}"
+    c.fill = AZUL_MED
+    c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=12)
+    c.alignment = CENTER
+    c.border = BORDER_THICK
+
+    row = 3
+
+    def section_header(label, fill_header, row):
+        ws.row_dimensions[row].height = 22
+        ws.merge_cells(f'A{row}:D{row}')
+        c = ws[f'A{row}']
+        c.value = f"  {label}"
+        c.fill = fill_header
+        c.font = FONT_W
+        c.alignment = LEFT
+        c.border = BORDER_THICK
+        return row + 1
+
+    def data_row(label1, val1, label2, val2, row, alt=False):
+        fill = GRIS_CLAR if alt else BLANCO
+        ws.row_dimensions[row].height = 18
+
+        ws[f'A{row}'].value = label1
+        ws[f'A{row}'].font = Font(name="Calibri", color="1E3A5F", bold=True, size=10)
+        ws[f'A{row}'].fill = fill
+        ws[f'A{row}'].alignment = LEFT
+        ws[f'A{row}'].border = BORDER_THIN
+
+        ws[f'B{row}'].value = val1 or '---'
+        ws[f'B{row}'].font = FONT_N
+        ws[f'B{row}'].fill = fill
+        ws[f'B{row}'].alignment = LEFT
+        ws[f'B{row}'].border = BORDER_THIN
+
+        ws[f'C{row}'].value = label2
+        ws[f'C{row}'].font = Font(name="Calibri", color="1E3A5F", bold=True, size=10)
+        ws[f'C{row}'].fill = fill
+        ws[f'C{row}'].alignment = LEFT
+        ws[f'C{row}'].border = BORDER_THIN
+
+        ws[f'D{row}'].value = val2 or '---'
+        ws[f'D{row}'].font = FONT_N
+        ws[f'D{row}'].fill = fill
+        ws[f'D{row}'].alignment = LEFT
+        ws[f'D{row}'].border = BORDER_THIN
+
+        return row + 1
+
+    # ── Sección 1: Datos Laborales ────────────────────────────────────────────
+    row = section_header("DATOS LABORALES", AZUL_MED, row)
+    row = data_row("Área", t.area, "Puesto", t.puesto, row, alt=False)
+    row = data_row("Tipo de Movimiento", t.tipo_mov, "Tipo de Contrato", t.tipo_cont, row, alt=True)
+    row = data_row("Fecha de Ingreso", fmt_date(t.fecha_ingreso), "Tipo de Jornada", t.tipo_jornada, row, alt=False)
+    row = data_row("Inicio", fmt_date(t.inicio), "Término de Prueba", fmt_date(t.termino_prueba), row, alt=True)
+    row = data_row("Tipo de Nómina", t.tipo_nomina, "Tipo de Pago", t.tipo_pago, row, alt=False)
+    row = data_row("Fecha de Baja", fmt_date(t.fecha_baja), "Folio IDSE", t.folio_mov_idse, row, alt=True)
+    if t.descripcion_servicio:
+        ws.row_dimensions[row].height = 18
+        ws.merge_cells(f'A{row}:D{row}')
+        c = ws[f'A{row}']
+        c.value = f"Descripción de Servicio:  {t.descripcion_servicio}"
+        c.font = FONT_N
+        c.fill = BLANCO
+        c.alignment = LEFT
+        c.border = BORDER_THIN
+        row += 1
+
+    # ── Sección 2: Datos Personales ───────────────────────────────────────────
+    row = section_header("DATOS PERSONALES", VERDE_OSC, row)
+    row = data_row("Nombre(s)", t.nombre, "Apellidos", t.nombre_apellidos, row, alt=False)
+    row = data_row("RFC", mask(t.rfc), "CURP", mask(t.curp), row, alt=True)
+    row = data_row("NSS", mask(t.nss), "Fecha de Nacimiento", fmt_date(t.fecha_nacimiento), row, alt=False)
+    row = data_row("Sexo", t.sexo, "Estado Civil", t.estado_civil, row, alt=True)
+    row = data_row("Nacionalidad", t.nacionalidad, "Edad", str(t.edad) if t.edad else None, row, alt=False)
+    row = data_row("Correo Electrónico", t.correo, "Celular", t.celular, row, alt=True)
+    if t.domicilio:
+        ws.row_dimensions[row].height = 18
+        ws.merge_cells(f'A{row}:D{row}')
+        c = ws[f'A{row}']
+        c.value = f"Domicilio:  {t.domicilio}"
+        c.font = FONT_N
+        c.fill = GRIS_CLAR
+        c.alignment = LEFT
+        c.border = BORDER_THIN
+        row += 1
+
+    # ── Sección 3: Datos Médicos ──────────────────────────────────────────────
+    row = section_header("DATOS MÉDICOS", AMBAR_OSC, row)
+    row = data_row("Tipo de Sangre", t.tipo_sangre, "Usa Lentes", t.lentes, row, alt=False)
+    row = data_row("Alergias", t.alergias, "Estatura", t.estatura, row, alt=True)
+    row = data_row("Enf. Crónicas", t.enfermedades_cronicas, "Licencia de Conducir", t.licencia_conducir, row, alt=False)
+    row = section_header("CONTACTO DE EMERGENCIA", ROJO_OSC, row)
+    row = data_row("Nombre", t.contacto_emergencia, "Parentesco", t.parentesco_contacto, row, alt=False)
+    row = data_row("Teléfono de Emergencia", t.numero_contacto_emerg, "", "", row, alt=True)
+
+    # ── Sección 4: Finanzas ───────────────────────────────────────────────────
+    row = section_header("FINANZAS / NÓMINA", MORA_OSC, row)
+    row = data_row("Salario Pactado / Sem", fmt_money(t.salario_real_pactado_x_sem), "Salario Base (SB)", fmt_money(t.sb), row, alt=False)
+    row = data_row("SDI", fmt_money(t.sdi), "Letra / Categoría", t.letra, row, alt=True)
+    row = data_row("Hrs. Extra ($)", fmt_money(t.hr_extra), "Infonavit ($)", fmt_money(t.infonavit), row, alt=False)
+    row = data_row("Caja de Ahorro ($)", fmt_money(t.caja_ahorro), "Viáticos ($)", fmt_money(t.viaticos), row, alt=True)
+    row = data_row("Pago Día Festivo ($)", fmt_money(t.pago_dia_festivo), "Pagos Efectivo Ext. ($)", fmt_money(t.pagos_efectivo), row, alt=False)
+
+    # ── Sección 5: Operación ─────────────────────────────────────────────────
+    row = section_header("OPERACIÓN / UBICACIÓN", AZUL_OSC, row)
+    row = data_row("Ubicación Actual", t.ubicacion_actual, "Estado (Ubic.)", t.ubicacion_estado, row, alt=False)
+    row = data_row("No. Proyecto", t.no_proyecto, "Coordinador a Cargo", t.coord_a_cargo, row, alt=True)
+    if t.observaciones:
+        ws.row_dimensions[row].height = 20
+        ws.merge_cells(f'A{row}:D{row}')
+        c = ws[f'A{row}']
+        c.value = f"Observaciones:  {t.observaciones}"
+        c.font = FONT_N
+        c.fill = BLANCO
+        c.alignment = LEFT
+        c.border = BORDER_THIN
+        row += 1
+
+    # ── Sección 6: Credenciales ───────────────────────────────────────────────
+    if t.credenciales:
+        row = section_header("CREDENCIALES DE PLANTA", VERDE_OSC, row)
+        # Sub-cabecera
+        ws.row_dimensions[row].height = 18
+        for col, label in [('A', 'Planta'), ('B', 'ID Credencial'), ('C', 'Caducidad'), ('D', 'Estado')]:
+            c = ws[f'{col}{row}']
+            c.value = label
+            c.fill = VERDE_CLAR
+            c.font = Font(name="Calibri", color="065F46", bold=True, size=10)
+            c.alignment = CENTER
+            c.border = BORDER_THIN
+        row += 1
+        from datetime import date as date_type
+        today = date_type.today()
+        for i, cred in enumerate(t.credenciales):
+            alt = (i % 2 == 0)
+            fill = GRIS_CLAR if alt else BLANCO
+            ws.row_dimensions[row].height = 17
+            caducidad = cred.fecha_caducidad
+            caducidad_str = caducidad.strftime('%d/%m/%Y') if caducidad else 'Sin fecha'
+            if caducidad and caducidad < today:
+                estado = "CADUCADA"
+                est_fill = ROJO_CLAR
+                est_font = Font(name="Calibri", color="7F1D1D", bold=True, size=10)
+            else:
+                estado = "VIGENTE"
+                est_fill = VERDE_CLAR
+                est_font = Font(name="Calibri", color="065F46", bold=True, size=10)
+
+            for col, val, fnt, fl in [
+                ('A', cred.planta,       FONT_N, fill),
+                ('B', cred.credencial_id, FONT_N, fill),
+                ('C', caducidad_str,     FONT_N, fill),
+                ('D', estado,            est_font, est_fill),
+            ]:
+                c = ws[f'{col}{row}']
+                c.value = val
+                c.font = fnt
+                c.fill = fl
+                c.alignment = LEFT if col != 'D' else CENTER
+                c.border = BORDER_THIN
+            row += 1
+
+    # ── Pie de página ─────────────────────────────────────────────────────────
+    row += 1
+    ws.row_dimensions[row].height = 16
+    ws.merge_cells(f'A{row}:D{row}')
+    c = ws[f'A{row}']
+    from datetime import date as date_type
+    c.value = f"Generado el {date_type.today().strftime('%d/%m/%Y')} — Sistema de Nóminas"
+    c.font = FONT_SM
+    c.alignment = CENTER
+
+    # ── Freeze header ────────────────────────────────────────────────────────
+    ws.freeze_panes = 'A3'
+
+    # ── Enviar ───────────────────────────────────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe_name = f"{t.no_empleado}_{(t.nombre_apellidos or '').replace(' ', '_')}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=safe_name,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
 
 @bp.route('/<int:id>/documentos', methods=['POST'])
 @login_required
