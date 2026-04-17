@@ -5,61 +5,376 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=7">
 <style>
-/* ── Gestión de Solicitudes: estilos específicos ── */
-.status-badge {
-    display: inline-flex; align-items: center; gap: 0.3rem;
-    font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.05em; padding: 0.3rem 0.7rem; border-radius: 999px;
-}
-.status-pendiente  { background:#FFFBEB; color:#92400E; border: 1px solid #FEF3C7; }
-.status-aprobada   { background:#ECFDF5; color:#065F46; border: 1px solid #D1FAE5; }
-.status-rechazada  { background:#FEF2F2; color:#991B1B; border: 1px solid #FEE2E2; }
-.status-entregada  { background:#EFF6FF; color:#1E40AF; border: 1px solid #DBEAFE; }
+    /* ══ STATUS BADGES ══ */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.67rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 0.32rem 0.75rem;
+        border-radius: 999px;
+    }
 
-.status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-.dot-pendiente  { background: #F59E0B; }
-.dot-aprobada   { background: #10B981; }
-.dot-rechazada  { background: #EF4444; }
-.dot-entregada  { background: #3B82F6; }
+    .status-pendiente {
+        background: #FEF3C7;
+        color: #92400E;
+        border: 1px solid #FCD34D;
+    }
 
-.request-card {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 1rem 1.25rem; background: white; border: 1.5px solid #F1F5F9;
-    border-radius: 14px; cursor: pointer; transition: all 0.2s;
-    border-left-width: 4px;
-}
-.request-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.07); transform: translateY(-1px); background: #FAFAFA; }
-.request-card.border-pendiente  { border-left-color: #F59E0B; }
-.request-card.border-aprobada   { border-left-color: #10B981; }
-.request-card.border-rechazada  { border-left-color: #EF4444; }
-.request-card.border-entregada  { border-left-color: #3B82F6; }
+    .status-aprobada {
+        background: #D1FAE5;
+        color: #065F46;
+        border: 1px solid #34D399;
+    }
 
-.filter-tab {
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.78rem;
-    font-weight: 700; cursor: pointer; border: 1.5px solid transparent;
-    transition: all 0.2s; white-space: nowrap; background: transparent;
-}
-.filter-tab:hover { background: #F9FAFB; }
-.filter-tab.active { background: #111827; color: white; }
-.filter-tab.active .tab-dot { background: white !important; }
+    .status-rechazada {
+        background: #FEE2E2;
+        color: #991B1B;
+        border: 1px solid #FCA5A5;
+    }
 
-.stat-card {
-    background: white; border-radius: 14px; padding: 1rem 1.25rem;
-    border: 1px solid #F1F5F9; display: flex; align-items: center; gap: 0.85rem;
-    flex: 1; min-width: 0;
-}
-.stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.stat-val  { font-size: 1.6rem; font-weight: 900; color: #111827; line-height: 1; }
-.stat-lbl  { font-size: 0.68rem; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+    .status-entregada {
+        background: #DBEAFE;
+        color: #1E40AF;
+        border: 1px solid #93C5FD;
+    }
 
-.sol-toast {
-    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
-    padding: 0.85rem 1.5rem; border-radius: 12px; font-weight: 700;
-    font-size: 0.9rem; color: white; box-shadow: 0 8px 24px rgba(0,0,0,.15);
-    animation: fadeIn .3s ease;
-}
+    .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
 
+    .dot-pendiente {
+        background: #F59E0B;
+        box-shadow: 0 0 0 2px #FDE68A;
+    }
+
+    .dot-aprobada {
+        background: #10B981;
+        box-shadow: 0 0 0 2px #6EE7B7;
+    }
+
+    .dot-rechazada {
+        background: #EF4444;
+        box-shadow: 0 0 0 2px #FCA5A5;
+    }
+
+    .dot-entregada {
+        background: #3B82F6;
+        box-shadow: 0 0 0 2px #BFDBFE;
+    }
+
+    /* ══ STAT CARDS ══ */
+    .stat-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.1rem 1.25rem;
+        border: 1px solid #F1F5F9;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex: 1;
+        min-width: 140px;
+        transition: box-shadow 0.2s, transform 0.2s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-card:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+    }
+
+    .stat-card::after {
+        content: '';
+        position: absolute;
+        right: -18px;
+        top: -18px;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: var(--stat-glow, rgba(0, 0, 0, 0.03));
+        pointer-events: none;
+    }
+
+    .stat-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .stat-val {
+        font-size: 1.9rem;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .stat-lbl {
+        font-size: 0.67rem;
+        font-weight: 700;
+        color: #9CA3AF;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-top: 0.2rem;
+    }
+
+    /* ══ FILTER TABS ══ */
+    .filter-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.45rem 1.05rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        border: 1.5px solid #E5E7EB;
+        transition: all 0.18s;
+        white-space: nowrap;
+        background: white;
+        color: #374151;
+    }
+
+    .filter-tab:hover {
+        border-color: #CBD5E1;
+        background: #F8FAFC;
+    }
+
+    .filter-tab.active {
+        background: #0F172A;
+        color: white;
+        border-color: #0F172A;
+    }
+
+    .filter-tab.active .tab-count {
+        color: rgba(255, 255, 255, 0.6) !important;
+    }
+
+    .filter-tab.tab-pendiente.active {
+        background: #D97706;
+        border-color: #D97706;
+    }
+
+    .filter-tab.tab-aprobada.active {
+        background: #059669;
+        border-color: #059669;
+    }
+
+    .filter-tab.tab-rechazada.active {
+        background: #DC2626;
+        border-color: #DC2626;
+    }
+
+    .filter-tab.tab-entregada.active {
+        background: #2563EB;
+        border-color: #2563EB;
+    }
+
+    /* ══ REQUEST CARDS ══ */
+    .request-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        background: white;
+        border: 1px solid #F1F5F9;
+        border-radius: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border-left: 4px solid transparent;
+        gap: 1rem;
+    }
+
+    .request-card:hover {
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+        border-color: #E2E8F0;
+    }
+
+    .request-card.border-pendiente {
+        border-left-color: #F59E0B;
+    }
+
+    .request-card.border-aprobada {
+        border-left-color: #10B981;
+    }
+
+    .request-card.border-rechazada {
+        border-left-color: #EF4444;
+    }
+
+    .request-card.border-entregada {
+        border-left-color: #3B82F6;
+    }
+
+    .req-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+        letter-spacing: -0.02em;
+    }
+
+    .req-avatar.av-pendiente {
+        background: #FEF3C7;
+        color: #92400E;
+    }
+
+    .req-avatar.av-aprobada {
+        background: #D1FAE5;
+        color: #065F46;
+    }
+
+    .req-avatar.av-rechazada {
+        background: #FEE2E2;
+        color: #991B1B;
+    }
+
+    .req-avatar.av-entregada {
+        background: #DBEAFE;
+        color: #1E40AF;
+    }
+
+    .req-items-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 999px;
+        padding: 0.18rem 0.6rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #64748B;
+    }
+
+    /* ══ MODAL IMPROVEMENTS ══ */
+    .modal-action-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        padding: 0.9rem 1.5rem;
+        border-radius: 14px;
+        font-size: 0.9rem;
+        font-weight: 800;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        letter-spacing: 0.02em;
+    }
+
+    .modal-action-btn:active {
+        transform: scale(0.98);
+    }
+
+    .btn-reject-modal {
+        background: #FEE2E2;
+        color: #991B1B;
+        border: 1.5px solid #FCA5A5;
+    }
+
+    .btn-reject-modal:hover {
+        background: #DC2626;
+        color: white;
+        border-color: #DC2626;
+    }
+
+    .btn-approve-modal {
+        background: #D1FAE5;
+        color: #065F46;
+        border: 1.5px solid #6EE7B7;
+    }
+
+    .btn-approve-modal:hover {
+        background: #059669;
+        color: white;
+        border-color: #059669;
+    }
+
+    .btn-deliver-modal {
+        background: #DBEAFE;
+        color: #1E40AF;
+        border: 1.5px solid #93C5FD;
+        width: 100%;
+    }
+
+    .btn-deliver-modal:hover {
+        background: #2563EB;
+        color: white;
+        border-color: #2563EB;
+    }
+
+    .detail-info-item {
+        background: #F8FAFC;
+        border: 1px solid #F1F5F9;
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+    }
+
+    .detail-info-label {
+        font-size: 0.65rem;
+        font-weight: 800;
+        color: #9CA3AF;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        margin-bottom: 0.3rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .detail-info-value {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1E293B;
+    }
+
+    /* ══ TOAST ══ */
+    .sol-toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 9999;
+        padding: 0.9rem 1.5rem 0.9rem 1.1rem;
+        border-radius: 14px;
+        font-weight: 700;
+        font-size: 0.875rem;
+        color: white;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+        animation: toastIn .3s cubic-bezier(0.34, 1.4, 0.64, 1);
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    @keyframes toastIn {
+        from {
+            opacity: 0;
+            transform: translateY(16px) scale(0.95);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
 </style>
 {% endblock %}
 
@@ -76,29 +391,34 @@
         <div class="header-illustration">
             <svg width="155" height="85" viewBox="0 0 155 85" fill="none">
                 <!-- Pila de documentos -->
-                <rect x="40" y="20" width="75" height="58" rx="6" fill="#E0E7FF" stroke="#A5B4FC" stroke-width="1.5"/>
-                <rect x="35" y="15" width="75" height="58" rx="6" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
-                <rect x="30" y="10" width="75" height="58" rx="6" fill="white" stroke="#E0E7FF" stroke-width="1.5"/>
+                <rect x="40" y="20" width="75" height="58" rx="6" fill="#E0E7FF" stroke="#A5B4FC" stroke-width="1.5" />
+                <rect x="35" y="15" width="75" height="58" rx="6" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5" />
+                <rect x="30" y="10" width="75" height="58" rx="6" fill="white" stroke="#E0E7FF" stroke-width="1.5" />
                 <!-- Líneas del documento -->
-                <rect x="42" y="22" width="50" height="3.5" rx="1.5" fill="#C7D2FE"/>
-                <rect x="42" y="30" width="35" height="3" rx="1.5" fill="#DDE6FF"/>
-                <rect x="42" y="37" width="44" height="3" rx="1.5" fill="#DDE6FF"/>
-                <rect x="42" y="44" width="30" height="3" rx="1.5" fill="#DDE6FF"/>
+                <rect x="42" y="22" width="50" height="3.5" rx="1.5" fill="#C7D2FE" />
+                <rect x="42" y="30" width="35" height="3" rx="1.5" fill="#DDE6FF" />
+                <rect x="42" y="37" width="44" height="3" rx="1.5" fill="#DDE6FF" />
+                <rect x="42" y="44" width="30" height="3" rx="1.5" fill="#DDE6FF" />
                 <!-- Check verde grande -->
-                <circle cx="103" cy="58" r="16" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5"/>
-                <path d="M95 58 l5 5 9-9" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="103" cy="58" r="16" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5" />
+                <path d="M95 58 l5 5 9-9" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"
+                    stroke-linejoin="round" />
                 <!-- Estrella pendiente -->
-                <circle cx="26" cy="28" r="9" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1.5"/>
-                <path d="M26 23 l1.5 3.5 3.5 0.5 -2.5 2.5 0.5 3.5 -3-1.5 -3 1.5 0.5-3.5 -2.5-2.5 3.5-0.5z" fill="#F59E0B"/>
+                <circle cx="26" cy="28" r="9" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1.5" />
+                <path d="M26 23 l1.5 3.5 3.5 0.5 -2.5 2.5 0.5 3.5 -3-1.5 -3 1.5 0.5-3.5 -2.5-2.5 3.5-0.5z"
+                    fill="#F59E0B" />
                 <!-- Detalles -->
-                <circle cx="145" cy="20" r="2" fill="#A5B4FC"/>
-                <circle cx="15" cy="58" r="1.5" fill="#6EE7B7"/>
-                <circle cx="140" cy="72" r="1" fill="#FCD34D"/>
+                <circle cx="145" cy="20" r="2" fill="#A5B4FC" />
+                <circle cx="15" cy="58" r="1.5" fill="#6EE7B7" />
+                <circle cx="140" cy="72" r="1" fill="#FCD34D" />
             </svg>
         </div>
         <div class="flex gap-3">
             <button id="btnRefresh" class="btn-glow btn-glow-blue flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                </svg>
                 Actualizar
             </button>
         </div>
@@ -107,7 +427,13 @@
     <!-- Stats -->
     <div id="statsRow" class="flex flex-wrap gap-3 mb-5">
         <!-- Se renderizan via JS -->
-        <div class="stat-card animate-pulse"><div class="stat-icon bg-gray-100"></div><div><div class="h-7 w-8 bg-gray-100 rounded mb-1"></div><div class="h-3 w-20 bg-gray-100 rounded"></div></div></div>
+        <div class="stat-card animate-pulse">
+            <div class="stat-icon bg-gray-100"></div>
+            <div>
+                <div class="h-7 w-8 bg-gray-100 rounded mb-1"></div>
+                <div class="h-3 w-20 bg-gray-100 rounded"></div>
+            </div>
+        </div>
     </div>
 
     <!-- Filtros y búsqueda -->
@@ -120,9 +446,14 @@
             <!-- Buscador -->
             <div class="search-container" style="min-width:220px; max-width:260px;">
                 <div class="search-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
+                    </svg>
                 </div>
-                <input id="searchSolicitudes" type="text" placeholder="Buscar solicitante..." class="premium-search" style="padding: 0.75rem 1rem 0.75rem 2.75rem !important; font-size: 0.85rem;">
+                <input id="searchSolicitudes" type="text" placeholder="Buscar solicitante..." class="premium-search"
+                    style="padding: 0.75rem 1rem 0.75rem 2.75rem !important; font-size: 0.85rem;">
             </div>
         </div>
     </div>
@@ -139,14 +470,16 @@
 </div>
 
 <!-- Modal Detalle Solicitud -->
-<div id="modalDetail" class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
-    <div class="modal-content-premium w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+<div id="modalDetail"
+    class="fixed inset-0 bg-gray-900/40 backdrop-blur-md hidden z-50 flex items-center justify-center p-4">
+    <div class="modal-content-premium w-full max-w-2xl flex flex-col" style="max-height:90vh;">
 
-        <!-- Header del modal -->
-        <div class="flex justify-between items-start p-6 border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+        <!-- Header fijo -->
+        <div class="flex justify-between items-start p-6 border-b border-gray-100 flex-shrink-0">
             <div>
                 <div class="flex items-center gap-2 mb-1">
-                    <span id="detailStatusBadge" class="status-badge status-pendiente"><span class="status-dot dot-pendiente"></span>PENDIENTE</span>
+                    <span id="detailStatusBadge" class="status-badge status-pendiente"><span
+                            class="status-dot dot-pendiente"></span>PENDIENTE</span>
                 </div>
                 <h3 id="detailTitle" class="font-bold text-xl text-gray-800">Solicitud #—</h3>
                 <p id="detailSubtitle" class="text-xs text-gray-400 font-semibold mt-0.5">—</p>
@@ -154,66 +487,96 @@
             <div class="flex items-center gap-2">
                 <button id="btnPrintDetail" title="Imprimir / PDF"
                     class="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <polyline points="6 9 6 2 18 2 18 9" />
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                        <rect x="6" y="14" width="12" height="8" rx="1" />
+                    </svg>
                     PDF
                 </button>
-                <button id="btnCloseDetail" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-xl font-light">&times;</button>
+                <button id="btnCloseDetail"
+                    class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-xl font-light">&times;</button>
             </div>
         </div>
 
-        <!-- Info de la solicitud -->
-        <div id="detailInfoGrid" class="grid grid-cols-2 gap-4 px-6 pt-5 pb-3 border-b border-gray-50">
-            <!-- Se rellena via JS -->
-        </div>
-
-        <!-- Tabla de materiales -->
-        <div class="px-6 py-4">
-            <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Materiales Solicitados</h4>
-            <div class="overflow-hidden border border-gray-100 rounded-xl mb-6">
-                <table class="w-full text-left">
-                    <thead class="bg-gray-50/80">
-                        <tr>
-                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">#</th>
-                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Material</th>
-                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">Código</th>
-                            <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Cantidad</th>
-                        </tr>
-                    </thead>
-                    <tbody id="detailTableBody" class="divide-y divide-gray-50 bg-white">
-                    </tbody>
-                </table>
+        <!-- Contenido scrolleable -->
+        <div class="overflow-y-auto flex-1">
+            <!-- Info de la solicitud -->
+            <div id="detailInfoGrid" class="grid grid-cols-2 gap-4 px-6 pt-5 pb-3 border-b border-gray-50">
+                <!-- Se rellena via JS -->
             </div>
 
-            <!-- Acciones según estado -->
-            <div id="actionButtons" class="hidden flex gap-3">
-                <button id="btnReject"
-                    class="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95 border border-rose-100">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                    RECHAZAR
-                </button>
-                <button id="btnApprove"
-                    class="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-95 border border-emerald-100">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                    APROBAR
-                </button>
-            </div>
-            <div id="deliverButton" class="hidden">
-                <button id="btnDeliver"
-                    class="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-black text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-95 border border-blue-100">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                    MARCAR COMO ENTREGADA
-                </button>
-            </div>
-            <div id="doneMessage" class="hidden flex items-center justify-center gap-2 py-4 bg-gray-50 rounded-xl text-gray-500 font-bold text-sm">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
-                Esta solicitud ya fue procesada.
+            <!-- Tabla de materiales -->
+            <div class="px-6 py-4">
+                <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Materiales Solicitados</h4>
+                <div class="overflow-hidden border border-gray-100 rounded-xl">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50/80">
+                            <tr>
+                                <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">#
+                                </th>
+                                <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    Material</th>
+                                <th class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    Código</th>
+                                <th
+                                    class="px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">
+                                    Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailTableBody" class="divide-y divide-gray-50 bg-white">
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
+
+        <!-- Botones fijos al fondo -->
+        <div class="px-6 py-4 border-t border-gray-100 flex-shrink-0">
+            <div id="actionButtons" style="display:none; gap:0.75rem;">
+                <button id="btnReject" class="modal-action-btn btn-reject-modal">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                    Rechazar solicitud
+                </button>
+                <button id="btnApprove" class="modal-action-btn btn-approve-modal">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Aprobar solicitud
+                </button>
+            </div>
+            <div id="deliverButton" style="display:none;">
+                <button id="btnDeliver" class="modal-action-btn btn-deliver-modal">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M5 12h14" />
+                        <path d="M15 5l7 7-7 7" />
+                        <path d="M3 7h3v10H3z" />
+                    </svg>
+                    Marcar como entregada
+                </button>
+            </div>
+            <div id="doneMessage"
+                style="display:none; align-items:center; justify-content:center; gap:0.6rem; padding:1rem; background:#F8FAFC; border-radius:14px; border:1px solid #E2E8F0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 8 12 12 14 14" />
+                </svg>
+                <span style="font-size:0.875rem; font-weight:700; color:#64748B;">Esta solicitud ya fue
+                    procesada.</span>
+            </div>
+        </div>
+
     </div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_solicitudes.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='js/inventario_solicitudes.js') }}?v=9"></script>
 {% endblock %}

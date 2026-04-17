@@ -21,11 +21,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInput       = document.getElementById('searchSolicitudes');
 
     // ─── TOAST ─────────────────────────────────────────────────
+    const TOAST_ICONS = {
+        success: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
+        error:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+        info:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    };
     function showToast(msg, type = 'success') {
         const t = document.createElement('div');
         t.className = 'sol-toast';
-        t.textContent = msg;
-        t.style.background = type === 'error' ? '#EF4444' : type === 'info' ? '#6366F1' : '#10B981';
+        t.innerHTML = (TOAST_ICONS[type] || TOAST_ICONS.success) + `<span>${msg}</span>`;
+        t.style.background = type === 'error' ? '#DC2626' : type === 'info' ? '#4F46E5' : '#059669';
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 3500);
     }
@@ -50,11 +55,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ─── STATS ─────────────────────────────────────────────────
     const STAT_DEFS = [
-        { key:'total',     label:'Total',      bg:'#F1F5F9', color:'#475569', dotCls:'' },
-        { key:'pendiente', label:'Pendientes',  bg:'#FFFBEB', color:'#D97706', dotCls:'dot-pendiente' },
-        { key:'aprobada',  label:'Aprobadas',   bg:'#ECFDF5', color:'#059669', dotCls:'dot-aprobada' },
-        { key:'rechazada', label:'Rechazadas',  bg:'#FEF2F2', color:'#DC2626', dotCls:'dot-rechazada' },
-        { key:'entregada', label:'Entregadas',  bg:'#EFF6FF', color:'#2563EB', dotCls:'dot-entregada' },
+        { key:'total',     label:'Total Pedidos', bg:'#F1F5F9', color:'#334155', glow:'rgba(51,65,85,0.08)',
+          icon:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>` },
+        { key:'pendiente', label:'Pendientes',    bg:'#FEF3C7', color:'#92400E', glow:'rgba(245,158,11,0.15)',
+          icon:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
+        { key:'aprobada',  label:'Aprobadas',     bg:'#D1FAE5', color:'#065F46', glow:'rgba(16,185,129,0.15)',
+          icon:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>` },
+        { key:'rechazada', label:'Rechazadas',    bg:'#FEE2E2', color:'#991B1B', glow:'rgba(239,68,68,0.15)',
+          icon:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>` },
+        { key:'entregada', label:'Entregadas',    bg:'#DBEAFE', color:'#1E40AF', glow:'rgba(59,130,246,0.15)',
+          icon:`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M15 5l7 7-7 7"/><rect x="2" y="7" width="5" height="10" rx="1"/></svg>` },
     ];
 
     function renderStats() {
@@ -66,13 +76,8 @@ document.addEventListener('DOMContentLoaded', () => {
             entregada: allRequests.filter(s => s.estatus === 'ENTREGADA').length,
         };
         statsRow.innerHTML = STAT_DEFS.map(d => `
-        <div class="stat-card" style="border-left: 4px solid ${d.color}; border-top: 1px solid #F1F5F9; border-right: 1px solid #F1F5F9; border-bottom: 1px solid #F1F5F9;">
-            <div class="stat-icon" style="background:${d.bg};">
-                ${d.key === 'total'
-                    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${d.color}" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`
-                    : `<span class="status-dot ${d.dotCls}" style="width:14px; height:14px;"></span>`
-                }
-            </div>
+        <div class="stat-card" style="border-left:4px solid ${d.color}; --stat-glow:${d.glow};">
+            <div class="stat-icon" style="background:${d.bg}; color:${d.color};">${d.icon}</div>
             <div>
                 <div class="stat-val" style="color:${d.color};">${counts[d.key]}</div>
                 <div class="stat-lbl">${d.label}</div>
@@ -84,16 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const TABS = ['Todas','PENDIENTE','APROBADA','RECHAZADA','ENTREGADA'];
     const TAB_LABELS = { 'Todas':'Todas','PENDIENTE':'Pendientes','APROBADA':'Aprobadas','RECHAZADA':'Rechazadas','ENTREGADA':'Entregadas' };
     const TAB_DOTS   = { 'PENDIENTE':'dot-pendiente','APROBADA':'dot-aprobada','RECHAZADA':'dot-rechazada','ENTREGADA':'dot-entregada' };
+    const TAB_ICONS  = {
+        'Todas':     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+        'PENDIENTE': `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+        'APROBADA':  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
+        'RECHAZADA': `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+        'ENTREGADA': `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/><path d="M15 5l7 7-7 7"/></svg>`,
+    };
 
     function renderFilterTabs() {
         filterTabsEl.innerHTML = TABS.map(tab => {
             const isActive = tab === activeFilter;
             const count    = tab === 'Todas' ? allRequests.length : allRequests.filter(s => s.estatus === tab).length;
-            const dot      = tab !== 'Todas' ? `<span class="status-dot tab-dot ${TAB_DOTS[tab]}"></span>` : '';
+            const cls      = tab === 'Todas' ? '' : ` tab-${tab.toLowerCase()}`;
             return `
-            <button class="filter-tab${isActive ? ' active' : ''}" data-filter="${tab}">
-                ${dot}${TAB_LABELS[tab]}
-                <span class="text-[10px] ${isActive ? 'text-white/70' : 'text-gray-400'} font-black ml-0.5">${count}</span>
+            <button class="filter-tab${cls}${isActive ? ' active' : ''}" data-filter="${tab}">
+                ${TAB_ICONS[tab] || ''}
+                ${TAB_LABELS[tab]}
+                <span class="tab-count" style="font-size:0.68rem; font-weight:800; margin-left:2px; color:${isActive ? 'rgba(255,255,255,0.65)' : '#9CA3AF'};">${count}</span>
             </button>`;
         }).join('');
 
@@ -135,34 +148,34 @@ document.addEventListener('DOMContentLoaded', () => {
             const estatus   = s.estatus || 'PENDIENTE';
             const cls       = estatus.toLowerCase();
             const dot       = TAB_DOTS[estatus] || '';
-            const fecha     = new Date(s.fecha_creacion).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
-            const initiales = (s.solicitante_nombre || 'S').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+            const fecha     = new Date(s.fecha_creacion).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+            const hora      = new Date(s.fecha_creacion).toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+            const initials  = (s.solicitante_nombre || 'S').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+            const matIcon   = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`;
+            const projIcon  = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
 
             return `
             <div class="request-card border-${cls}" data-id="${s.id}">
-                <!-- Avatar -->
-                <div class="flex items-center gap-4 min-w-0 flex-1">
-                    <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 flex items-center justify-center font-black text-indigo-600 text-sm flex-shrink-0">
-                        ${initiales}
-                    </div>
-                    <div class="min-w-0">
-                        <p class="text-sm font-black text-gray-900 leading-tight truncate">${s.solicitante_nombre || 'Sin nombre'}</p>
-                        <p class="text-[11px] font-semibold text-gray-400 mt-0.5 truncate">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="inline mr-0.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
-                            ${s.proyecto || 'Sin proyecto'} &nbsp;·&nbsp; ${s.detalles.length} material${s.detalles.length !== 1 ? 'es' : ''}
-                        </p>
+                <div style="display:flex; align-items:center; gap:1rem; min-width:0; flex:1;">
+                    <div class="req-avatar av-${cls}">${initials}</div>
+                    <div style="min-width:0;">
+                        <p style="font-size:0.9rem; font-weight:800; color:#0F172A; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;">${s.solicitante_nombre || 'Sin nombre'}</p>
+                        <div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.35rem; flex-wrap:wrap;">
+                            <span class="req-items-badge">${projIcon} ${s.proyecto || 'Sin proyecto'}</span>
+                            <span class="req-items-badge">${matIcon} ${s.detalles.length} material${s.detalles.length !== 1 ? 'es' : ''}</span>
+                        </div>
                     </div>
                 </div>
-                <!-- Meta -->
-                <div class="flex items-center gap-4 flex-shrink-0">
-                    <div class="text-right hidden sm:block">
-                        <p class="text-[11px] font-bold text-gray-400">${fecha}</p>
-                        <p class="text-[10px] font-black text-indigo-400 uppercase tracking-wider">ID #${s.id}</p>
+                <div style="display:flex; align-items:center; gap:1rem; flex-shrink:0;">
+                    <div style="text-align:right; display:none;" class="sm-show">
+                        <p style="font-size:0.72rem; font-weight:600; color:#94A3B8;">${fecha}</p>
+                        <p style="font-size:0.68rem; font-weight:700; color:#CBD5E1;">${hora}</p>
+                        <p style="font-size:0.65rem; font-weight:800; color:#C7D2FE; text-transform:uppercase; letter-spacing:0.05em;">ID #${s.id}</p>
                     </div>
                     <span class="status-badge status-${cls}">
                         <span class="status-dot ${dot}"></span>${estatus}
                     </span>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="2.5" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
             </div>`;
         }).join('');
@@ -200,13 +213,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Grid de info
         document.getElementById('detailInfoGrid').innerHTML = `
-        <div>
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Proyecto</p>
-            <p class="text-sm font-bold text-gray-800">${s.proyecto || 'General'}</p>
+        <div class="detail-info-item">
+            <div class="detail-info-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                Proyecto
+            </div>
+            <div class="detail-info-value">${s.proyecto || 'General'}</div>
         </div>
-        <div>
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Materiales</p>
-            <p class="text-sm font-bold text-gray-800">${s.detalles.length} líneas</p>
+        <div class="detail-info-item">
+            <div class="detail-info-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Total de Materiales
+            </div>
+            <div class="detail-info-value">${s.detalles.length} material${s.detalles.length !== 1 ? 'es' : ''}</div>
+        </div>
+        <div class="detail-info-item">
+            <div class="detail-info-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Fecha de Solicitud
+            </div>
+            <div class="detail-info-value" style="font-size:0.85rem;">${fecha}</div>
+        </div>
+        <div class="detail-info-item">
+            <div class="detail-info-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Solicitante
+            </div>
+            <div class="detail-info-value" style="font-size:0.85rem;">${s.solicitante_nombre || '—'}</div>
         </div>`;
 
         // Tabla de materiales
@@ -226,130 +259,27 @@ document.addEventListener('DOMContentLoaded', () => {
         </tr>`).join('');
 
         // Botones de acción según estado
-        const isPending   = estatus === 'PENDIENTE';
-        const isAprobada  = estatus === 'APROBADA';
-        const isDone      = estatus === 'RECHAZADA' || estatus === 'ENTREGADA';
-        document.getElementById('actionButtons').classList.toggle('hidden', !isPending);
-        deliverButton.classList.toggle('hidden', !isAprobada);
-        document.getElementById('doneMessage').classList.toggle('hidden', !isDone);
+        const isPending  = estatus === 'PENDIENTE';
+        const isAprobada = estatus === 'APROBADA';
+        const isDone     = estatus === 'RECHAZADA' || estatus === 'ENTREGADA';
+        const actionEl   = document.getElementById('actionButtons');
+        const doneEl     = document.getElementById('doneMessage');
+        actionEl.style.display  = isPending  ? 'flex'   : 'none';
+        deliverButton.style.display = isAprobada ? 'block' : 'none';
+        doneEl.style.display    = isDone     ? 'flex'   : 'none';
 
         modalDetail.classList.remove('hidden');
     }
 
-    // ─── ABRIR VENTANA PDF ─────────────────────────────────────
-    function abrirVentanaPDF(titulo, bodyHTML) {
-        const win = window.open('', '_blank', 'width=860,height=1100,menubar=no,toolbar=no,location=no');
-        if (!win) { showToast('Activa las ventanas emergentes para ver el PDF.', 'info'); return; }
-        win.document.write(`<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>${titulo}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#fff;padding:44px 52px;font-size:13px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0}
-.logo{font-size:28px;font-weight:900;letter-spacing:-.03em;color:#111}
-.logo span{color:#4F46E5}
-.logo-sub{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-top:5px}
-.folio-box{text-align:right}
-.folio-num{font-size:18px;font-weight:900;color:#111}
-.folio-date{font-size:11px;color:#888;margin-top:4px}
-.divider{border:none;border-top:3px solid #111;margin:16px 0 20px}
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 40px;margin-bottom:20px}
-.info-field label{font-size:9px;font-weight:900;color:#888;text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:3px}
-.info-field span{font-size:13px;font-weight:600;color:#111;display:block;padding-bottom:5px;border-bottom:1px solid #E5E7EB}
-.status-box{display:inline-block;padding:4px 14px;border-radius:4px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.07em;margin-top:6px;border:1.5px solid #111}
-.status-PENDIENTE{color:#92400E;border-color:#D97706;background:#FFFBEB}
-.status-APROBADA{color:#065F46;border-color:#10B981;background:#ECFDF5}
-.status-RECHAZADA{color:#991B1B;border-color:#EF4444;background:#FEF2F2}
-.status-ENTREGADA{color:#1E40AF;border-color:#3B82F6;background:#EFF6FF}
-.section-title{font-size:10px;font-weight:900;color:#6B7280;text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px}
-.table-wrap{border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;margin-bottom:24px}
-table{width:100%;border-collapse:collapse;font-size:12px}
-thead tr{background:#111827}
-thead th{color:#fff;padding:10px 14px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.07em;font-weight:800}
-tbody tr:nth-child(even) td{background:#F9FAFB}
-tbody td{padding:10px 14px;border-bottom:1px solid #F1F5F9;vertical-align:middle}
-tbody tr:last-child td{border-bottom:none}
-.c{text-align:center}.r{text-align:right}.bold{font-weight:800;color:#4F46E5}.ac{font-size:15px}.muted{color:#9CA3AF;font-size:11px;font-weight:600}
-.sku{display:inline-block;background:#F3F4F6;color:#6B7280;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
-.check-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:28px}
-.check-item{border:1.5px solid #E5E7EB;border-radius:6px;padding:10px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;color:#374151}
-.check-box{width:16px;height:16px;border:2px solid #9CA3AF;border-radius:3px;flex-shrink:0}
-.sig-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:48px}
-.sig{text-align:center}
-.sig-line{border-top:1.5px solid #374151;padding-top:8px;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
-@media print{@page{margin:1.5cm 2cm;size:letter}body{padding:0}}
-</style>
-</head>
-<body>
-${bodyHTML}
-<script>window.onload=function(){window.focus();window.print();}<\/script>
-</body>
-</html>`);
-        win.document.close();
-    }
-
-    // ─── IMPRIMIR SOLICITUD (nueva ventana PDF) ────────────────
+    // ─── DESCARGAR PDF (servidor) ───────────────────────────────
     document.getElementById('btnPrintDetail').addEventListener('click', () => {
         if (!activeRequest) return;
-        const s      = activeRequest;
-        const fecha  = new Date(s.fecha_creacion).toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' });
-        const estatus = s.estatus || 'PENDIENTE';
-
-        const filas = s.detalles.map((d, i) => `
-            <tr>
-                <td class="c">${i + 1}</td>
-                <td>${d.producto_descripcion}</td>
-                <td><span class="sku">${d.producto_codigo}</span></td>
-                <td class="r bold ac">${d.cantidad_solicitada}</td>
-                <td class="muted">${d.producto_unidad || 'pza'}</td>
-            </tr>`).join('');
-
-        abrirVentanaPDF(`Solicitud #${s.id}`, `
-        <div class="header">
-            <div>
-                <div class="logo">SKIL<span>LED</span></div>
-                <div class="logo-sub">Solicitud de Materiales · Detalle</div>
-            </div>
-            <div class="folio-box">
-                <div class="folio-num">Solicitud #${s.id}</div>
-                <div class="folio-date">${fecha}</div>
-                <div class="status-box status-${estatus}">${estatus}</div>
-            </div>
-        </div>
-        <div class="divider"></div>
-        <div class="info-grid">
-            <div class="info-field"><label>Solicitante</label><span>${s.solicitante_nombre || '—'}</span></div>
-            <div class="info-field"><label>Proyecto</label><span>${s.proyecto || 'General'}</span></div>
-            <div class="info-field"><label>Total de materiales</label><span>${s.detalles.length} línea${s.detalles.length !== 1 ? 's' : ''}</span></div>
-            <div class="info-field"><label>Estado</label><span>${estatus}</span></div>
-        </div>
-        <div class="section-title">Materiales Solicitados</div>
-        <div class="table-wrap">
-            <table>
-                <thead><tr>
-                    <th class="c" style="width:36px">#</th>
-                    <th>Descripción del Material</th>
-                    <th>Código (SKU)</th>
-                    <th class="r" style="width:72px">Cant.</th>
-                    <th style="width:56px">Unidad</th>
-                </tr></thead>
-                <tbody>${filas}</tbody>
-            </table>
-        </div>
-        <div class="section-title">Resolución</div>
-        <div class="check-grid">
-            <div class="check-item"><div class="check-box"></div> Aprobado</div>
-            <div class="check-item"><div class="check-box"></div> Rechazado</div>
-            <div class="check-item"><div class="check-box"></div> Entregado</div>
-        </div>
-        <div class="sig-grid">
-            <div class="sig"><div class="sig-line">Solicitante</div></div>
-            <div class="sig"><div class="sig-line">Responsable de Almacén</div></div>
-            <div class="sig"><div class="sig-line">Autorizado por</div></div>
-        </div>`);
+        const btn = document.getElementById('btnPrintDetail');
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Generando…';
+        window.location.href = `/inventario/solicitudes/${activeRequest.id}/pdf`;
+        setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 2000);
     });
 
     // ─── APROBAR / RECHAZAR ────────────────────────────────────

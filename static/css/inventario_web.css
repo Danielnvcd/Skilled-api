@@ -795,8 +795,8 @@
 /* --- DASHBOARD GRIDS --- */
 .dashboard-cats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.85rem;
     padding: 0.5rem 0;
 }
 
@@ -804,10 +804,13 @@
     position: relative;
     background: var(--base-color, #4F46E5);
     color: #ffffff;
-    border-radius: 18px;
-    padding: 1.5rem;
+    border-radius: 12px;
+    padding: 0.75rem 1.1rem;
+    min-height: 90px;
+    max-height: 110px;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     text-decoration: none !important;
     overflow: hidden;
     box-shadow: 0 4px 15px rgba(0,0,0,0.06);
@@ -822,10 +825,10 @@
 
 .dash-cat-bg-icon {
     position: absolute;
-    right: -20px;
-    bottom: -20px;
-    width: 140px;
-    height: 140px;
+    right: -12px;
+    bottom: -12px;
+    width: 80px;
+    height: 80px;
     opacity: 0.15;
     transform: rotate(-15deg);
     pointer-events: none;
@@ -843,15 +846,15 @@
 
 .dash-cat-content h3 {
     margin: 0;
-    font-size: 1.35rem;
-    font-weight: 800;
+    font-size: 0.95rem;
+    font-weight: 700;
     line-height: 1.2;
     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .dash-cat-metrics {
-    margin-top: 0.5rem;
-    font-size: 2.25rem;
+    margin-top: 0.3rem;
+    font-size: 1.5rem;
     font-weight: 800;
     line-height: 1;
     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -860,7 +863,7 @@
 .dash-cat-footer {
     position: relative;
     z-index: 2;
-    margin-top: 1.5rem;
+    margin-top: 0.6rem;
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
