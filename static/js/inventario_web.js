@@ -24,26 +24,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     const COLORES_PICKER = [
-        { color:'#4F46E5', bg:'#EEF2FF', label:'Índigo' },
-        { color:'#7C3AED', bg:'#F5F3FF', label:'Violeta' },
-        { color:'#059669', bg:'#ECFDF5', label:'Esmeralda' },
-        { color:'#0891B2', bg:'#ECFEFF', label:'Cyan' },
-        { color:'#0284C7', bg:'#F0F9FF', label:'Azul' },
-        { color:'#DC2626', bg:'#FEF2F2', label:'Rojo' },
-        { color:'#B45309', bg:'#FFFBEB', label:'Ámbar' },
-        { color:'#D97706', bg:'#FFF7ED', label:'Naranja' },
-        { color:'#BE185D', bg:'#FDF2F8', label:'Rosa' },
-        { color:'#374151', bg:'#F9FAFB', label:'Gris' },
+        { color:'#0b5fb4', bg:'#dbeafe', label:'Azul' },
+        { color:'#dc2626', bg:'#fee2e2', label:'Rojo' },
+        { color:'#64748b', bg:'#f1f5f9', label:'Gris' },
     ];
 
     const CATEGORIA_CONFIG_BASE = {
-        'Tornillería':       { color:'#4F46E5', bg:'#EEF2FF',  iconId:'tornillo' },
-        'Tuercas':           { color:'#B45309', bg:'#FFFBEB',  iconId:'hexagon'  },
-        'Rondanas':          { color:'#0891B2', bg:'#ECFEFF',  iconId:'circle'   },
-        'Pijas':             { color:'#7C3AED', bg:'#F5F3FF',  iconId:'tornillo' },
-        'Abrazaderas':       { color:'#059669', bg:'#ECFDF5',  iconId:'link'     },
-        'Soportería':        { color:'#DC2626', bg:'#FEF2F2',  iconId:'shelves'  },
-        'Tubería/Accesorios':{ color:'#0284C7', bg:'#F0F9FF',  iconId:'pipe'     },
+        'Tornillería':       { color:'#0b5fb4', bg:'#dbeafe',  iconId:'tornillo' },
+        'Tuercas':           { color:'#dc2626', bg:'#fee2e2',  iconId:'hexagon'  },
+        'Rondanas':          { color:'#64748b', bg:'#f1f5f9',  iconId:'circle'   },
+        'Pijas':             { color:'#0b5fb4', bg:'#dbeafe',  iconId:'tornillo' },
+        'Abrazaderas':       { color:'#64748b', bg:'#f1f5f9',  iconId:'link'     },
+        'Soportería':        { color:'#dc2626', bg:'#fee2e2',  iconId:'shelves'  },
+        'Tubería/Accesorios':{ color:'#0b5fb4', bg:'#dbeafe',  iconId:'pipe'     },
     };
 
     function getSvgById(id) {

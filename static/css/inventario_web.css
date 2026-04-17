@@ -70,8 +70,8 @@
 }
 
 .btn-glow-blue {
-    background: linear-gradient(135deg, #4F46E5 0%, #3B82F6 100%);
-    box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.35);
+    background: linear-gradient(135deg, #0b5fb4 0%, #094d8f 100%);
+    box-shadow: 0 4px 14px 0 rgba(11, 95, 180, 0.35);
 }
 
 .btn-glow-emerald {
@@ -83,7 +83,7 @@
     transform: translateY(-2px) scale(1.02);
 }
 
-.btn-glow-blue:hover { box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45); }
+.btn-glow-blue:hover { box-shadow: 0 6px 20px rgba(11, 95, 180, 0.45); }
 .btn-glow-emerald:hover { box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45); }
 
 /* Grid Cards */
