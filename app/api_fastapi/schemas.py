@@ -99,6 +99,10 @@ class MovimientoResponse(BaseModel):
     usuario_id: int
     motivo: Optional[str]
 
+    @property
+    def cantidad_display(self):
+        return float(self.cantidad)
+
 # --- Solicitudes de Material ---
 
 class SolicitudDetalleBase(BaseModel):

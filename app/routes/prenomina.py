@@ -547,6 +547,100 @@ def api_eliminar_deposito(id):
         current_app.logger.error(f"Error al eliminar depósito: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': 'Ocurrió un error al eliminar el depósito.'}), 500
 
+@bp.route('/api/viaticos', methods=['PATCH'])
+@login_required
+@limiter.limit("20 per minute")
+def api_actualizar_viaticos():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+
+        prenomina_id = data.get('prenomina_id')
+        monto_viaticos = data.get('monto_viaticos')
+
+        if prenomina_id is None or monto_viaticos is None:
+            return jsonify({'success': False, 'message': 'Faltan campos obligatorios: prenomina_id, monto_viaticos'}), 400
+
+        try:
+            prenomina_id = int(prenomina_id)
+            monto_viaticos = Decimal(str(monto_viaticos))
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'prenomina_id y monto_viaticos deben ser numéricos.'}), 400
+
+        if monto_viaticos < 0:
+            return jsonify({'success': False, 'message': 'El monto de viáticos no puede ser negativo.'}), 400
+
+        prenomina = Prenomina.query.get_or_404(prenomina_id)
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+
+        prenomina.pago_viaticos = monto_viaticos
+        db.session.commit()
+        recalcular_totales_prenomina(prenomina)
+
+        return jsonify({
+            'success': True,
+            'message': 'Viáticos actualizados.',
+            'pago_viaticos': float(prenomina.pago_viaticos),
+            'total_percepciones': float(prenomina.total_percepciones),
+            'total_a_pagar': float(prenomina.total_a_pagar),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar viáticos: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al actualizar los viáticos.'}), 500
+
+@bp.route('/api/festivos', methods=['PATCH'])
+@login_required
+@limiter.limit("20 per minute")
+def api_actualizar_festivos():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+
+        prenomina_id = data.get('prenomina_id')
+        monto_festivos = data.get('monto_festivos')
+
+        if prenomina_id is None or monto_festivos is None:
+            return jsonify({'success': False, 'message': 'Faltan campos obligatorios: prenomina_id, monto_festivos'}), 400
+
+        try:
+            prenomina_id = int(prenomina_id)
+            monto_festivos = Decimal(str(monto_festivos))
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'prenomina_id y monto_festivos deben ser numéricos.'}), 400
+
+        if monto_festivos < 0:
+            return jsonify({'success': False, 'message': 'El monto de festivos no puede ser negativo.'}), 400
+
+        prenomina = Prenomina.query.get_or_404(prenomina_id)
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+
+        prenomina.pago_festivos = monto_festivos
+        db.session.commit()
+        recalcular_totales_prenomina(prenomina)
+
+        return jsonify({
+            'success': True,
+            'message': 'Festivos actualizados.',
+            'pago_festivos': float(prenomina.pago_festivos),
+            'total_percepciones': float(prenomina.total_percepciones),
+            'total_a_pagar': float(prenomina.total_a_pagar),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar festivos: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al actualizar los festivos.'}), 500
+
 # _recalcular_prenomina removida — usar recalcular_totales_prenomina() desde utils.py
 
 def calcular_preview_prenomina(fecha_obj, reportes):

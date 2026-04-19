@@ -454,6 +454,41 @@ def get_estante_qr_image(estante_id: int, db: Session = Depends(get_db), current
     return Response(content=buf.getvalue(), media_type="image/png")
 
 # ─── Movimientos ──────────────────────────────────────────────────────────────
+@router.get("/movimientos/", response_model=list[schemas.MovimientoResponse])
+def get_movimientos(
+    producto_id: int = None,
+    tipo: str = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_inventario_user),
+):
+    q = db.query(MovimientoInventario)
+    if producto_id:
+        q = q.filter(MovimientoInventario.producto_id == producto_id)
+    if tipo:
+        q = q.filter(MovimientoInventario.tipo == tipo.upper())
+    return q.order_by(MovimientoInventario.fecha.desc()).limit(limit).all()
+
+@router.get("/productos/bajo-minimo/")
+def get_productos_bajo_minimo(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_inventario_user),
+):
+    from sqlalchemy import text
+    productos = db.query(Producto).filter(
+        Producto.activo == True,
+        Producto.stock_actual <= Producto.stock_minimo
+    ).order_by(Producto.categoria, Producto.descripcion).all()
+    return [{
+        'id': p.id,
+        'codigo': p.codigo,
+        'descripcion': p.descripcion,
+        'categoria': p.categoria,
+        'unidad': p.unidad,
+        'stock_actual': float(p.stock_actual),
+        'stock_minimo': float(p.stock_minimo),
+    } for p in productos]
+
 @router.post("/movimientos/", response_model=schemas.MovimientoResponse)
 def create_movimiento(
     request: Request,

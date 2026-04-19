@@ -234,6 +234,18 @@ def solicitud_pdf(solicitud_id):
     return response
 
 
+@bp.route('/movimientos')
+@login_required
+def movimientos():
+    user = User.query.get(session.get('user_id'))
+    if user.role not in ['inventario', 'admin']:
+        flash('No tienes permiso para ver esta página.', 'danger')
+        return redirect(url_for('main.home'))
+    from app.models import Producto, Almacen
+    productos = Producto.query.filter_by(activo=True).order_by(Producto.descripcion).all()
+    almacenes = Almacen.query.filter_by(activo=True).order_by(Almacen.nombre).all()
+    return render_template('inventario_movimientos.html', user=user, productos=productos, almacenes=almacenes)
+
 @bp.route('/mis-pedidos')
 @login_required
 def mis_pedidos():

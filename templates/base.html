@@ -100,6 +100,7 @@
             {% if session.get('role') == 'inventario' %}
             {{ menu_link('inventario_ui.catalogo', false, 'fas fa-layer-group', 'Catálogo de Materiales', true) }}
             {{ menu_link('inventario_ui.estantes', false, 'fas fa-warehouse', 'Bodegas y Estantes', true) }}
+            {{ menu_link('inventario_ui.movimientos', false, 'fas fa-exchange-alt', 'Movimientos', true) }}
             {{ menu_link('inventario_ui.solicitudes', false, 'fas fa-list-check', 'Gestionar Pedidos', true) }}
             {% endif %}
 

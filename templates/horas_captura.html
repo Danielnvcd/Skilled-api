@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=3">
 <!-- Select2 CSS for searchable dropdowns -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
 <style>
@@ -120,24 +120,9 @@
                 <div class="form-group"
                     style="margin-bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
                     <label style="color: #D97706; font-weight: 600;">¿Viáticos?</label>
-                    <input type="checkbox" id="chkViaticos" name="aplica_viaticos" value="1"
+                    <input type="checkbox" name="aplica_viaticos" value="1"
                         style="width: 20px; height: 20px; cursor: pointer; accent-color: #D97706;">
-                    <div id="viaticosOpciones"
-                        style="display:none; flex-direction:column; gap:0.2rem; margin-top:0.4rem; align-items:flex-start;">
-                        <label
-                            style="display:flex; gap:0.3rem; align-items:center; margin:0; font-size:0.78rem; cursor:pointer;">
-                            <input type="radio" name="viaticos_modo" value="perfil" id="viaticos_perfil" checked
-                                style="accent-color: #D97706; margin:0;"> Perfil
-                        </label>
-                        <label
-                            style="display:flex; gap:0.3rem; align-items:center; margin:0; font-size:0.78rem; cursor:pointer;">
-                            <input type="radio" name="viaticos_modo" value="manual" id="viaticos_manual"
-                                style="accent-color: #D97706; margin:0;"> Manual
-                        </label>
-                        <input type="number" step="0.01" min="0.01" name="monto_viaticos_manual"
-                            id="montoViaticosManual" class="form-control" placeholder="$0.00"
-                            style="display:none; width:90px; font-size:0.8rem; padding:0.3rem 0.5rem; margin-top:0.2rem;">
-                    </div>
+                    <input type="hidden" name="viaticos_modo" value="perfil">
                 </div>
 
                 <div class="form-group"
@@ -162,6 +147,53 @@
                 </button>
             </div>
         </form>
+    </div>
+    {% endif %}
+
+    <!-- ── Tarjetas de Trabajadores ─────────────────────────────────────────── -->
+    {% if trabajadores %}
+    <div class="captura-form-bg" style="margin-top: 2rem;">
+        <h3 style="margin: 0 0 0.35rem; color: var(--text-main);">Horas por Trabajador</h3>
+        <p style="margin: 0 0 1.25rem; font-size: 0.84rem; color: var(--text-muted);">
+            Haz clic en un trabajador para ver y registrar su semana completa.
+        </p>
+        <!-- Buscador de trabajadores -->
+        <div style="position: relative; max-width: 320px; margin-bottom: 1rem;">
+            <svg style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:15px; height:15px; color:#9CA3AF; pointer-events:none;"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input type="text" id="buscarWorkerCard" placeholder="Buscar trabajador..."
+                style="width:100%; padding:7px 7px 7px 32px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem; background:var(--bg-card); color:var(--text-main); outline:none; box-sizing:border-box;">
+        </div>
+        <div id="workerCardNoResults" style="display:none; font-size:0.85rem; color:var(--text-muted); padding:0.5rem 0 0.75rem;">
+            <i class="fas fa-search" style="margin-right:5px; opacity:0.5;"></i>Sin resultados para la búsqueda.
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;" id="listaWorkerCards">
+            {% for t in trabajadores %}
+            {% set ns = namespace(dias=0, total=0.0) %}
+            {% for fecha in semana_fechas %}
+                {% set reg = grid_registros.get(t.id, {}).get(fecha) %}
+                {% if reg %}{% set ns.dias = ns.dias + 1 %}{% set ns.total = ns.total + (reg.horas_productivas|float or 0) %}{% endif %}
+            {% endfor %}
+            <div class="worker-card"
+                 data-trabajador-id="{{ t.id }}"
+                 data-nombre="{{ t.nombre_completo }}"
+                 data-no="{{ t.no_empleado }}">
+                <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-main);">{{ t.nombre_completo }}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace; margin-top: 2px;">{{ t.no_empleado }}</div>
+                <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="font-size: 0.75rem; color: {% if ns.dias > 0 %}var(--success){% else %}var(--text-muted){% endif %}; font-weight: 600;">
+                        {{ ns.dias }}/{{ semana_fechas|length }} días
+                    </span>
+                    {% if ns.total > 0 %}
+                    <span style="font-size: 0.75rem; color: var(--primary); font-weight: 700;">· {{ "%.1f"|format(ns.total) }}h</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 
@@ -224,8 +256,7 @@
                     </td>
                     <td>
                         {% if reg.aplica_viaticos %}
-                        <span style="color:#D97706; font-weight:bold;">Sí{% if reg.monto_viaticos_manual %} (${{
-                            "%.2f"|format(reg.monto_viaticos_manual|float) }}){% endif %}</span>
+                        <span style="color:#D97706; font-weight:bold;">Sí</span>
                         {% else %}
                         <span style="color:var(--text-muted);">No</span>
                         {% endif %}
@@ -281,8 +312,51 @@
 
 </div>
 
+<!-- Modal Semana por Trabajador -->
+<div class="modal-overlay" id="modalTrabajador">
+    <div class="modal-content" style="max-width: 960px; width: 96%; max-height: 92vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <div>
+                <h3 id="mtsNombre" style="margin:0;">Trabajador</h3>
+                <code id="mtsNo" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; display: block;"></code>
+            </div>
+            <button class="close-modal" id="btnCerrarMts" type="button">×</button>
+        </div>
+        <div style="overflow: auto; flex: 1; padding: 0 0.5rem;">
+            <table id="tablaSemanaTrabajador" style="width: 100%; border-collapse: collapse; font-size: 0.84rem;">
+                <thead>
+                    <tr style="background: #F9FAFB; position: sticky; top: 0; z-index: 1;">
+                        <th style="padding: 0.6rem 0.75rem; text-align: left; border-bottom: 2px solid var(--border); min-width: 80px;">Día</th>
+                        <th style="padding: 0.6rem 0.5rem; border-bottom: 2px solid var(--border); min-width: 95px;">Entrada</th>
+                        <th style="padding: 0.6rem 0.5rem; border-bottom: 2px solid var(--border); min-width: 95px;">Salida</th>
+                        <th style="padding: 0.6rem 0.25rem; border-bottom: 2px solid var(--border); text-align: center; width: 60px;">Comida</th>
+                        <th style="padding: 0.6rem 0.25rem; border-bottom: 2px solid var(--border); text-align: center; color: #D97706; width: 60px;">Viáticos</th>
+                        <th style="padding: 0.6rem 0.25rem; border-bottom: 2px solid var(--border); text-align: center; color: #7C3AED; width: 60px;">Festivo</th>
+                        <th style="padding: 0.6rem 0.5rem; border-bottom: 2px solid var(--border); min-width: 155px;">Incidencia</th>
+                        <th style="padding: 0.6rem 0.5rem; border-bottom: 2px solid var(--border); text-align: center; width: 55px;">Hrs</th>
+                        <th style="padding: 0.6rem 0.5rem; border-bottom: 2px solid var(--border); width: 110px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoSemanaTrabajador">
+                    <!-- Poblado por JS -->
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <span id="mtsTotalHrs" style="font-size: 0.9rem; color: var(--primary); font-weight: 700; margin-right: auto;"></span>
+            <button class="btn-secondary" id="btnCerrarMts2" type="button">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Datos del servidor para scripts externos (CSP-safe, no ejecutable) -->
+<script type="application/json" id="captura-config">{"borrador": {{ (reporte.estado == 'BORRADOR') | tojson }}, "reporte_id": {{ reporte.id }}}</script>
+<script type="application/json" id="registros-data">{{ registros_json | tojson }}</script>
+<script type="application/json" id="semana-config">{"fechas": {{ semana_fechas_json | tojson }}, "horas": {{ horas_dropdown | tojson }}, "incidencias": {{ incidencias_lista | tojson }}}</script>
+
 <!-- Select2 JS for searchable dropdowns -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
-<script src="{{ url_for('static', filename='js/horas_captura.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/horas_captura.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/horas_grid.js') }}?v=5"></script>
 {% endblock %}

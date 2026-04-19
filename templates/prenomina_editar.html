@@ -78,7 +78,7 @@
 
                 <!-- Current Totals -->
                 <div
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; background: #F9FAFB; padding: 1rem; border-radius: 8px;">
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; background: #F9FAFB; padding: 1rem; border-radius: 8px;">
                     <div>
                         <span
                             style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total
@@ -99,6 +99,76 @@
                             Activos</span>
                         <div style="font-size: 1.1rem; font-weight: 700; color: #7C3AED;" id="prestamos-{{ p.id }}">-${{
                             "%.2f"|format(p.descuento_prestamos) }}</div>
+                    </div>
+                    <div>
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Viáticos</span>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                            <span style="font-size: 1rem; color: #D97706; font-weight: 700;" id="viaticos-display-{{ p.id }}">${{ "%.2f"|format(p.pago_viaticos or 0) }}</span>
+                            {% if estado_actual == 'ABIERTA' %}
+                            <button class="btn-editar-viaticos" data-prenomina-id="{{ p.id }}"
+                                title="Editar viáticos"
+                                style="background: none; border: none; color: #D97706; cursor: pointer; font-size: 0.85rem; padding: 2px 4px;">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% if estado_actual == 'ABIERTA' %}
+                        <div id="viaticos-form-{{ p.id }}" style="display: none; margin-top: 6px; display: none;">
+                            <div style="display: flex; gap: 4px; align-items: center;">
+                                <input type="number" step="0.01" min="0"
+                                    class="form-control viaticos-input"
+                                    data-prenomina-id="{{ p.id }}"
+                                    value="{{ "%.2f"|format(p.pago_viaticos or 0) }}"
+                                    style="width: 90px; font-size: 0.85rem; padding: 4px 8px;">
+                                <button class="btn-guardar-viaticos"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="background: #D97706; color: white; border: none; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 0.8rem; white-space: nowrap;">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button class="btn-cancelar-viaticos"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85rem;">
+                                    <i class="fa-solid fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span
+                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Festivos</span>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                            <span style="font-size: 1rem; color: #7C3AED; font-weight: 700;" id="festivos-display-{{ p.id }}">${{ "%.2f"|format(p.pago_festivos or 0) }}</span>
+                            {% if estado_actual == 'ABIERTA' %}
+                            <button class="btn-editar-festivos" data-prenomina-id="{{ p.id }}"
+                                title="Editar festivos"
+                                style="background: none; border: none; color: #7C3AED; cursor: pointer; font-size: 0.85rem; padding: 2px 4px;">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% if estado_actual == 'ABIERTA' %}
+                        <div id="festivos-form-{{ p.id }}" style="display: none; margin-top: 6px;">
+                            <div style="display: flex; gap: 4px; align-items: center;">
+                                <input type="number" step="0.01" min="0"
+                                    class="form-control festivos-input"
+                                    data-prenomina-id="{{ p.id }}"
+                                    value="{{ "%.2f"|format(p.pago_festivos or 0) }}"
+                                    style="width: 90px; font-size: 0.85rem; padding: 4px 8px;">
+                                <button class="btn-guardar-festivos"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="background: #7C3AED; color: white; border: none; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 0.8rem; white-space: nowrap;">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button class="btn-cancelar-festivos"
+                                    data-prenomina-id="{{ p.id }}"
+                                    style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85rem;">
+                                    <i class="fa-solid fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -240,5 +310,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/prenomina_editar.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/prenomina_editar.js') }}?v=4"></script>
 {% endblock %}

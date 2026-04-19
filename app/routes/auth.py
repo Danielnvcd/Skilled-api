@@ -266,15 +266,22 @@ def update_last_seen():
 @bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("4 per minute", methods=['POST'])
 def login():
-    # Si ya tiene sesión activa, regresarlo a donde estaba o al home
+    # Si ya tiene sesión activa, redirigir según rol
     if 'user_id' in session:
-        flash('Ya tienes una sesión activa.', 'info')
         next_url = request.args.get('next') or request.referrer
         if next_url and _is_safe_url(next_url) and '/login' not in next_url:
-            fallback = next_url
+            return redirect(next_url)
+        role = session.get('role', '')
+        if role == 'inventario':
+            is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
+            dest = url_for('inventario_ui.movil') if is_mobile else url_for('inventario_ui.web')
+        elif role == 'solicitante_material':
+            dest = url_for('inventario_ui.solicitar')
+        elif role == 'coordinador':
+            dest = url_for('horas.index')
         else:
-            fallback = url_for('main.home')
-        return redirect(fallback)
+            dest = url_for('main.home')
+        return redirect(dest)
         
     if request.method == 'POST':
         u = User.query.filter_by(username=request.form.get('username')).first()
