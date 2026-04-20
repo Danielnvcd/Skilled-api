@@ -3,185 +3,262 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
 <style>
-    .prenomina-empty {
-        background: var(--bg-card);
-        padding: 3rem;
-        border-radius: 16px;
-        text-align: center;
-        border: 1px dashed var(--border);
-        color: var(--text-muted);
-    }
-
+    /* ── Week card ── */
     .rep-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        background: var(--bg-card, white);
+        border-radius: 14px;
         border: 1px solid var(--border);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+        border-left: 5px solid #0b5fb4;
         margin-bottom: 1rem;
-        transition: transform 0.2s, box-shadow 0.2s;
+        display: grid;
+        grid-template-columns: 160px 1fr auto;
+        align-items: stretch;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        transition: box-shadow 0.2s, transform 0.2s;
     }
-
     .rep-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 6px 18px rgba(11,95,180,0.1);
+        transform: translateY(-1px);
     }
+    .rep-card.procesada { border-left-color: #16a34a; }
+    @media (max-width: 768px) { .rep-card { grid-template-columns: 1fr; } }
 
-    .info-block {
+    /* Date panel */
+    .rn-date-panel {
+        background: linear-gradient(160deg, #0b5fb4 0%, #094d8f 100%);
+        color: white;
+        padding: 1.25rem 1rem;
         display: flex;
         flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 160px; min-width: 160px; max-width: 160px;
+        text-align: center;
+    }
+    .rep-card.procesada .rn-date-panel {
+        background: linear-gradient(160deg, #16a34a 0%, #15803d 100%);
+    }
+    .rn-date-label  { font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; }
+    .rn-date-value  { font-size: 0.9rem; font-weight: 700; margin-top: 4px; line-height: 1.45; word-break: break-word; }
+    .rn-date-sep    { font-size: 0.7rem; opacity: 0.7; margin: 3px 0; }
+    .rn-date-fin    { font-size: 0.82rem; font-weight: 600; opacity: 0.9; }
+    .rn-date-badge  {
+        margin-top: 8px;
+        background: rgba(255,255,255,0.18);
+        font-size: 0.68rem; font-weight: 600;
+        padding: 2px 10px; border-radius: 20px;
+        white-space: nowrap;
     }
 
-    .info-block.fecha {
-        min-width: 250px;
+    /* Projects panel */
+    .rn-projects {
+        padding: 1rem 1.5rem;
+        border-right: 1px solid var(--border);
+        display: flex; flex-direction: column;
+        justify-content: center; gap: 0.35rem;
+    }
+    .rn-projects-label {
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.4px; color: var(--text-muted); margin-bottom: 4px;
+    }
+    .rn-project-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-main); }
+    .rn-project-dot  { width: 7px; height: 7px; border-radius: 50%; background: #0b5fb4; flex-shrink: 0; }
+    .rn-project-name { font-weight: 600; }
+    .rn-project-coord { color: var(--text-muted); font-size: 0.78rem; }
+    .rn-more { font-size: 0.75rem; color: var(--text-muted); font-style: italic; padding-left: 1.1rem; }
+
+    /* Actions panel */
+    .rn-actions {
+        padding: 1rem 1.25rem;
+        display: flex; flex-direction: column;
+        align-items: flex-end; justify-content: center;
+        gap: 0.5rem; min-width: 190px;
     }
 
-    .badge.pagado {
-        background: #D1FAE5;
-        color: #064E3B;
+    /* Status badges */
+    .rn-badge-done {
+        font-size: 0.72rem; font-weight: 700;
+        background: #dcfce7; color: #15803d;
+        border: 1px solid #bbf7d0;
+        padding: 3px 10px; border-radius: 20px;
+        display: inline-flex; align-items: center; gap: 4px;
+    }
+    .rn-badge-ready {
+        font-size: 0.72rem; font-weight: 700;
+        background: #dbeafe; color: #0b5fb4;
+        border: 1px solid #bfdbfe;
+        padding: 3px 10px; border-radius: 20px;
+        display: inline-flex; align-items: center; gap: 4px;
     }
 
-    .badge.pendiente {
-        background: #FEF3C7;
-        color: #92400E;
+    /* Buttons */
+    .btn-calcular {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        background: linear-gradient(135deg, #0b5fb4, #094d8f);
+        color: white; text-decoration: none;
+        padding: 7px 14px; border-radius: 8px;
+        font-size: 0.83rem; font-weight: 600;
+        transition: filter 0.2s, transform 0.15s;
+        box-shadow: 0 2px 6px rgba(11,95,180,0.25);
+        white-space: nowrap;
     }
+    .btn-calcular:hover { filter: brightness(1.1); transform: translateY(-1px); color: white; text-decoration: none; }
 
-    .badge.listo {
-        background: #DBEAFE;
-        color: #1E40AF;
+    .btn-ver {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        background: #eff6ff; color: #0b5fb4;
+        border: 1px solid #bfdbfe; text-decoration: none;
+        padding: 7px 14px; border-radius: 8px;
+        font-size: 0.83rem; font-weight: 600;
+        transition: background 0.15s; white-space: nowrap;
     }
+    .btn-ver:hover { background: #dbeafe; color: #0b5fb4; text-decoration: none; }
+
+    .btn-excel {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: transparent; color: #15803d;
+        border: 1px solid #bbf7d0; text-decoration: none;
+        padding: 5px 11px; border-radius: 8px;
+        font-size: 0.78rem; font-weight: 600;
+        transition: background 0.15s; white-space: nowrap;
+    }
+    .btn-excel:hover { background: #dcfce7; color: #15803d; text-decoration: none; }
+
+    /* Filter bar */
+    .rn-filter-bar {
+        display: flex; align-items: center; gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg-card); border-radius: 10px;
+        border: 1px solid var(--border);
+        margin-bottom: 1.5rem; width: fit-content;
+    }
+    .rn-filter-label { font-size: 0.88rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+    .rn-filter-input {
+        border: 1px solid var(--border); outline: none;
+        background: transparent; font-size: 0.9rem;
+        color: var(--text-main); padding: 4px 8px;
+        border-radius: 7px; cursor: pointer;
+    }
+    #clearSearchPrenomina {
+        background: none; border: none; cursor: pointer;
+        color: #9ca3af; font-size: 1.2rem; padding: 0 4px;
+        line-height: 1; display: none; transition: color 0.15s;
+    }
+    #clearSearchPrenomina:hover { color: #e31a1c; }
+
+    /* Pagination */
+    .pg-btn     { padding: 0.45rem 0.7rem; border-radius: 6px; text-decoration: none; font-size: 0.85rem; }
+    .pg-disabled { pointer-events: none; opacity: 0.4; }
+    .pg-active  { background: #0b5fb4; color: white; border: 1px solid #0b5fb4; font-weight: 700; pointer-events: none; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="horas-wrapper">
+
+    <!-- Header -->
     <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title">Generación de Prenómina</h1>
-            <p class="subtitle">Calcula el pago de los Trabajadores en base a los Reportes de Horas cerrados.</p>
+            <h1 class="main-title">
+                <i class="fas fa-calculator" style="color:#0b5fb4; margin-right:10px;"></i>
+                Generación de Prenómina
+            </h1>
+            <p class="subtitle">Calcula el pago de los trabajadores en base a los reportes de horas cerrados.</p>
         </div>
     </div>
 
     <div style="margin-bottom: 2rem;">
-        <h3 style="color: var(--text-main); margin-bottom: 1rem; font-size: 1.25rem;">Reportes Disponibles para Pago
-        </h3>
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top:-0.5rem; margin-bottom: 1.5rem;">
-            Aquí aparecen las semanas de Proyecto que ya fueron cerradas por el Coordinador/Coordinador.
-        </p>
 
-        <!-- Buscador de Fechas -->
-        <div
-            style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 1rem;">
-            <div
-                style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border); flex: 1; max-width: max-content;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-                <label
-                    style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500; white-space: nowrap;">Filtrar
-                    por fecha:</label>
-                <input type="date" id="searchFechaPrenomina"
-                    style="flex: 0 0 auto; border: 1px solid var(--border); outline: none; background: transparent; font-size: 0.95rem; color: var(--text-main); padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer;">
-                <button type="button" id="clearSearchPrenomina" title="Limpiar filtro"
-                    style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0; display: none;">&times;</button>
-            </div>
-
-            {# Global export removed #}
+        <!-- Filter bar -->
+        <div class="rn-filter-bar">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <label class="rn-filter-label">Filtrar por fecha:</label>
+            <input type="date" id="searchFechaPrenomina" class="rn-filter-input">
+            <button type="button" id="clearSearchPrenomina" title="Limpiar filtro">&times;</button>
         </div>
+
         <div id="noResultsPrenomina"
-            style="display: none; text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
-            <i class="fa-solid fa-calendar-xmark"
-                style="font-size: 1.5rem; margin-bottom: 0.5rem; display:block; opacity:0.5;"></i>
+            style="display:none; text-align:center; padding:2.5rem; color:var(--text-muted); font-size:0.95rem;">
+            <i class="fa-solid fa-calendar-xmark" style="font-size:1.8rem; display:block; margin-bottom:0.5rem; opacity:0.4;"></i>
             No se encontraron semanas para la fecha seleccionada.
         </div>
 
         {% for s in semanas %}
-        <div class="rep-card" data-fecha-inicio="{{ s.fecha_inicio_semana.strftime('%Y-%m-%d') }}"
-            data-fecha-fin="{{ s.fecha_fin_semana.strftime('%Y-%m-%d') }}">
-            <div class="info-block">
-                <span
-                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Semana
-                    del</span>
-                <strong style="font-size: 1.1rem; color: var(--text-main);">{{
-                    s.fecha_inicio_semana|fecha_es('mes_corto') }}</strong>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">{{ s.proyectos|length }} proyecto(s)
-                    cerrados</span>
-            </div>
+        <div class="rep-card {% if s.fecha_str in prenominas_fechas %}procesada{% endif %}"
+             data-fecha-inicio="{{ s.fecha_inicio_semana.strftime('%Y-%m-%d') }}"
+             data-fecha-fin="{{ s.fecha_fin_semana.strftime('%Y-%m-%d') }}">
 
-            <div class="info-block fecha">
-                <span
-                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Período</span>
-                <strong>{{ s.fecha_inicio_semana.strftime('%d/%m/%Y') }} - {{ s.fecha_fin_semana.strftime('%d/%m/%Y')
-                    }}</strong>
-            </div>
-
-            <div class="info-block"
-                style="flex: 1; margin: 0 1.5rem; padding-left: 1rem; border-left: 2px solid var(--border);">
-                <span
-                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-bottom: 4px;">Proyectos
-                    Consolidados</span>
-                <div
-                    style="display: flex; flex-direction: column; gap: 4px; max-height: 80px; overflow-y: auto; padding-right: 5px;">
-                    {% for rep in s.proyectos %}
-                    <div style="font-size: 0.85rem; color: var(--text-main);">
-                        <i class="fa-solid fa-folder" style="color: #6366f1; margin-right: 4px;"></i>
-                        <strong>{{ rep.nombre }}</strong>
-                        <span style="color: var(--text-muted); margin-left: 4px;">
-                            (Coord: {{ (rep.coordinador.full_name or rep.coordinador.username) if
-                            rep.coordinador else 'Sin asignar' }})
-                        </span>
-                    </div>
-                    {% endfor %}
+            <!-- Date panel -->
+            <div class="rn-date-panel">
+                <div class="rn-date-label">Semana</div>
+                <div class="rn-date-value">{{ s.fecha_inicio_semana.strftime('%d/%m/%Y') }}</div>
+                <div class="rn-date-sep">— al —</div>
+                <div class="rn-date-fin">{{ s.fecha_fin_semana.strftime('%d/%m/%Y') }}</div>
+                <div class="rn-date-badge">
+                    <i class="fas fa-folder" style="margin-right:3px;"></i>
+                    {{ s.proyectos|length }} proyecto{{ 's' if s.proyectos|length != 1 else '' }}
                 </div>
             </div>
 
-            <div class="info-block"
-                style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-                {% if s.fecha_str in prenominas_fechas %}
-                <span class="badge pagado"
-                    style="margin-bottom: 0.5rem; display:inline-block; font-size:0.75rem; padding: 4px 10px; border-radius:12px; width: max-content; text-align: center; font-weight: 600;">Procesada
-                    Globalmente</span>
-                <br>
-                <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-secondary"
-                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Ver Recibos Generados</a>
-                {% else %}
-                <span class="badge listo"
-                    style="margin-bottom: 0.5rem; display:inline-block; font-size:0.75rem; padding: 4px 10px; border-radius:12px; width: max-content; text-align: center; font-weight: 600;">Lista
-                    p/Cálculo</span>
-                <br>
-                <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-primary"
-                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">Calcular Prenómina Consolidada</a>
+            <!-- Projects panel -->
+            <div class="rn-projects">
+                <div class="rn-projects-label">
+                    <i class="fas fa-layer-group" style="margin-right:4px;"></i>Proyectos Consolidados
+                </div>
+                {% for rep in s.proyectos[:4] %}
+                <div class="rn-project-item">
+                    <div class="rn-project-dot"></div>
+                    <div>
+                        <span class="rn-project-name">{{ rep.nombre }}</span>
+                        <span class="rn-project-coord">
+                            · {{ (rep.coordinador.full_name or rep.coordinador.username) if rep.coordinador else 'Sin asignar' }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if s.proyectos|length > 4 %}
+                <div class="rn-more">+ {{ s.proyectos|length - 4 }} más...</div>
                 {% endif %}
+            </div>
 
+            <!-- Actions panel -->
+            <div class="rn-actions">
+                {% if s.fecha_str in prenominas_fechas %}
+                    <span class="rn-badge-done"><i class="fas fa-check-circle"></i> Procesada</span>
+                    <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-ver">
+                        <i class="fas fa-eye"></i> Ver Recibos
+                    </a>
+                {% else %}
+                    <span class="rn-badge-ready"><i class="fas fa-clock"></i> Lista p/Cálculo</span>
+                    <a href="{{ url_for('prenomina.generar', fecha_str=s.fecha_str) }}" class="btn-calcular">
+                        <i class="fas fa-calculator"></i> Calcular Prenómina
+                    </a>
+                {% endif %}
                 {% if session.get('role') == 'admin' %}
-                <a href="{{ url_for('reportes.excel_prenomina', fecha_str=s.fecha_str) }}" class="btn-primary"
-                    style="background: #10b981; font-size: 0.85rem; padding: 0.4rem 0.8rem; margin-top: 0.5rem; display: inline-flex; align-items: center; gap: 0.5rem;">
-                    <i class="fa-solid fa-file-excel"></i> Exportar esta Semana
+                <a href="{{ url_for('reportes.excel_prenomina', fecha_str=s.fecha_str) }}" class="btn-excel">
+                    <i class="fa-solid fa-file-excel"></i> Exportar Excel
                 </a>
                 {% endif %}
             </div>
+
         </div>
         {% else %}
-        <div class="prenomina-empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 6v6l4 2"></path>
-            </svg>
-            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin semanas cerradas</h4>
-            <p style="margin:0;">No hay ningún reporte semanal que haya sido "Cerrado" por los coordinadores aún. Deben
-                cerrar captura primero.</p>
+        <div style="text-align:center; padding:3rem; background:var(--bg-card); border-radius:14px; border:1px dashed var(--border);">
+            <i class="fas fa-clock" style="font-size:2.5rem; color:#d1d5db; display:block; margin-bottom:1rem;"></i>
+            <h4 style="margin:0 0 0.5rem; font-size:1.1rem; color:var(--text-main);">Sin semanas cerradas</h4>
+            <p style="margin:0; color:var(--text-muted);">No hay reportes semanales cerrados por los coordinadores aún.</p>
         </div>
         {% endfor %}
+
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/search_prenomina.js') }}"></script>
+<script src="{{ url_for('static', filename='js/search_prenomina.js') }}?v=1"></script>
 {% endblock %}

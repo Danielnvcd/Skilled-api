@@ -605,6 +605,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 viewModal.classList.add('active');
 
+                const btnExport = document.getElementById('btnExportarExcel');
+                if (btnExport) btnExport.href = `/trabajadores/exportar/${id}`;
+
             } else {
                 // Populate Edit Modal
                 if (modalTitle) modalTitle.textContent = `Editar Trabajador (${data.no_empleado})`;

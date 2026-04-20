@@ -1,0 +1,17 @@
+/* ============================================================
+   Tailwind CSS v4 — Archivo de entrada
+   Compilar con: python build_tailwind.py
+   ============================================================ */
+
+/* Importar solo theme y utilities (sin preflight/reset de base) */
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+/* Fuentes de contenido a escanear */
+@source "../../templates/**/*.html";
+@source "../js/**/*.js";
+
+/* Tema personalizado */
+@theme {
+  --color-primary: #3b82f6;
+}

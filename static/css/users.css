@@ -200,6 +200,18 @@
     border: 1px solid #ddd6fe;
 }
 
+.role-inventario {
+    background-color: #F0FDF4;
+    color: #16A34A;
+    border: 1px solid #BBF7D0;
+}
+
+.role-solicitante_material {
+    background-color: #FEF3C7;
+    color: #D97706;
+    border: 1px solid #FDE68A;
+}
+
 /* Custom premium file upload styling (Horizontal) */
 .profile-upload-horizontal {
     display: flex;

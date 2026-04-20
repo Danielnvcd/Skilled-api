@@ -133,7 +133,7 @@
 <div class="trabajadores-wrapper">
     <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title">Credenciales</h1>
+            <h1 class="main-title"><i class="fas fa-id-card" style="color:#06b6d4; margin-right:10px;"></i>Credenciales</h1>
             <p class="subtitle">Recuento de Personal por Ubicación y Credenciales</p>
         </div>
     </div>
@@ -209,7 +209,7 @@
                                 data-ubicacion="{{ proyectos_activos|join(', ') if proyectos_activos else (t.ubicacion_actual or '-') }}"
                                 data-estado="{{ t.ubicacion_estado or '-' }}" data-celular="{{ t.celular or '-' }}"
                                 data-observaciones="{{ t.observaciones or '' }}"
-                                data-foto="{{ url_for('trabajadores.get_foto_perfil', id=t.id) if t.foto_perfil else '' }}"
+                                data-foto="{{ url_for('trabajadores.get_foto_perfil_thumb', id=t.id) if t.foto_perfil else '' }}"
                                 data-creds='{{ t.credenciales|map(attribute="planta")|list|tojson }}'
                                 data-credids='{{ creds|tojson }}'
                                 style="background: #eef2ff; color: #3b5998; border: 1px solid #c7d2fe; border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s;">

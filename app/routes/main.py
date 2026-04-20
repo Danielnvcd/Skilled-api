@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, session, request
+from flask import Blueprint, render_template, session, request, redirect, url_for
 from app.utils import login_required
 from app.models import Trabajador, Proyecto, AuditLog, DocumentoTrabajador, CredencialPlanta
 from app.extensions import db
@@ -11,6 +11,9 @@ bp = Blueprint('main', __name__)
 @bp.route('/')
 @login_required
 def home():
+    if session.get('role') == 'solicitante_material':
+        return redirect(url_for('inventario_ui.solicitar'))
+        
     current_month = datetime.now().month
     current_year = datetime.now().year
 
@@ -161,7 +164,7 @@ def credenciales():
         ))
 
     # Paginate results
-    pagination = query.order_by(Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+    pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
 
     return render_template('credenciales.html', pagination=pagination, q=q)
 

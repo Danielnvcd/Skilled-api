@@ -8,8 +8,7 @@
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=2">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="{{ url_for('static', filename='js/tailwind-config.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
     <style>
         body {
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 40%, rgba(255, 255, 255, 0.4) 100%),
@@ -70,6 +69,8 @@
         </div>
         <nav id="sidebar-menu"
             class="flex-1 overflow-y-auto overflow-x-hidden mb-4 pr-1 space-y-1 custom-scrollbar relative">
+
+            {% if session.get('role') not in ['inventario', 'solicitante_material'] %}
             {% if session.get('role') != 'coordinador' %}
             {{ menu_link('main.home', false, 'iconos/inicio.png', 'Inicio') }}
             {{ menu_link('trabajadores.index', false, 'iconos/trabajadores.png', 'Empleados') }}
@@ -84,7 +85,6 @@
 
             {{ menu_link('main.credenciales', false, 'iconos/credenciales.png', 'Credenciales') }}
             {{ menu_link('horas.index', false, 'iconos/horario.png', 'Reporte de Horas') }}
-            {{ menu_link('https://nube.skilledmx.cloud', true, 'iconos/nube.png', 'Nube') }}
 
             {% if session.get('role') == 'coordinador' %}
             {{ menu_link('ficha.index', false, 'iconos/ficha tecnica.png', 'Ficha Técnica') }}
@@ -93,14 +93,36 @@
             {% if session.get('role') == 'admin' %}
             {{ menu_link('users.list_users', false, 'iconos/usuario.png', 'Usuarios') }}
             {% endif %}
+            {% endif %}
+
+            {% if session.get('role') in ['inventario', 'solicitante_material'] %}
+
+            {% if session.get('role') == 'inventario' %}
+            {{ menu_link('inventario_ui.catalogo', false, 'fas fa-layer-group', 'Catálogo de Materiales', true) }}
+            {{ menu_link('inventario_ui.estantes', false, 'fas fa-warehouse', 'Bodegas y Estantes', true) }}
+            {{ menu_link('inventario_ui.movimientos', false, 'fas fa-exchange-alt', 'Movimientos', true) }}
+            {{ menu_link('inventario_ui.solicitudes', false, 'fas fa-list-check', 'Gestionar Pedidos', true) }}
+            {% endif %}
+
+            {% if session.get('role') in ['solicitante_material'] %}
+            {{ menu_link('inventario_ui.solicitar', false, 'fas fa-plus-circle', 'Solicitar Material', true) }}
+            {{ menu_link('inventario_ui.mis_pedidos', false, 'fas fa-list-check', 'Mis Pedidos', true) }}
+            {% endif %}
+
+            {% endif %}
+
+            {{ menu_link('https://nube.skilledmx.cloud', true, 'iconos/nube.png', 'Nube') }}
         </nav>
 
         <div class="mt-auto pt-6 border-t border-gray-200/60 pb-2">
             <div class="flex items-center space-x-3 mb-4 bg-white/50 p-3 rounded-xl border border-white shadow-sm">
                 {% if current_user and current_user.profile_pic and current_user.profile_pic != 'default.png' %}
-                <img src="{{ url_for('users.serve_profile_pic', filename=current_user.profile_pic) }}" alt="Foto de perfil" class="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm border border-gray-200">
+                <img src="{{ url_for('users.serve_profile_pic', filename=current_user.profile_pic) }}"
+                    alt="Foto de perfil"
+                    class="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm border border-gray-200">
                 {% else %}
-                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20 shrink-0">
+                <div
+                    class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20 shrink-0">
                     {{ session.get('user', 'I')[:1] | upper }}
                 </div>
                 {% endif %}
@@ -113,7 +135,7 @@
                 </div>
             </div>
 
-            <form method="POST" action="{{ url_for('auth.logout') }}" class="w-full">
+            <form id="logout-form" method="POST" action="{{ url_for('auth.logout') }}" class="w-full">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit"
                     class="group w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100/80 text-rose-600 hover:text-rose-700 rounded-xl font-bold text-[0.95rem] transition-all duration-300 border-none shadow-sm hover:shadow-md hover:-translate-y-0.5">
@@ -140,6 +162,7 @@
 
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
     <script src="{{ url_for('static', filename='js/session_interceptor.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='js/logout-confirm.js') }}?v=1"></script>
     {% block scripts %}{% endblock %}
 </body>
 

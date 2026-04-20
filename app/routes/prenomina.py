@@ -137,9 +137,11 @@ def imprimir(fecha_str):
         flash("Hubo un error interno al generar el PDF.", "danger")
         return redirect(url_for('prenomina.generar', fecha_str=fecha_str))
         
+    from werkzeug.utils import secure_filename as _secure
     response = make_response(pdf.getvalue())
     response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=Prenomina_Consolidada_{fecha_obj.strftime("%d%m")}.pdf'
+    nombre_arch_consolidado = _secure(f'Prenomina_Consolidada_{fecha_obj.strftime("%d%m")}.pdf')
+    response.headers['Content-Disposition'] = f'inline; filename="{nombre_arch_consolidado}"'
     return response
 
 @bp.route('/imprimir_individual/<fecha_str>/<int:trabajador_id>', methods=['GET'])
@@ -199,16 +201,17 @@ def imprimir_individual(fecha_str, trabajador_id):
         flash("Hubo un error interno al generar el PDF.", "danger")
         return redirect(url_for('prenomina.generar', fecha_str=fecha_str))
         
+    from werkzeug.utils import secure_filename as _secure
     response = make_response(pdf.getvalue())
     response.headers['Content-Type'] = 'application/pdf'
-    
+
     # Nombre del archivo con Nombre del Trabajador, Fecha y Hora exacta de descarga
     ahora = datetime.now()
     nombre_limpio = prenomina.trabajador.nombre_apellidos.replace(' ', '_')
     timestamp = ahora.strftime("%Y-%m-%d_%H-%M-%S")
-    nombre_archivo = f'Recibo_{nombre_limpio}_{timestamp}.pdf'
-    
-    response.headers['Content-Disposition'] = f'inline; filename={nombre_archivo}'
+    nombre_archivo = _secure(f'Recibo_{nombre_limpio}_{timestamp}.pdf')
+
+    response.headers['Content-Disposition'] = f'inline; filename="{nombre_archivo}"'
     return response
 
 @bp.route('/guardar/<fecha_str>', methods=['POST'])
@@ -392,6 +395,9 @@ def cerrar_prenomina(fecha_str):
 @login_required
 @limiter.limit("10 per minute")
 def api_agregar_descuento():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         data = request.get_json(silent=True)
         if not data:
@@ -445,6 +451,9 @@ def api_agregar_descuento():
 @login_required
 @limiter.limit("10 per minute")
 def api_eliminar_descuento(id):
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         desc = DescuentoPrenomina.query.get_or_404(id)
         prenomina = desc.prenomina
@@ -467,6 +476,9 @@ def api_eliminar_descuento(id):
 @login_required
 @limiter.limit("10 per minute")
 def api_agregar_deposito():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         data = request.get_json(silent=True)
         if not data:
@@ -514,6 +526,9 @@ def api_agregar_deposito():
 @login_required
 @limiter.limit("10 per minute")
 def api_eliminar_deposito(id):
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
     try:
         dep = DepositoExtra.query.get_or_404(id)
         prenomina = dep.prenomina
@@ -531,6 +546,100 @@ def api_eliminar_deposito(id):
         db.session.rollback()
         current_app.logger.error(f"Error al eliminar depósito: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': 'Ocurrió un error al eliminar el depósito.'}), 500
+
+@bp.route('/api/viaticos', methods=['PATCH'])
+@login_required
+@limiter.limit("20 per minute")
+def api_actualizar_viaticos():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+
+        prenomina_id = data.get('prenomina_id')
+        monto_viaticos = data.get('monto_viaticos')
+
+        if prenomina_id is None or monto_viaticos is None:
+            return jsonify({'success': False, 'message': 'Faltan campos obligatorios: prenomina_id, monto_viaticos'}), 400
+
+        try:
+            prenomina_id = int(prenomina_id)
+            monto_viaticos = Decimal(str(monto_viaticos))
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'prenomina_id y monto_viaticos deben ser numéricos.'}), 400
+
+        if monto_viaticos < 0:
+            return jsonify({'success': False, 'message': 'El monto de viáticos no puede ser negativo.'}), 400
+
+        prenomina = Prenomina.query.get_or_404(prenomina_id)
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+
+        prenomina.pago_viaticos = monto_viaticos
+        db.session.commit()
+        recalcular_totales_prenomina(prenomina)
+
+        return jsonify({
+            'success': True,
+            'message': 'Viáticos actualizados.',
+            'pago_viaticos': float(prenomina.pago_viaticos),
+            'total_percepciones': float(prenomina.total_percepciones),
+            'total_a_pagar': float(prenomina.total_a_pagar),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar viáticos: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al actualizar los viáticos.'}), 500
+
+@bp.route('/api/festivos', methods=['PATCH'])
+@login_required
+@limiter.limit("20 per minute")
+def api_actualizar_festivos():
+    from flask import session
+    if session.get('role') not in ['admin', 'super_admin']:
+        return jsonify({'success': False, 'message': 'Acceso denegado.'}), 403
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({'success': False, 'message': 'Datos inválidos o vacíos.'}), 400
+
+        prenomina_id = data.get('prenomina_id')
+        monto_festivos = data.get('monto_festivos')
+
+        if prenomina_id is None or monto_festivos is None:
+            return jsonify({'success': False, 'message': 'Faltan campos obligatorios: prenomina_id, monto_festivos'}), 400
+
+        try:
+            prenomina_id = int(prenomina_id)
+            monto_festivos = Decimal(str(monto_festivos))
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'prenomina_id y monto_festivos deben ser numéricos.'}), 400
+
+        if monto_festivos < 0:
+            return jsonify({'success': False, 'message': 'El monto de festivos no puede ser negativo.'}), 400
+
+        prenomina = Prenomina.query.get_or_404(prenomina_id)
+        if prenomina.estado != 'ABIERTA':
+            return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
+
+        prenomina.pago_festivos = monto_festivos
+        db.session.commit()
+        recalcular_totales_prenomina(prenomina)
+
+        return jsonify({
+            'success': True,
+            'message': 'Festivos actualizados.',
+            'pago_festivos': float(prenomina.pago_festivos),
+            'total_percepciones': float(prenomina.total_percepciones),
+            'total_a_pagar': float(prenomina.total_a_pagar),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error al actualizar festivos: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': 'Ocurrió un error al actualizar los festivos.'}), 500
 
 # _recalcular_prenomina removida — usar recalcular_totales_prenomina() desde utils.py
 

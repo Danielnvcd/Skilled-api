@@ -103,7 +103,7 @@ class TestProyectoTotalIndex:
         assert 'PT-001' in html
         # Verify the totals are rendered
         assert '$5000.00' in html
-        assert 'ACUMULADO' in html
+        assert 'Acumulado' in html
 
     def test_multiple_semanas_acumulan(self, logged_in_admin, db, trabajador):
         """Dos semanas cerradas en el mismo proyecto deben acumular correctamente."""

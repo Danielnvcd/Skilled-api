@@ -240,6 +240,120 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     document.querySelectorAll('.btn-eliminar-deposito').forEach(bindEliminarDeposito);
 
+    // === Viáticos ===
+    document.querySelectorAll('.btn-editar-viaticos').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var prenominaId = this.getAttribute('data-prenomina-id');
+            var formEl = document.getElementById('viaticos-form-' + prenominaId);
+            if (formEl) formEl.style.display = 'block';
+        });
+    });
+
+    document.querySelectorAll('.btn-cancelar-viaticos').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var prenominaId = this.getAttribute('data-prenomina-id');
+            var formEl = document.getElementById('viaticos-form-' + prenominaId);
+            if (formEl) formEl.style.display = 'none';
+        });
+    });
+
+    document.querySelectorAll('.btn-guardar-viaticos').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var prenominaId = this.getAttribute('data-prenomina-id');
+            var inputEl = document.querySelector('.viaticos-input[data-prenomina-id="' + prenominaId + '"]');
+            var monto = parseFloat(inputEl.value);
+            if (isNaN(monto) || monto < 0) {
+                alert('Ingresa un monto válido.');
+                return;
+            }
+
+            var self = this;
+            self.disabled = true;
+            fetch('/prenomina/api/viaticos', {
+                method: 'PATCH',
+                headers: getHeaders(),
+                body: JSON.stringify({ prenomina_id: prenominaId, monto_viaticos: monto })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    self.disabled = false;
+                    if (data.success) {
+                        var displayEl = document.getElementById('viaticos-display-' + prenominaId);
+                        if (displayEl) displayEl.textContent = '$' + parseFloat(data.pago_viaticos).toFixed(2);
+                        updateTotals(prenominaId, data);
+                        var formEl = document.getElementById('viaticos-form-' + prenominaId);
+                        if (formEl) formEl.style.display = 'none';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(function () {
+                    self.disabled = false;
+                    alert('Error de red.');
+                });
+        });
+    });
+
+    // === Festivos ===
+    document.querySelectorAll('.btn-editar-festivos').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var prenominaId = this.getAttribute('data-prenomina-id');
+            var formEl = document.getElementById('festivos-form-' + prenominaId);
+            if (formEl) formEl.style.display = 'block';
+        });
+    });
+
+    document.querySelectorAll('.btn-cancelar-festivos').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var prenominaId = this.getAttribute('data-prenomina-id');
+            var formEl = document.getElementById('festivos-form-' + prenominaId);
+            if (formEl) formEl.style.display = 'none';
+        });
+    });
+
+    document.querySelectorAll('.btn-guardar-festivos').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var prenominaId = this.getAttribute('data-prenomina-id');
+            var inputEl = document.querySelector('.festivos-input[data-prenomina-id="' + prenominaId + '"]');
+            var monto = parseFloat(inputEl.value);
+            if (isNaN(monto) || monto < 0) {
+                alert('Ingresa un monto válido.');
+                return;
+            }
+
+            var self = this;
+            self.disabled = true;
+            fetch('/prenomina/api/festivos', {
+                method: 'PATCH',
+                headers: getHeaders(),
+                body: JSON.stringify({ prenomina_id: prenominaId, monto_festivos: monto })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    self.disabled = false;
+                    if (data.success) {
+                        var displayEl = document.getElementById('festivos-display-' + prenominaId);
+                        if (displayEl) displayEl.textContent = '$' + parseFloat(data.pago_festivos).toFixed(2);
+                        updateTotals(prenominaId, data);
+                        var formEl = document.getElementById('festivos-form-' + prenominaId);
+                        if (formEl) formEl.style.display = 'none';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(function () {
+                    self.disabled = false;
+                    alert('Error de red.');
+                });
+        });
+    });
+
     // === Cerrar Nómina ===
     var btnCerrar = document.getElementById('btnCerrarNomina');
     if (btnCerrar) {

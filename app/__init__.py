@@ -74,10 +74,11 @@ def create_app():
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000 # 1 año de caché para estáticos
     
     app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=15)
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+    # Access token corto: 20 minutos. El refresh token (cookie 'rt') extiende la sesión hasta 7 días.
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=20)
     is_prod = os.environ.get('FLASK_ENV') == 'production'
-    app.config['SESSION_COOKIE_SECURE'] = is_prod # Set True in prod only
+    app.config['SESSION_COOKIE_SECURE'] = is_prod  # Set True in prod only
 
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
 
@@ -114,25 +115,36 @@ def create_app():
     csp = {
         'default-src': '\'self\'',
         'script-src': [
-            '\'self\'', 
-            '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'', 
+            '\'self\'',
+            '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'',
             '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
             '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
-            'https://static.cloudflareinsights.com', 
-            'https://cdnjs.cloudflare.com', 
+            '\'sha256-LR1qZhcrwqC16k6pdfx3zpaEnV1gOIHJjkFpm3G3JgU=\'',
+            '\'sha256-HQDTABhTJR5g6ipLHPMSZNn4Zj+TfOpaKNRLQ4+8tH0=\'',  # Tailwind CDN inline script
+            'https://static.cloudflareinsights.com',
+            'https://cdnjs.cloudflare.com',
             'https://cdn.jsdelivr.net',
-            'https://cdn.tailwindcss.com'
+            'https://cdn.tailwindcss.com',
+            'https://unpkg.com',          # html5-qrcode CDN
         ],
+        # SEGURIDAD: 'unsafe-inline' en style-src es necesario temporalmente porque varios
+        # templates usan atributos style="" inline en el HTML. Para eliminarlo hay que mover
+        # todos los estilos inline a archivos .css externos (tracked en issue de seguridad).
+        # Prioridad: media. No bloquea funcionalidad actual.
         'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
-        'img-src': ['\'self\'', 'data:', 'blob:'],
+        'img-src': ['\'self\'', 'data:', 'blob:', 'https:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
-        'connect-src': ['\'self\'', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
+        # blob: necesario para getUserMedia (cámara) y WebWorkers del QR scanner
+        'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
+        'media-src': ['\'self\'', 'blob:'],           # stream de cámara
+        'worker-src': ['\'self\'', 'blob:'],           # WebWorker del scanner QR
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
-        'media-src': '\'self\''
+        # Bloquea que esta app sea embebida en iframes de otros dominios (anti-clickjacking)
+        'frame-ancestors': '\'none\'',
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui
     app.register_blueprint(auth.bp)
 
 
@@ -152,6 +164,7 @@ def create_app():
     app.register_blueprint(reportes.bp)
     app.register_blueprint(ausencias.bp)
     app.register_blueprint(metricas.bp)
+    app.register_blueprint(inventario_ui.bp)
 
     # ── Handler global de CSRF ─────────────────────────────────────────
     # Se ejecuta en TODA la app cuando un token CSRF es inválido o expiró.
@@ -197,8 +210,17 @@ def create_app():
             from werkzeug.exceptions import HTTPException
             if isinstance(e, HTTPException) and e.code != 500:
                 return e
-                
-            app.logger.error(f"Internal Server Error: {str(e)}\n{traceback.format_exc()}")
+
+            # En producción no exponer trazas completas (podrían revelar paths/secretos)
+            if is_prod:
+                app.logger.error(
+                    "Internal Server Error [%s]: %s",
+                    type(e).__name__, str(e)[:300]
+                )
+            else:
+                app.logger.error(
+                    "Internal Server Error: %s\n%s", str(e), traceback.format_exc()
+                )
             
             if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                  return jsonify({'error': "Ocurrió un error interno en el servidor."}), 500
@@ -207,7 +229,7 @@ def create_app():
             fallback_url = request.referrer if request.referrer else url_for('main.home')
             return redirect(fallback_url)
         except Exception as handler_error:
-            app.logger.error(f"Critical error in 500 handler: {str(handler_error)}")
+            app.logger.error("Critical error in 500 handler: %s", str(handler_error)[:200])
             return "Internal Server Error", 500
 
     # ── Observabilidad: logging de requests lentos y errores ──

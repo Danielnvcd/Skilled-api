@@ -312,9 +312,9 @@ class TestRespuestas403:
             sess['user'] = coord.username
             sess['role'] = 'coordinador'
 
-        # Coordinador es redirigido por login_required (ROLE_PERMISSIONS no permite users.*)
+        # Coordinador falla permisos y debe recibir 403 FORBIDDEN por reglas de hardening
         resp = client.get('/users/profile_pic/pic2.png')
-        assert resp.status_code == 302  # Redirect = acceso denegado por ROLE_PERMISSIONS
+        assert resp.status_code == 403  # FORBIDDEN = acceso denegado por ROLE_PERMISSIONS y hardening
 
 
 # ══════════════════════════════════════════════

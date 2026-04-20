@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=2">
 {% endblock %}
 
 {% block content %}
 <div class="horas-wrapper">
     <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title">Reporte de Horas</h1>
+            <h1 class="main-title"><i class="fas fa-clock" style="color:#8b5cf6; margin-right:10px;"></i>Reporte de Horas</h1>
             <p class="subtitle">Gestiona las semanas activas y reporta incidencias por proyecto.</p>
         </div>
         <button class="btn-primary" id="btnNuevoReporte">
@@ -185,5 +185,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/horas.js') }}"></script>
+<script src="{{ url_for('static', filename='js/horas.js') }}?v=1"></script>
 {% endblock %}

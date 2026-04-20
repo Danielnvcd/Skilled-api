@@ -1,5 +1,6 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory
-from sqlalchemy import or_
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, send_from_directory, send_file, session
+import io
+from sqlalchemy import or_, func
 from sqlalchemy.orm import selectinload
 from app.extensions import db, limiter
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
@@ -8,9 +9,18 @@ from werkzeug.utils import secure_filename
 import traceback
 import json
 import os
+import re
 import time
 from datetime import datetime as dt
 import pandas as pd
+
+_CURP_RE = re.compile(r'^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$')
+_RFC_RE  = re.compile(r'^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$')
+
+TIPOS_DOCUMENTO_VALIDOS = [
+    'Contrato', 'INE', 'CURP', 'RFC', 'NSS',
+    'ComprobanteDomicilio', 'CV', 'Otro'
+]
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
 
@@ -44,8 +54,8 @@ def index():
     query = Trabajador.query.options(
         selectinload(Trabajador.credenciales),
         selectinload(Trabajador.documentos)
-    ).filter_by(activo=True)
-    
+    ).filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
+
     if q:
         query = query.filter(or_(
             Trabajador.nombre.ilike(f'%{q}%'),
@@ -53,10 +63,10 @@ def index():
             Trabajador.no_empleado.ilike(f'%{q}%'),
             Trabajador.rfc.ilike(f'%{q}%')
         ))
-        
-    pagination = query.order_by(Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+
+    pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
     trabajadores = pagination.items
-    
+
     return render_template('trabajadores.html', trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/bajas', methods=['GET'])
@@ -64,11 +74,11 @@ def index():
 def bajas():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
-    
+
     query = Trabajador.query.options(
         selectinload(Trabajador.credenciales),
         selectinload(Trabajador.documentos)
-    ).filter_by(activo=False)
+    ).filter(or_(Trabajador.activo == False, Trabajador.fecha_baja != None))
     
     if q:
         query = query.filter(or_(
@@ -78,9 +88,9 @@ def bajas():
             Trabajador.rfc.ilike(f'%{q}%')
         ))
         
-    pagination = query.order_by(Trabajador.fecha_baja.desc().nulls_last(), Trabajador.id).paginate(page=page, per_page=20, error_out=False)
+    pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
     trabajadores = pagination.items
-    
+
     return render_template('trabajadores_bajas.html', trabajadores=trabajadores, pagination=pagination, q=q)
 
 @bp.route('/agregar', methods=['POST'])
@@ -99,7 +109,15 @@ def agregar():
         if errores_longitud:
             flash("Error de longitud en los campos:<br>" + "<br>".join(errores_longitud), 'danger')
             return redirect(url_for('trabajadores.index'))
-            
+
+        # Validación de formato CURP y RFC (advertencia, no bloqueo, por registros históricos)
+        _curp_val = (data.get('curp') or '').strip().upper()
+        _rfc_val  = (data.get('rfc') or '').strip().upper()
+        if _curp_val and not _CURP_RE.match(_curp_val):
+            flash('Advertencia: El formato de CURP no es válido. Verifica antes de continuar.', 'warning')
+        if _rfc_val and not _RFC_RE.match(_rfc_val):
+            flash('Advertencia: El formato de RFC no es válido. Verifica antes de continuar.', 'warning')
+
         # Basic validation
         if Trabajador.query.filter_by(no_empleado=no_empleado).first():
             flash('Error: El Número de Empleado ya existe.', 'danger')
@@ -186,13 +204,9 @@ def agregar():
                 if not allowed_image_file(file):
                     flash('Foto de perfil rechazada: solo se permiten imágenes JPG o PNG reales.', 'danger')
                     return redirect(url_for('trabajadores.index'))
-                filename = secure_filename(file.filename)
-                unique_filename = f"pp_{int(time.time())}_{filename}"
+                unique_filename = f"pp_{int(time.time())}_{secure_filename(file.filename)}"
                 pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
-                os.makedirs(pp_folder, exist_ok=True)
-                file_path = os.path.join(pp_folder, unique_filename)
-                file.save(file_path)
-                nuevo_trabajador.foto_perfil = f"perfiles/{unique_filename}"
+                nuevo_trabajador.foto_perfil = _save_profile_picture(file, pp_folder, unique_filename)
         
         # Parse Credentials JSON
         try:
@@ -286,9 +300,14 @@ def procesar_importacion():
             # Flags for current row errors
             row_errors = []
 
+            _FORMULA_CHARS = ('=', '+', '-', '@', '\t', '\r')
+
             def get_str(col_name, max_len=None):
                 val = row.get(col_name, '')
                 s = str(val).strip() if pd.notna(val) else ''
+                # Sanitizar formula injection: remover caracteres de inicio de fórmula CSV/Excel
+                if s and s[0] in _FORMULA_CHARS:
+                    s = s.lstrip('=+-@\t\r')
                 if max_len and len(s) > max_len:
                     row_errors.append(f"El campo '{col_name}' excede el límite de {max_len} caracteres (recibidos: {len(s)}).")
                 return s
@@ -404,27 +423,104 @@ def procesar_importacion():
 
     return redirect(url_for('trabajadores.importar'))
 
+def _generate_thumbnail(original_path: str, thumb_path: str, size: tuple = (100, 100)) -> None:
+    """Genera un thumbnail JPEG de `size` px a partir de `original_path`."""
+    from PIL import Image
+    with Image.open(original_path) as img:
+        img = img.convert('RGB')
+        img.thumbnail(size, Image.LANCZOS)
+        img.save(thumb_path, 'JPEG', quality=85, optimize=True)
+
+
+def _save_profile_picture(file, pp_folder: str, unique_filename: str) -> str:
+    """
+    Guarda la foto original y genera su thumbnail.
+    Devuelve la ruta relativa al UPLOAD_FOLDER de la imagen original
+    (p.ej. 'perfiles/pp_123_foto.jpg').
+    El thumbnail se guarda como 'perfiles/thumb_pp_123_foto.jpg'.
+    """
+    os.makedirs(pp_folder, exist_ok=True)
+    original_path = os.path.join(pp_folder, unique_filename)
+    file.save(original_path)
+
+    thumb_filename = f"thumb_{unique_filename}"
+    thumb_path = os.path.join(pp_folder, thumb_filename)
+    try:
+        _generate_thumbnail(original_path, thumb_path)
+    except Exception as e:
+        current_app.logger.warning(f"No se pudo generar thumbnail para {unique_filename}: {e}")
+
+    return f"perfiles/{unique_filename}"
+
+
+def _delete_profile_picture(foto_perfil_rel: str) -> None:
+    """Elimina la foto original y su thumbnail dado el path relativo almacenado en BD."""
+    from flask import current_app
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    original_path = os.path.join(upload_folder, foto_perfil_rel)
+    try:
+        if os.path.exists(original_path):
+            os.remove(original_path)
+    except Exception as e:
+        current_app.logger.error(f"Error eliminando foto original: {e}")
+
+    # thumb vive en la misma carpeta con prefijo 'thumb_'
+    folder, filename = os.path.split(original_path)
+    thumb_path = os.path.join(folder, f"thumb_{filename}")
+    try:
+        if os.path.exists(thumb_path):
+            os.remove(thumb_path)
+    except Exception as e:
+        current_app.logger.error(f"Error eliminando thumbnail: {e}")
+
+
+def _mask_pii(value: str, visible: int = 4) -> str:
+    """Oculta los caracteres centrales de un campo PII, dejando `visible` al inicio y al final."""
+    if not value or len(value) <= visible * 2:
+        return value
+    return value[:visible] + '*' * (len(value) - visible * 2) + value[-visible:]
+
+
 @bp.route('/get/<int:id>')
 @login_required
 def get_trabajador(id):
-    t = Trabajador.query.get_or_404(id)
+    from flask import session
+    t = (Trabajador.query
+         .options(
+             selectinload(Trabajador.credenciales),
+             selectinload(Trabajador.documentos),
+             # proyectos usa lazy='dynamic' (query object), no es compatible con selectinload
+         )
+         .filter_by(id=id)
+         .first_or_404())
+
     credenciales = [{'planta': c.planta, 'credencial_id': c.credencial_id, 'fecha_caducidad': c.fecha_caducidad.isoformat() if c.fecha_caducidad else None} for c in t.credenciales]
     documentos = [d.to_dict() for d in t.documentos]
-    
+
     # Extraer coordinadores de los proyectos activos asignados
     coordinadores_set = set()
     for p in t.proyectos:
         if p.activo and p.coordinador:
             coordinadores_set.add(p.coordinador.full_name or p.coordinador.username)
-            
+
     coordinadores_asignados = ", ".join(coordinadores_set) if coordinadores_set else "Ninguno asignado"
-    
+
+    # Solo admin y super_admin ven PII completa; otros roles reciben datos enmascarados
+    is_admin = session.get('role') in ('admin', 'super_admin')
+    curp = t.curp or ''
+    rfc  = t.rfc  or ''
+    nss  = t.nss  or ''
+    if not is_admin:
+        curp = _mask_pii(curp)
+        rfc  = _mask_pii(rfc)
+        nss  = _mask_pii(nss)
+
     data = {
         'id': t.id,
         'no_empleado': t.no_empleado,
         'nombre_apellidos': t.nombre_apellidos,
         'nombre': t.nombre,
-        
+
         # Laborales
         'tipo_mov': t.tipo_mov or '',
         'tipo_cont': t.tipo_cont or '',
@@ -436,11 +532,11 @@ def get_trabajador(id):
         'inicio': t.inicio.isoformat() if t.inicio else '',
         'termino_prueba': t.termino_prueba.isoformat() if t.termino_prueba else '',
         'fecha_baja': t.fecha_baja.isoformat() if t.fecha_baja else '',
-        
+
         # Generales
-        'curp': t.curp or '',
-        'rfc': t.rfc or '',
-        'nss': t.nss or '',
+        'curp': curp,
+        'rfc': rfc,
+        'nss': nss,
         'fecha_nacimiento': t.fecha_nacimiento.isoformat() if t.fecha_nacimiento else '',
         'sexo': t.sexo or '',
         'estado_civil': t.estado_civil or '',
@@ -497,8 +593,13 @@ def get_trabajador(id):
 def editar(id):
     try:
         t = Trabajador.query.get_or_404(id)
+
+        if not is_authorized_for_worker(t):
+            flash('Acceso denegado.', 'danger')
+            return redirect(url_for('trabajadores.index'))
+
         data = request.form
-        
+
         # Check uniqueness of no_empleado if it changed
         new_no = data.get('no_empleado')
         if new_no != t.no_empleado and Trabajador.query.filter_by(no_empleado=new_no).first():
@@ -509,7 +610,15 @@ def editar(id):
         if errores_longitud:
             flash("Error de longitud en los campos:<br>" + "<br>".join(errores_longitud), 'danger')
             return redirect(url_for('trabajadores.index'))
-            
+
+        # Validación de formato CURP y RFC (advertencia, no bloqueo, por registros históricos)
+        _curp_val = (data.get('curp') or '').strip().upper()
+        _rfc_val  = (data.get('rfc') or '').strip().upper()
+        if _curp_val and not _CURP_RE.match(_curp_val):
+            flash('Advertencia: El formato de CURP no es válido. Verifica antes de continuar.', 'warning')
+        if _rfc_val and not _RFC_RE.match(_rfc_val):
+            flash('Advertencia: El formato de RFC no es válido. Verifica antes de continuar.', 'warning')
+
         t.no_empleado = new_no
         t.nombre_apellidos = data.get('nombre_apellidos')
         t.nombre = data.get('nombre')
@@ -579,22 +688,11 @@ def editar(id):
                 if not allowed_image_file(file):
                     flash('Foto de perfil rechazada: solo se permiten imágenes JPG o PNG reales.', 'danger')
                     return redirect(url_for('trabajadores.index'))
-                # Delete old profile picture if exists
                 if t.foto_perfil:
-                    old_pp_path = os.path.join(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
-                    try:
-                        if os.path.exists(old_pp_path):
-                            os.remove(old_pp_path)
-                    except Exception as e:
-                        current_app.logger.error(f"Error deleting old profile pic: {e}")
-                
-                filename = secure_filename(file.filename)
-                unique_filename = f"pp_{int(time.time())}_{filename}"
+                    _delete_profile_picture(t.foto_perfil)
+                unique_filename = f"pp_{int(time.time())}_{secure_filename(file.filename)}"
                 pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
-                os.makedirs(pp_folder, exist_ok=True)
-                file_path = os.path.join(pp_folder, unique_filename)
-                file.save(file_path)
-                t.foto_perfil = f"perfiles/{unique_filename}"
+                t.foto_perfil = _save_profile_picture(file, pp_folder, unique_filename)
         
         # Update credentials
         try:
@@ -679,6 +777,7 @@ def guardar_credenciales(id):
 
 @bp.route('/eliminar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def eliminar(id):
     try:
         from datetime import date
@@ -702,6 +801,7 @@ def eliminar(id):
 
 @bp.route('/reactivar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def reactivar(id):
     try:
         t = Trabajador.query.get_or_404(id)
@@ -720,6 +820,288 @@ def reactivar(id):
         flash('Ocurrió un error al reactivar el trabajador.', 'danger')
         
     return redirect(url_for('trabajadores.bajas'))
+
+
+@bp.route('/exportar/<int:id>', methods=['GET'])
+@login_required
+def exportar_excel(id):
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from datetime import date as date_type
+
+    t = (Trabajador.query
+         .options(selectinload(Trabajador.credenciales))
+         .filter_by(id=id).first_or_404())
+
+    is_admin = session.get('role') in ('admin', 'super_admin')
+
+    def fmt_date(d):
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    def fmt_money(v):
+        return float(v) if v else ''
+
+    def mask(val):
+        if not val or is_admin:
+            return val or ''
+        return val[:3] + '***' + val[-2:] if len(val) > 5 else '***'
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Empleado"
+
+    AZUL_OSC = PatternFill("solid", fgColor="1E3A5F")
+    AZUL_HDR = PatternFill("solid", fgColor="2563EB")
+    BLANCO   = PatternFill("solid", fgColor="FFFFFF")
+
+    thin  = Side(style="thin",   color="CBD5E1")
+    thick = Side(style="medium", color="1E3A5F")
+    BORDER     = Border(left=thin,  right=thin,  top=thin,  bottom=thin)
+    BORDER_HDR = Border(left=thick, right=thick, top=thick, bottom=thick)
+    CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+
+    HEADERS = [
+        "No. Empleado", "Nombre(s)", "Apellidos", "RFC", "CURP", "NSS",
+        "Fecha Nacimiento", "Sexo", "Estado Civil", "Nacionalidad", "Edad",
+        "Correo", "Celular", "Domicilio",
+        "Área", "Puesto", "Tipo Movimiento", "Tipo Contrato",
+        "Fecha Ingreso", "Tipo Jornada", "Tipo Nómina", "Tipo Pago",
+        "Folio IDSE", "Desc. Servicio",
+        "Tipo Sangre", "Lentes", "Alergias", "Estatura", "Enf. Crónicas", "Licencia Conducir",
+        "Contacto Emergencia", "Parentesco", "Tel. Emergencia",
+        "Salario Pactado/Sem", "Salario Base", "SDI", "Letra/Categoría",
+        "Hrs Extra", "Infonavit", "Caja Ahorro", "Viáticos", "Día Festivo", "Pagos Efectivo",
+        "Ubicación Actual", "Estado Ubic.", "No. Proyecto", "Coord. a Cargo", "Observaciones",
+    ]
+
+    # ── Título ────────────────────────────────────────────────────────────────
+    ws.row_dimensions[1].height = 36
+    ws.merge_cells(f'A1:{get_column_letter(len(HEADERS))}1')
+    c = ws['A1']
+    c.value = f"{t.nombre} {t.nombre_apellidos}".upper() + f"  —  No. {t.no_empleado}  —  Generado: {date_type.today().strftime('%d/%m/%Y')}"
+    c.fill = AZUL_OSC
+    c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=13)
+    c.alignment = CENTER
+    c.border = BORDER_HDR
+
+    # ── Cabecera ─────────────────────────────────────────────────────────────
+    ws.row_dimensions[2].height = 22
+    for col_idx, header in enumerate(HEADERS, start=1):
+        c = ws.cell(row=2, column=col_idx, value=header)
+        c.fill = AZUL_HDR
+        c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=10)
+        c.alignment = CENTER
+        c.border = BORDER_HDR
+
+    # ── Fila de datos ─────────────────────────────────────────────────────────
+    ws.row_dimensions[3].height = 18
+    values = [
+        t.no_empleado, t.nombre, t.nombre_apellidos,
+        mask(t.rfc), mask(t.curp), mask(t.nss),
+        fmt_date(t.fecha_nacimiento), t.sexo, t.estado_civil, t.nacionalidad,
+        t.edad, t.correo, t.celular, t.domicilio,
+        t.area, t.puesto, t.tipo_mov, t.tipo_cont,
+        fmt_date(t.fecha_ingreso), t.tipo_jornada, t.tipo_nomina, t.tipo_pago,
+        t.folio_mov_idse, t.descripcion_servicio,
+        t.tipo_sangre, t.lentes, t.alergias, t.estatura,
+        t.enfermedades_cronicas, t.licencia_conducir,
+        t.contacto_emergencia, t.parentesco_contacto, t.numero_contacto_emerg,
+        fmt_money(t.salario_real_pactado_x_sem), fmt_money(t.sb), fmt_money(t.sdi),
+        t.letra, fmt_money(t.hr_extra), fmt_money(t.infonavit),
+        fmt_money(t.caja_ahorro), fmt_money(t.viaticos),
+        fmt_money(t.pago_dia_festivo), fmt_money(t.pagos_efectivo),
+        t.ubicacion_actual, t.ubicacion_estado, t.no_proyecto, t.coord_a_cargo,
+        t.observaciones,
+    ]
+    for col_idx, val in enumerate(values, start=1):
+        c = ws.cell(row=3, column=col_idx, value=val if val is not None else '')
+        c.fill = BLANCO
+        c.font = Font(name="Calibri", color="374151", size=10)
+        c.alignment = LEFT
+        c.border = BORDER
+
+    # ── Credenciales (hoja aparte si las hay) ─────────────────────────────────
+    if t.credenciales:
+        ws2 = wb.create_sheet("Credenciales")
+        ws2.row_dimensions[1].height = 22
+        for col_idx, label in enumerate(['Planta', 'ID Credencial', 'Caducidad', 'Estado'], start=1):
+            c = ws2.cell(row=1, column=col_idx, value=label)
+            c.fill = AZUL_HDR
+            c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=10)
+            c.alignment = CENTER
+            c.border = BORDER_HDR
+        today = date_type.today()
+        VERDE_CLR = PatternFill("solid", fgColor="D1FAE5")
+        ROJO_CLR  = PatternFill("solid", fgColor="FEE2E2")
+        for i, cred in enumerate(t.credenciales, start=2):
+            caducidad = cred.fecha_caducidad
+            cad_str = caducidad.strftime('%d/%m/%Y') if caducidad else ''
+            vencida = caducidad and caducidad < today
+            estado = "CADUCADA" if vencida else "VIGENTE"
+            row_fill = ROJO_CLR if vencida else VERDE_CLR
+            for col_idx, val in enumerate([cred.planta, cred.credencial_id, cad_str, estado], start=1):
+                c = ws2.cell(row=i, column=col_idx, value=val or '')
+                c.fill = row_fill
+                c.font = Font(name="Calibri", color="7F1D1D" if vencida else "065F46", size=10)
+                c.alignment = LEFT
+                c.border = BORDER
+        for col_idx, w in enumerate([20, 20, 14, 12], start=1):
+            ws2.column_dimensions[get_column_letter(col_idx)].width = w
+
+    # ── Anchos ───────────────────────────────────────────────────────────────
+    col_widths = [14,18,20,14,20,14,14,8,14,14,6,28,14,32,
+                  16,20,16,16,14,14,14,12,12,20,
+                  12,8,16,10,16,16,
+                  22,14,14,
+                  16,14,12,14,12,12,12,12,12,14,
+                  20,16,14,20,24]
+    for i, w in enumerate(col_widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.freeze_panes = 'A3'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe_name = f"{t.no_empleado}_{(t.nombre_apellidos or '').replace(' ', '_')}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=safe_name,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@bp.route('/exportar-todos', methods=['GET'])
+@login_required
+def exportar_todos():
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from datetime import date as date_type
+
+    is_admin = session.get('role') in ('admin', 'super_admin')
+    trabajadores = (Trabajador.query
+                    .filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
+                    .order_by(func.lower(Trabajador.nombre))
+                    .all())
+
+    def fmt_date(d):
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    def fmt_money(v):
+        return float(v) if v else ''
+
+    def mask(val):
+        if not val or is_admin:
+            return val or ''
+        return val[:3] + '***' + val[-2:] if len(val) > 5 else '***'
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Empleados"
+
+    AZUL_OSC = PatternFill("solid", fgColor="1E3A5F")
+    AZUL_HDR = PatternFill("solid", fgColor="2563EB")
+    GRIS_ALT = PatternFill("solid", fgColor="F1F5F9")
+    BLANCO   = PatternFill("solid", fgColor="FFFFFF")
+
+    thin  = Side(style="thin",   color="CBD5E1")
+    thick = Side(style="medium", color="1E3A5F")
+    BORDER     = Border(left=thin,  right=thin,  top=thin,  bottom=thin)
+    BORDER_HDR = Border(left=thick, right=thick, top=thick, bottom=thick)
+    CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+
+    HEADERS = [
+        "No. Empleado", "Nombre(s)", "Apellidos", "RFC", "CURP", "NSS",
+        "Fecha Nacimiento", "Sexo", "Estado Civil", "Nacionalidad", "Edad",
+        "Correo", "Celular", "Domicilio",
+        "Área", "Puesto", "Tipo Movimiento", "Tipo Contrato",
+        "Fecha Ingreso", "Tipo Jornada", "Tipo Nómina", "Tipo Pago",
+        "Folio IDSE", "Desc. Servicio",
+        "Tipo Sangre", "Lentes", "Alergias", "Estatura", "Enf. Crónicas", "Licencia Conducir",
+        "Contacto Emergencia", "Parentesco", "Tel. Emergencia",
+        "Salario Pactado/Sem", "Salario Base", "SDI", "Letra/Categoría",
+        "Hrs Extra", "Infonavit", "Caja Ahorro", "Viáticos", "Día Festivo", "Pagos Efectivo",
+        "Ubicación Actual", "Estado Ubic.", "No. Proyecto", "Coord. a Cargo",
+    ]
+
+    # ── Fila de título ────────────────────────────────────────────────────────
+    ws.row_dimensions[1].height = 38
+    ws.merge_cells(f'A1:{get_column_letter(len(HEADERS))}1')
+    c = ws['A1']
+    c.value = f"LISTADO DE EMPLEADOS — Generado: {date_type.today().strftime('%d/%m/%Y')}"
+    c.fill = AZUL_OSC
+    c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=14)
+    c.alignment = CENTER
+    c.border = BORDER_HDR
+
+    # ── Cabecera de columnas ──────────────────────────────────────────────────
+    ws.row_dimensions[2].height = 22
+    for col_idx, header in enumerate(HEADERS, start=1):
+        c = ws.cell(row=2, column=col_idx, value=header)
+        c.fill = AZUL_HDR
+        c.font = Font(name="Calibri", color="FFFFFF", bold=True, size=10)
+        c.alignment = CENTER
+        c.border = BORDER_HDR
+
+    # ── Datos ─────────────────────────────────────────────────────────────────
+    for row_idx, t in enumerate(trabajadores, start=3):
+        alt = (row_idx % 2 == 0)
+        fill = GRIS_ALT if alt else BLANCO
+        ws.row_dimensions[row_idx].height = 16
+
+        values = [
+            t.no_empleado, t.nombre, t.nombre_apellidos,
+            mask(t.rfc), mask(t.curp), mask(t.nss),
+            fmt_date(t.fecha_nacimiento), t.sexo, t.estado_civil, t.nacionalidad,
+            t.edad, t.correo, t.celular, t.domicilio,
+            t.area, t.puesto, t.tipo_mov, t.tipo_cont,
+            fmt_date(t.fecha_ingreso), t.tipo_jornada, t.tipo_nomina, t.tipo_pago,
+            t.folio_mov_idse, t.descripcion_servicio,
+            t.tipo_sangre, t.lentes, t.alergias, t.estatura,
+            t.enfermedades_cronicas, t.licencia_conducir,
+            t.contacto_emergencia, t.parentesco_contacto, t.numero_contacto_emerg,
+            fmt_money(t.salario_real_pactado_x_sem), fmt_money(t.sb), fmt_money(t.sdi),
+            t.letra, fmt_money(t.hr_extra), fmt_money(t.infonavit),
+            fmt_money(t.caja_ahorro), fmt_money(t.viaticos),
+            fmt_money(t.pago_dia_festivo), fmt_money(t.pagos_efectivo),
+            t.ubicacion_actual, t.ubicacion_estado, t.no_proyecto, t.coord_a_cargo,
+        ]
+
+        for col_idx, val in enumerate(values, start=1):
+            c = ws.cell(row=row_idx, column=col_idx, value=val if val is not None else '')
+            c.fill = fill
+            c.font = Font(name="Calibri", color="374151", size=10)
+            c.alignment = LEFT
+            c.border = BORDER
+
+    # ── Anchos automáticos (estimados) ───────────────────────────────────────
+    col_widths = [14,18,20,14,20,14,14,8,14,14,6,28,14,32,
+                  16,20,16,16,14,14,14,12,12,20,
+                  12,8,16,10,16,16,
+                  22,14,14,
+                  16,14,12,14,12,12,12,12,12,14,
+                  20,16,14,20]
+    for i, w in enumerate(col_widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.freeze_panes = 'A3'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"empleados_{date_type.today().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=fname,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
 
 @bp.route('/<int:id>/documentos', methods=['POST'])
 @login_required
@@ -754,8 +1136,10 @@ def upload_documento(id):
         f_inicio = _parse_date(fecha_inicio_str) if fecha_inicio_str else None
         f_fin = _parse_date(fecha_fin_str) if fecha_fin_str else None
         
-        # Parse optional tipo_documento
+        # Parse optional tipo_documento — validar contra lista blanca
         tipo_doc = request.form.get('tipo_documento', '').strip() or None
+        if tipo_doc and tipo_doc not in TIPOS_DOCUMENTO_VALIDOS:
+            return jsonify({'error': 'Tipo de documento no válido'}), 400
         
         # Relate to DB path
         db_path = f"trabajadores/{t.id}/{unique_filename}"
@@ -792,6 +1176,23 @@ def get_foto_perfil(id):
     if not t.foto_perfil:
         return jsonify({'error': 'No encontrado'}), 404
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
+
+
+@bp.route('/foto/<int:id>/thumb', methods=['GET'])
+@login_required
+def get_foto_perfil_thumb(id):
+    t = Trabajador.query.get_or_404(id)
+    if not is_authorized_for_worker(t):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not t.foto_perfil:
+        return jsonify({'error': 'No encontrado'}), 404
+    folder, filename = os.path.split(t.foto_perfil)
+    thumb_rel = os.path.join(folder, f"thumb_{filename}").replace('\\', '/')
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    if os.path.exists(os.path.join(upload_folder, thumb_rel)):
+        return send_from_directory(upload_folder, thumb_rel)
+    # Fallback a la imagen original si el thumbnail no existe (fotos pre-migración)
+    return send_from_directory(upload_folder, t.foto_perfil)
     
 @bp.route('/documento/<int:doc_id>', methods=['DELETE'])
 @login_required

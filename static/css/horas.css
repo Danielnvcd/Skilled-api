@@ -382,3 +382,170 @@
 .delete-btn:hover {
     opacity: 1;
 }
+
+/* ── Tabla Semanal por Trabajador ─────────────────────────────────────────── */
+.tabla-semanal {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+
+.tabla-semanal th {
+    background: #F9FAFB;
+    padding: 0.55rem 0.5rem;
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    border-bottom: 2px solid var(--border);
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.tabla-semanal td {
+    border: 1px solid #F0F0F0;
+    padding: 0.45rem 0.4rem;
+    vertical-align: middle;
+}
+
+.th-dia { min-width: 88px; }
+.th-fin-semana { background: #F5F3FF !important; color: #6D28D9 !important; }
+.th-total { background: #EEF2FF !important; color: var(--primary) !important; }
+
+.td-trabajador {
+    min-width: 160px;
+    padding: 0.55rem 0.75rem;
+    background: #FAFAFA;
+    border-right: 2px solid var(--border) !important;
+}
+
+.celda-dia {
+    text-align: center;
+    min-width: 88px;
+    vertical-align: middle;
+    position: relative;
+    transition: background 0.13s;
+}
+
+.celda-con-dato {
+    background: #F0FDF4;
+    cursor: pointer;
+}
+.celda-con-dato:hover { background: #DCFCE7; }
+
+.celda-vacia { cursor: pointer; }
+.celda-vacia:hover { background: #F5F3FF; }
+
+.celda-fin-semana { background: #FAFAFA; }
+.celda-fin-semana.celda-vacia:hover { background: #EDE9FE; }
+
+.celda-agregar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #E5E7EB;
+    color: #9CA3AF;
+    font-size: 1.15rem;
+    font-weight: 700;
+    transition: all 0.13s;
+    line-height: 1;
+}
+.celda-vacia:hover .celda-agregar {
+    background: var(--primary);
+    color: white;
+    transform: scale(1.15);
+}
+
+.celda-horario {
+    font-family: monospace;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.celda-horas {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--success);
+}
+
+.celda-incidencia {
+    display: inline-block;
+    font-size: 0.7rem;
+    background: #FEE2E2;
+    color: #B91C1C;
+    padding: 2px 5px;
+    border-radius: 4px;
+    max-width: 82px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.celda-badges {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin-top: 3px;
+}
+
+.badge-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    font-size: 0.62rem;
+    font-weight: 700;
+}
+
+.badge-viaticos { background: #FEF3C7; color: #D97706; }
+.badge-festivo  { background: #EDE9FE; color: #7C3AED; }
+.badge-comida   { background: #E0F2FE; color: #0369A1; }
+
+.celda-total {
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--primary);
+    background: #EEF2FF;
+    white-space: nowrap;
+    border-left: 2px solid #C7D2FE !important;
+}
+
+.fila-totales td {
+    background: #F3F4F6;
+    border-top: 2px solid var(--border) !important;
+    font-size: 0.82rem;
+    text-align: center;
+    padding: 0.5rem;
+}
+.fila-totales td:first-child { text-align: left; padding-left: 0.75rem; }
+
+/* ── Tarjetas de trabajadores ─────────────────────────────────────────────── */
+.worker-card {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 155px;
+    user-select: none;
+}
+.worker-card:hover {
+    border-color: var(--primary);
+    background: #F5F3FF;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.12);
+}
+.worker-card.activo {
+    border-color: var(--primary);
+    background: #EEF2FF;
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.15);
+}

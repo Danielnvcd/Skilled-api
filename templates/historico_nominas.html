@@ -2,176 +2,277 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/historico.css') }}">
+<style>
+    /* ── Week card ── */
+    .hn-card {
+        background: var(--bg-card, white);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        border-left: 5px solid #0b5fb4;
+        margin-bottom: 1rem;
+        display: grid;
+        grid-template-columns: 160px 1fr auto;
+        align-items: stretch;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .hn-card:hover {
+        box-shadow: 0 6px 18px rgba(11,95,180,0.1);
+        transform: translateY(-1px);
+    }
+    @media (max-width: 768px) { .hn-card { grid-template-columns: 1fr; } }
+
+    /* Date panel */
+    .hn-date-panel {
+        background: linear-gradient(160deg, #0b5fb4 0%, #094d8f 100%);
+        color: white;
+        padding: 1.25rem 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 160px;
+        min-width: 160px;
+        max-width: 160px;
+        text-align: center;
+    }
+    .hn-date-label { font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; }
+    .hn-date-value {
+        font-size: 0.9rem; font-weight: 700; margin-top: 4px; line-height: 1.45;
+        word-break: break-word; white-space: normal;
+    }
+    .hn-date-badge {
+        margin-top: 8px;
+        background: rgba(255,255,255,0.18);
+        font-size: 0.68rem; font-weight: 600;
+        padding: 2px 10px; border-radius: 20px;
+        letter-spacing: 0.3px; white-space: nowrap;
+    }
+
+    /* Projects panel */
+    .hn-projects {
+        padding: 1rem 1.5rem;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.35rem;
+    }
+    .hn-projects-label {
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.4px; color: var(--text-muted); margin-bottom: 4px;
+    }
+    .hn-project-item {
+        display: flex; align-items: center; gap: 0.5rem;
+        font-size: 0.85rem; color: var(--text-main);
+    }
+    .hn-project-dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: #0b5fb4; flex-shrink: 0;
+    }
+    .hn-project-name { font-weight: 600; }
+    .hn-project-coord { color: var(--text-muted); font-size: 0.78rem; }
+    .hn-more {
+        font-size: 0.75rem; color: var(--text-muted);
+        font-style: italic; padding-left: 1.1rem;
+    }
+
+    /* Actions panel */
+    .hn-actions {
+        padding: 1rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 0.5rem;
+        min-width: 180px;
+    }
+    .hn-status-badge {
+        font-size: 0.72rem; font-weight: 700;
+        background: #dcfce7; color: #15803d;
+        border: 1px solid #bbf7d0;
+        padding: 3px 10px; border-radius: 20px;
+        display: inline-flex; align-items: center; gap: 4px;
+    }
+    .btn-desglose {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        background: linear-gradient(135deg, #0b5fb4, #094d8f);
+        color: white; text-decoration: none;
+        padding: 7px 14px; border-radius: 8px;
+        font-size: 0.83rem; font-weight: 600;
+        transition: filter 0.2s, transform 0.15s;
+        box-shadow: 0 2px 6px rgba(11,95,180,0.25);
+        white-space: nowrap;
+    }
+    .btn-desglose:hover { filter: brightness(1.1); transform: translateY(-1px); color: white; text-decoration: none; }
+
+    .btn-excel {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        background: #f0fdf4; color: #15803d;
+        border: 1px solid #bbf7d0;
+        text-decoration: none;
+        padding: 6px 12px; border-radius: 8px;
+        font-size: 0.78rem; font-weight: 600;
+        transition: background 0.15s;
+        white-space: nowrap;
+    }
+    .btn-excel:hover { background: #dcfce7; color: #15803d; text-decoration: none; }
+
+    /* Filter bar */
+    .hn-filter-bar {
+        display: flex; align-items: center; gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg-card);
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        margin-bottom: 1.5rem;
+        width: fit-content;
+    }
+    .hn-filter-bar svg { color: #9ca3af; flex-shrink: 0; }
+    .hn-filter-label { font-size: 0.88rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+    .hn-filter-input {
+        border: 1px solid var(--border); outline: none;
+        background: transparent; font-size: 0.9rem;
+        color: var(--text-main); padding: 4px 8px;
+        border-radius: 7px; cursor: pointer;
+    }
+    .hn-filter-clear {
+        color: #9ca3af; font-size: 1.1rem; line-height: 1;
+        text-decoration: none; padding: 0 4px;
+        transition: color 0.15s;
+    }
+    .hn-filter-clear:hover { color: #e31a1c; text-decoration: none; }
+
+    /* Pagination */
+    .pg-btn { padding: 0.45rem 0.7rem; border-radius: 6px; text-decoration: none; font-size: 0.85rem; }
+    .pg-disabled { pointer-events: none; opacity: 0.4; }
+    .pg-active {
+        background: #0b5fb4; color: white;
+        border-color: #0b5fb4; font-weight: 700;
+        pointer-events: none; border: 1px solid #0b5fb4;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="horas-wrapper">
+
+    <!-- Header -->
     <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title">Histórico de Pagos de Nómina</h1>
-            <p class="subtitle">Consulta o imprime las nóminas globales que ya fueron calculadas y aprobadas, separadas
-                por proyecto.</p>
+            <h1 class="main-title">
+                <i class="fas fa-file-invoice-dollar" style="color:#0b5fb4; margin-right:10px;"></i>
+                Histórico de Pagos de Nómina
+            </h1>
+            <p class="subtitle">Consulta o imprime las nóminas globales calculadas y aprobadas, separadas por proyecto.</p>
         </div>
     </div>
 
     <div style="margin-bottom: 2rem;">
-        <h3 style="color: var(--text-main); margin-bottom: 1rem; font-size: 1.25rem;">Nóminas Procesadas</h3>
 
-        <!-- Buscador de Fechas -->
-        <div
-            style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 1rem;">
-            <form action="{{ url_for('historico.index') }}" method="GET"
-                style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border); flex: 1; max-width: max-content;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-                <label
-                    style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500; white-space: nowrap;">Filtrar
-                    por fecha:</label>
-                <input type="date" name="search_date" value="{{ search_date }}" onchange="this.form.submit()"
-                    style="flex: 0 0 auto; border: 1px solid var(--border); outline: none; background: transparent; font-size: 0.95rem; color: var(--text-main); padding: 0.35rem 0.5rem; border-radius: 8px; cursor: pointer;">
-                {% if search_date %}
-                <a href="{{ url_for('historico.index') }}" title="Limpiar filtro"
-                    style="background: none; border: none; cursor: pointer; color: #9CA3AF; font-size: 1.2rem; padding: 0 0.5rem; text-decoration: none;">&times;</a>
-                {% endif %}
-            </form>
-            {# Global export removed #}
-        </div>
+        <!-- Filter bar -->
+        <form action="{{ url_for('historico.index') }}" method="GET" class="hn-filter-bar">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <label class="hn-filter-label">Filtrar por fecha:</label>
+            <input type="date" name="search_date" value="{{ search_date }}" onchange="this.form.submit()"
+                class="hn-filter-input">
+            {% if search_date %}
+            <a href="{{ url_for('historico.index') }}" class="hn-filter-clear" title="Limpiar filtro">&times;</a>
+            {% endif %}
+        </form>
 
         {% if search_date and not semanas %}
-        <div id="noResultsHistorico"
-            style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
-            <i class="fa-solid fa-calendar-xmark"
-                style="font-size: 1.5rem; margin-bottom: 0.5rem; display:block; opacity:0.5;"></i>
+        <div style="text-align:center; padding: 2.5rem; color: var(--text-muted); font-size: 0.95rem;">
+            <i class="fa-solid fa-calendar-xmark" style="font-size:1.8rem; display:block; margin-bottom:0.5rem; opacity:0.4;"></i>
             No se encontraron nóminas para la fecha seleccionada.
         </div>
         {% endif %}
 
         {% for s in semanas %}
-        <div class="hist-card" data-fecha-inicio="{{ s.fecha_inicio.strftime('%Y-%m-%d') }}">
-            <div class="info-block" style="min-width: 200px;">
-                <span
-                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600;">Nómina
-                    Guardada</span>
-                <strong style="font-size: 1.1rem; color: var(--text-main);">Semana del {{
-                    s.fecha_inicio|fecha_es('completo')
-                    }}</strong>
-                <span style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-top: 2px;">{{
-                    s.proyectos|length }} proyecto(s)
-                    cerrados</span>
-            </div>
+        <div class="hn-card" data-fecha-inicio="{{ s.fecha_inicio.strftime('%Y-%m-%d') }}">
 
-            <div class="info-block"
-                style="flex: 1; margin: 0 1.5rem; padding-left: 1rem; border-left: 2px solid var(--border);">
-                <span
-                    style="font-size: 0.8rem; text-transform:uppercase; color:var(--text-muted); font-weight:600; margin-bottom: 4px;">Proyectos
-                    Consolidados</span>
-                <div
-                    style="display: flex; flex-direction: column; gap: 4px; max-height: 80px; overflow-y: auto; padding-right: 5px;">
-                    {% for rep in s.proyectos %}
-                    <div style="font-size: 0.85rem; color: var(--text-main);">
-                        <i class="fa-solid fa-folder" style="color: #6366f1; margin-right: 4px;"></i>
-                        <strong>{{ rep.proyecto.nombre }}</strong>
-                        <span style="color: var(--text-muted); margin-left: 4px;">
-                            (Coord: {{ (rep.proyecto.coordinador.full_name or rep.proyecto.coordinador.username) if
-                            rep.proyecto.coordinador else 'Sin asignar' }})
-                        </span>
-                    </div>
-                    {% endfor %}
+            <!-- Date panel -->
+            <div class="hn-date-panel">
+                <div class="hn-date-label">Semana</div>
+                <div class="hn-date-value">{{ s.fecha_inicio|fecha_es('completo') }}</div>
+                <div class="hn-date-badge">
+                    <i class="fas fa-folder" style="margin-right:3px;"></i>
+                    {{ s.proyectos|length }} proyecto{{ 's' if s.proyectos|length != 1 else '' }}
                 </div>
             </div>
 
-            <div class="info-block"
-                style="text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
-                <span class="badge"
-                    style="background:#D1FAE5; color:#064E3B; margin-bottom: 0.5rem; display:inline-block; font-size:0.75rem; padding: 4px 10px; border-radius:12px; width: max-content; text-align: center; font-weight: 600;">Pagada
-                    / Cerrada</span>
-                <br>
-                <a href="{{ url_for('historico.detalle', fecha_str=s.fecha_str) }}" class="btn-primary"
-                    style="font-size: 0.9rem; padding: 0.5rem 1rem;">
-                    Ver Desglose por Proyecto
-                </a>
+            <!-- Projects panel -->
+            <div class="hn-projects">
+                <div class="hn-projects-label">
+                    <i class="fas fa-layer-group" style="margin-right:4px;"></i>Proyectos Consolidados
+                </div>
+                {% for rep in s.proyectos[:4] %}
+                <div class="hn-project-item">
+                    <div class="hn-project-dot"></div>
+                    <div>
+                        <span class="hn-project-name">{{ rep.proyecto.nombre }}</span>
+                        <span class="hn-project-coord">
+                            · {{ (rep.proyecto.coordinador.full_name or rep.proyecto.coordinador.username) if rep.proyecto.coordinador else 'Sin asignar' }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if s.proyectos|length > 4 %}
+                <div class="hn-more">+ {{ s.proyectos|length - 4 }} más...</div>
+                {% endif %}
+            </div>
 
+            <!-- Actions panel -->
+            <div class="hn-actions">
+                <span class="hn-status-badge">
+                    <i class="fas fa-check-circle"></i> Pagada / Cerrada
+                </span>
+                <a href="{{ url_for('historico.detalle', fecha_str=s.fecha_str) }}" class="btn-desglose">
+                    <i class="fas fa-chart-bar"></i> Ver Desglose
+                </a>
                 {% if session.get('role') == 'admin' %}
-                <a href="{{ url_for('reportes.excel_historico', fecha_str=s.fecha_str) }}" class="btn-primary"
-                    style="background: #10b981; font-size: 0.85rem; padding: 0.4rem 0.8rem; margin-top: 0.5rem; display: inline-flex; align-items: center; gap: 0.5rem;">
-                    <i class="fa-solid fa-file-excel"></i> Exportar esta Semana
+                <a href="{{ url_for('reportes.excel_historico', fecha_str=s.fecha_str) }}" class="btn-excel">
+                    <i class="fa-solid fa-file-excel"></i> Exportar Excel
                 </a>
                 {% endif %}
             </div>
+
         </div>
         {% else %}
-        <div class="historico-empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem; color: #9CA3AF;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin histórico disponible</h4>
-            <p style="margin:0;">Aún no has generado ni guardado ninguna nómina global.</p>
+        <div style="text-align:center; padding:3rem; background:var(--bg-card); border-radius:14px; border:1px dashed var(--border);">
+            <i class="fas fa-file-invoice-dollar" style="font-size:2.5rem; color:#d1d5db; display:block; margin-bottom:1rem;"></i>
+            <h4 style="margin:0 0 0.5rem; font-size:1.1rem; color:var(--text-main);">Sin histórico disponible</h4>
+            <p style="margin:0; color:var(--text-muted);">Aún no has generado ni guardado ninguna nómina global.</p>
         </div>
         {% endfor %}
 
         <!-- Paginación -->
         {% if pagination.pages > 1 %}
-        <style>
-            .pg-btn {
-                padding: 0.5rem 0.75rem;
-                border-radius: 4px;
-                text-decoration: none;
-            }
-
-            .pg-disabled {
-                pointer-events: none;
-                opacity: 0.5;
-            }
-
-            .pg-active {
-                background-color: var(--primary);
-                color: white;
-                border-color: var(--primary);
-                font-weight: bold;
-                pointer-events: none;
-                border: 1px solid var(--primary);
-            }
-        </style>
-        <div
-            style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
-            <div style="display: flex; gap: 0.25rem;">
+        <div style="padding:1.5rem; display:flex; justify-content:center; border-top:1px solid var(--border); margin-top:1rem;">
+            <div style="display:flex; gap:0.25rem;">
                 <a href="{{ url_for('historico.index', page=1, search_date=search_date) }}"
-                    class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
-                    &laquo; Primera
-                </a>
+                    class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled{% endif %}">&laquo; Primera</a>
                 <a href="{{ url_for('historico.index', page=pagination.prev_num, search_date=search_date) }}"
-                    class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled disabled{% endif %}">
-                    &lsaquo; Anterior
-                </a>
-
+                    class="btn-secondary pg-btn {% if not pagination.has_prev %}pg-disabled{% endif %}">&lsaquo; Anterior</a>
                 {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                 {% if page_num %}
                 <a href="{{ url_for('historico.index', page=page_num, search_date=search_date) }}"
-                    class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active active{% endif %}">
-                    {{ page_num }}
-                </a>
+                    class="btn-secondary pg-btn {% if page_num == pagination.page %}pg-active{% endif %}">{{ page_num }}</a>
                 {% else %}
-                <span class="btn-secondary pg-btn pg-disabled disabled">...</span>
+                <span class="btn-secondary pg-btn pg-disabled">...</span>
                 {% endif %}
                 {% endfor %}
-
                 <a href="{{ url_for('historico.index', page=pagination.next_num, search_date=search_date) }}"
-                    class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled disabled{% endif %}">
-                    Siguiente &rsaquo;
-                </a>
+                    class="btn-secondary pg-btn {% if not pagination.has_next %}pg-disabled{% endif %}">Siguiente &rsaquo;</a>
                 <a href="{{ url_for('historico.index', page=pagination.pages, search_date=search_date) }}"
-                    class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled disabled{% endif %}">
-                    Última &raquo;
-                </a>
+                    class="btn-secondary pg-btn {% if pagination.page == pagination.pages %}pg-disabled{% endif %}">Última &raquo;</a>
             </div>
         </div>
         {% endif %}

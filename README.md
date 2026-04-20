@@ -178,4 +178,106 @@ SISTEMA DE NOMINAS/
 
 ---
 
+## 🌐 Producción y Despliegue (Ubuntu/Gunicorn)
+
+Para entornos de producción, se recomienda utilizar **Gunicorn** con workers de **Uvicorn** para manejar tanto Flask como FastAPI de forma simultánea.
+
+### 1. Requisitos para el Servidor
+Asegúrate de instalar las dependencias y tener `uvicorn` y `gunicorn` en tu entorno virtual:
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Compilar Tailwind CSS
+El archivo `static/css/tailwind.css` **no se incluye en el repositorio** (está en `.gitignore`) porque se genera a partir del código fuente. Debes compilarlo en el servidor antes de arrancar la aplicación:
+
+```bash
+# Generar el CSS minificado de producción
+python build_tailwind.py
+```
+
+Esto escanea todos los templates HTML y archivos JS, y genera `static/css/tailwind.css` (~40 KB minificado).
+
+> Si en el futuro modificas clases de Tailwind en los templates, vuelve a ejecutar `python build_tailwind.py` y reinicia el servidor.
+>
+> Para desarrollo local con recarga automática al guardar cambios: `python build_tailwind.py --watch`
+
+### 3. Configuración de Systemd (`/etc/systemd/system/nominas.service`)
+Utiliza la siguiente plantilla para mantener el servidor siempre encendido:
+
+```ini
+[Unit]
+Description=Sistema de Nominas - Gunicorn (Flask + FastAPI)
+After=network.target postgresql.service redis.service
+
+[Service]
+User=sistemanominas
+Group=www-data
+WorkingDirectory=/opt/nominas
+Environment="PATH=/opt/nominas/venv/bin"
+EnvironmentFile=/opt/nominas/.env
+# Ejecución con UvicornWorker para cargar root_app (FastAPI + Flask)
+ExecStart=/opt/nominas/venv/bin/gunicorn --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:8000 --timeout 120 --access-logfile - run:root_app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 4. Comandos de Gestión
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nominas
+sudo systemctl start nominas
+sudo systemctl status nominas
+```
+
+### 5. Configuración de Nginx (`/etc/nginx/sites-available/default`)
+Para un correcto funcionamiento (especialmente con HTTPS/Cloudflare), asegúrate de que tu bloque de Nginx tenga los encabezados de proxy adecuados:
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+    client_max_body_size 50M;
+
+    # Compresión gzip
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Archivos estáticos
+    location /static/ {
+        alias /opt/nominas/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Proxy Principal
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # IMPORTANTE para FastAPI: respetar el protocolo original (HTTPS)
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+
+        # Soporte para WebSockets
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        proxy_read_timeout 120s;
+    }
+}
+```
+
+### 💡 ¿Por qué es necesaria esta configuración?
+
+- **ASGI + WSGI**: Gunicorn por defecto solo entiende Flask (WSGI). Al agregar `uvicorn.workers.UvicornWorker`, le permitimos procesar también FastAPI (ASGI) de forma eficiente.
+- **Protocolo HTTPS (X-Forwarded-Proto)**: FastAPI es estricto con la seguridad. Sin el encabezado `$http_x_forwarded_proto`, la documentación de la API (`/api/docs`) y las redirecciones intentarían usar `http`, provocando errores de **Contenido Mixto** que el navegador bloquearía.
+- **WebSockets**: Los encabezados de `Upgrade` y `Connection` permiten que FastAPI maneje conexiones persistentes en tiempo real si se requieren en el futuro.
+
+---
+
 > _Desarrollado para mantener la contabilidad organizada, veloz e inquebrantable._

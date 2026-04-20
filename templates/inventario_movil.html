@@ -1,0 +1,212 @@
+{% extends "base_movil.html" %}
+
+{% block title %}Escáner Móvil{% endblock %}
+
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_movil.css') }}?v=3">
+<meta name="theme-color" content="#eff6ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+{% endblock %}
+
+{% block content %}
+
+<!-- Toast -->
+<div id="toast" class="toast" aria-live="polite"></div>
+
+<!-- Loading -->
+<div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+</div>
+
+<!-- ═══ VIEW: SCANNER ═══ -->
+<section id="view-scanner" class="view active">
+    <header class="app-header">
+        <div class="header-left">
+            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled" class="header-logo">
+            <div class="header-brand">
+                <h2 class="header-title">Inventario</h2>
+                <p class="header-sub">{{ session.get('user', '') }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="btn-refresh" class="btn-icon" title="Recargar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+            </button>
+            <form method="POST" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-icon" title="Cerrar sesión">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </header>
+
+    <div class="scanner-content">
+        <div class="scanner-hero">
+            <div class="hero-icon">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                    <line x1="7" y1="12" x2="17" y2="12" />
+                </svg>
+            </div>
+            <h2>Escanear Estante</h2>
+            <p>Apunta la cámara al código QR pegado en el estante para registrar entradas y salidas</p>
+        </div>
+
+        <button id="btn-scan" class="btn btn-primary btn-full btn-large">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+            </svg>
+            <span>Escanear QR</span>
+        </button>
+
+        <!-- Lector QR en Modal -->
+        <div id="modal-scanner"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden">
+            <div
+                class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col gap-4 p-5 animate-in fade-in zoom-in duration-300">
+                <div class="flex justify-between items-center mb-1">
+                    <h3 class="text-lg font-bold text-gray-800">Escaneando Estante...</h3>
+                    <button id="btn-close-scanner"
+                        class="text-gray-400 hover:text-gray-700 font-bold text-xl">&times;</button>
+                </div>
+
+                <div id="qr-reader" class="qr-reader w-full"></div>
+
+                <button id="btn-stop-scan" class="btn btn-danger btn-full">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    </svg>
+                    <span>Cancelar escaneo</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ VIEW: MOVEMENT FORM ═══ -->
+<section id="view-form" class="view">
+    <header class="app-header">
+        <button id="btn-back" class="btn-icon" title="Volver">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+            </svg>
+        </button>
+        <h2 class="header-title">Registrar Movimiento</h2>
+        <div style="width:44px"></div>
+    </header>
+
+    <div class="form-content">
+        <div class="movement-card">
+            <div>
+                <div class="warehouse-badge" id="almacen-badge">Almacén</div>
+                <h2 class="warehouse-name" id="almacen-nombre" style="margin-top: 8px;">---</h2>
+            </div>
+
+            <input type="hidden" id="almacen_id">
+
+            <div class="field-group">
+                <label class="field-label">Producto</label>
+                <select id="producto_id" class="field-select">
+                    <option value="">Cargando catálogo...</option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">Tipo de Movimiento</label>
+                <div class="tipo-chips">
+                    <button type="button" class="tipo-chip active-entrada" data-tipo="ENTRADA"
+                        style="display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14" />
+                            <path d="m19 12-7 7-7-7" />
+                        </svg>
+                        Entrada
+                    </button>
+                    <button type="button" class="tipo-chip" data-tipo="SALIDA"
+                        style="display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 19V5" />
+                            <path d="m5 12 7-7 7 7" />
+                        </svg>
+                        Salida
+                    </button>
+                    <button type="button" class="tipo-chip" data-tipo="AJUSTE"
+                        style="display:flex; align-items:center; justify-content:center; gap:6px;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="4" y1="21" x2="4" y2="14" />
+                            <line x1="4" y1="10" x2="4" y2="3" />
+                            <line x1="12" y1="21" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12" y2="3" />
+                            <line x1="20" y1="21" x2="20" y2="16" />
+                            <line x1="20" y1="12" x2="20" y2="3" />
+                            <line x1="1" y1="14" x2="7" y2="14" />
+                            <line x1="9" y1="8" x2="15" y2="8" />
+                            <line x1="17" y1="16" x2="23" y2="16" />
+                        </svg>
+                        Ajuste
+                    </button>
+                </div>
+                <input type="hidden" id="tipo" value="ENTRADA">
+            </div>
+
+            <div class="field-group">
+                <label class="field-label">Cantidad</label>
+                <input type="number" step="0.01" id="cantidad" class="field-input" placeholder="0" min="0.01">
+            </div>
+
+            <button id="btn-save" class="btn btn-primary btn-full btn-large">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                </svg>
+                <span>Guardar Movimiento</span>
+            </button>
+
+            <button id="btn-scan-another" class="btn btn-ghost btn-full">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                </svg>
+                <span>Escanear otro estante</span>
+            </button>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="{{ url_for('static', filename='js/inventario_movil.js') }}?v=14"></script>
+{% endblock %}

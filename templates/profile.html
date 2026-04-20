@@ -83,17 +83,31 @@
             </svg>
             Cambiar Contraseña
         </h3>
-        <form method="POST" action="{{ url_for('auth.profile') }}">
+        <form method="POST" action="{{ url_for('auth.profile') }}" id="profilePasswordForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label>Nueva Contraseña</label>
-                <input type="password" name="new_password" required placeholder="Ingresa tu nueva contraseña">
+                <input type="password" name="new_password" id="profilePasswordInput"
+                       required placeholder="Ingresa tu nueva contraseña" autocomplete="new-password">
+                <div class="pwd-strength-container" id="profilePwdStrength"
+                     style="display: none; margin-top: 0.5rem;">
+                    <div class="pwd-bars" style="display: flex; gap: 4px; margin-bottom: 0.25rem;">
+                        <div class="pwd-bar" style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;"></div>
+                        <div class="pwd-bar" style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;"></div>
+                        <div class="pwd-bar" style="height: 6px; flex: 1; background: #E5E7EB; border-radius: 4px; transition: background 0.3s;"></div>
+                    </div>
+                    <div class="pwd-text" style="font-size: 0.8rem; color: #6B7280;">Escribe una contraseña</div>
+                </div>
             </div>
             <div class="form-group" style="margin-bottom: 2rem;">
                 <label>Confirmar Contraseña</label>
-                <input type="password" name="confirm_password" required placeholder="Confirma tu nueva contraseña">
+                <input type="password" name="confirm_password" id="profileConfirmInput"
+                       required placeholder="Confirma tu nueva contraseña" autocomplete="new-password">
+                <div id="profileConfirmMsg"
+                     style="font-size: 0.8rem; margin-top: 0.35rem; display: none;"></div>
             </div>
-            <button type="submit" class="btn-primary">
+            <button type="submit" class="btn-primary" id="btnSubmitProfile"
+                    disabled style="opacity: 0.5; cursor: not-allowed;">
                 Actualizar Contraseña
             </button>
         </form>
@@ -132,5 +146,5 @@
         </div>
     </div>
 </div>
-<script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+<script src="{{ url_for('static', filename='js/profile.js', v=2) }}"></script>
 {% endblock %}
