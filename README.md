@@ -1,10 +1,10 @@
-# Sistema de Nóminas 🏢
+# Sistema de Nóminas
 
 Un sistema integral basado en web para la gestión de nóminas, empleados y reportes, desarrollado en **Python (Flask)**. Ofrece un entorno seguro y profesional con soporte para bases de datos relacionales, generación de documentos (PDF, Excel) y opciones avanzadas de carga de datos masivos.
 
 ---
 
-## 🚀 Características Principales
+## Características Principales
 
 - **Gestión de Empleados**: Altas, bajas, y edición con múltiples campos (laborales, personales, médicos y financieros).
 - **Carga Masiva (Excel)**: Soporte completo para carga y descarga de plantillas en formato `.xlsx`.
@@ -16,7 +16,7 @@ Un sistema integral basado en web para la gestión de nóminas, empleados y repo
 
 ---
 
-## 🛠️ Requisitos del Sistema
+## Requisitos del Sistema
 
 Para ejecutar el proyecto sin problemas, necesitas tener instalados en tu computadora (haz clic sobre ellos si necesitas instalarlos):
 
@@ -27,7 +27,7 @@ Para ejecutar el proyecto sin problemas, necesitas tener instalados en tu comput
 
 ---
 
-## ⚙️ Pasos de Instalación Rápida (Estilo Copiar y Pegar)
+## Pasos de Instalación Rápida (Estilo Copiar y Pegar)
 
 Sigue estas instrucciones al pie de la letra, copiando y pegando en tu terminal para iniciar todo el sistema localmente.
 
@@ -89,7 +89,7 @@ echo "DATABASE_URL=postgresql+psycopg2://tu_usuario:tu_contrasena@localhost:5432
 echo REDIS_URL=redis://localhost:6379/0 >> .env
 ```
 
-⚠️ **MUY IMPORTANTE**:
+**MUY IMPORTANTE**:
 Abre el nuevo archivo `.env` que se creó. Asegúrate de modificar `tu_usuario`, `tu_contrasena` y `nombre_base_de_datos` con tus accesos reales configurados de PostgreSQL.
 
 ---
@@ -123,11 +123,11 @@ Ahora simplemente levanta la aplicación:
 python run.py
 ```
 
-> ¡Listo! Abre tu navegador favorito y accede a: **http://localhost:5000** 🚀
+> Listo. Abre tu navegador favorito y accede a: **http://localhost:5000**
 
 ---
 
-## 🧑‍💻 Comandos Útiles para el Día a Día
+## Comandos Útiles para el Día a Día
 
 Aquí tienes un listado de comandos a mano de utilidades extra cuando desarrollas. Asegúrate de tener activado siempre tu entorno virtual `(venv)` antes de usarlos.
 
@@ -152,7 +152,7 @@ flask db upgrade
 
 ---
 
-## 📁 Arquitectura del Código del Proyecto
+## Arquitectura del Código del Proyecto
 
 Si quieres curiosear qué hace cada archivo y dónde va cada módulo, guíate por este mapa:
 
@@ -178,7 +178,7 @@ SISTEMA DE NOMINAS/
 
 ---
 
-## 🌐 Producción y Despliegue (Ubuntu/Gunicorn)
+## Producción y Despliegue (Ubuntu/Gunicorn)
 
 Para entornos de producción, se recomienda utilizar **Gunicorn** con workers de **Uvicorn** para manejar tanto Flask como FastAPI de forma simultánea.
 
@@ -272,7 +272,7 @@ server {
 }
 ```
 
-### 💡 ¿Por qué es necesaria esta configuración?
+### ¿Por qué es necesaria esta configuración?
 
 - **ASGI + WSGI**: Gunicorn por defecto solo entiende Flask (WSGI). Al agregar `uvicorn.workers.UvicornWorker`, le permitimos procesar también FastAPI (ASGI) de forma eficiente.
 - **Protocolo HTTPS (X-Forwarded-Proto)**: FastAPI es estricto con la seguridad. Sin el encabezado `$http_x_forwarded_proto`, la documentación de la API (`/api/docs`) y las redirecciones intentarían usar `http`, provocando errores de **Contenido Mixto** que el navegador bloquearía.
