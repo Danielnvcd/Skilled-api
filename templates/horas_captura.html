@@ -240,7 +240,8 @@
             </thead>
             <tbody>
                 {% for reg in reporte.registros|sort(attribute='fecha', reverse=True) %}
-                <tr data-dia="{{ ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][reg.fecha.weekday()] }}"
+                <tr data-registro-id="{{ reg.id }}"
+                    data-dia="{{ ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'][reg.fecha.weekday()] }}"
                     data-trabajador="{{ (reg.trabajador.nombre_completo ~ ' ' ~ reg.trabajador.no_empleado)|lower }}">
                     <td style="font-weight: 600;">{{ reg.fecha|fecha_es('dia_corto') }}</td>
                     <td style="font-family: monospace;">{{ reg.trabajador.no_empleado }}</td>
@@ -358,5 +359,5 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
 <script src="{{ url_for('static', filename='js/horas_captura.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/horas_grid.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/horas_grid.js') }}?v=7"></script>
 {% endblock %}

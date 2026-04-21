@@ -272,6 +272,23 @@
                     regsData.push(Object.assign({ trabajador_id: trabajadorId, fecha: fecha }, data.registro));
                 }
                 tr.dataset.registroId = String(data.registro.id);
+
+                // Agregar botón Eliminar si es registro nuevo
+                if (!registroId && !f.btnG.parentElement.querySelector('.btn-eliminar')) {
+                    var btnDel = document.createElement('button');
+                    btnDel.type = 'button';
+                    btnDel.className = 'btn-eliminar';
+                    btnDel.textContent = 'Eliminar';
+                    btnDel.style.cssText = 'margin-top:3px; padding:0.18rem 0.5rem; font-size:0.72rem; border-radius:5px; border:1px solid #FCA5A5; cursor:pointer; background:#FEF2F2; color:#B91C1C; width:100%;';
+                    (function (id) {
+                        btnDel.addEventListener('click', function () {
+                            eliminarDia(tr, id, trabajadorId, f.statusDiv, f.tdHrs, btnDel);
+                        });
+                    })(data.registro.id);
+                    f.btnG.parentElement.appendChild(btnDel);
+                }
+
+                sincronizarFilaTabla(data.registro, !registroId);
                 actualizarTotalModal(trabajadorId);
                 actualizarContadorCard(trabajadorId);
             } else {
@@ -310,6 +327,7 @@
                 statusDiv.style.color = '#9CA3AF';
                 statusDiv.textContent = 'Eliminado';
                 btnDel.remove();
+                eliminarFilaTabla(registroId);
                 actualizarTotalModal(trabajadorId);
                 actualizarContadorCard(trabajadorId);
             } else {
@@ -321,6 +339,111 @@
             statusDiv.style.color = '#DC2626';
             statusDiv.textContent = 'Error de red';
             btnDel.disabled = false;
+        }
+    }
+
+    // ── Sincronización tabla "Registros Guardados" ────────────────────────────
+    var DIAS_ABREV = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+    function fechaDiaCorto(fechaStr) {
+        var parts = fechaStr.split('-');
+        var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        var dia = DIAS_ABREV[d.getDay()];
+        var dd = String(d.getDate()).padStart(2, '0');
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        return dia + ' ' + dd + '/' + mm;
+    }
+
+    function actualizarContadorTabla(delta) {
+        var headers = document.querySelectorAll('.captura-form-bg h3');
+        headers.forEach(function (h) {
+            if (h.textContent.indexOf('Registros Guardados') >= 0) {
+                var m = h.textContent.match(/\((\d+)\)/);
+                if (m) h.textContent = 'Registros Guardados (' + (parseInt(m[1]) + delta) + ')';
+            }
+        });
+    }
+
+    function crearFilaTabla(reg) {
+        var diaCorto = fechaDiaCorto(reg.fecha);
+        var diaAbrev = diaCorto.split(' ')[0];
+
+        var tr = document.createElement('tr');
+        tr.dataset.registroId = String(reg.id);
+        tr.dataset.dia = diaAbrev;
+        tr.dataset.trabajador = ((reg.nombre_completo || '') + ' ' + (reg.no_empleado || '')).toLowerCase();
+
+        function td(html, style) {
+            var el = document.createElement('td');
+            if (style) el.style.cssText = style;
+            el.innerHTML = html;
+            return el;
+        }
+
+        tr.appendChild(td('<strong>' + diaCorto + '</strong>'));
+        tr.appendChild(td('<span style="font-family:monospace;">' + (reg.no_empleado || '') + '</span>'));
+        tr.appendChild(td(reg.nombre_completo || ''));
+        tr.appendChild(td(reg.hora_entrada || '-'));
+        tr.appendChild(td(reg.hora_salida || '-'));
+        tr.appendChild(td(reg.tomo_comida ? '<span style="color:var(--primary);font-weight:bold;">Sí</span>' : '<span style="color:var(--text-muted);">No</span>'));
+        tr.appendChild(td(reg.aplica_viaticos ? '<span style="color:#D97706;font-weight:bold;">Sí</span>' : '<span style="color:var(--text-muted);">No</span>'));
+        tr.appendChild(td(reg.aplica_dia_festivo ? '<span style="color:#7C3AED;font-weight:bold;">Sí</span>' : '<span style="color:var(--text-muted);">No</span>'));
+        tr.appendChild(td((reg.horas_productivas || 0).toFixed(2) + ' hrs.', 'font-weight:bold; color:var(--success);'));
+        tr.appendChild(td(reg.incidencia ? '<span class="badge" style="background:#FEE2E2;color:#B91C1C;">' + reg.incidencia + '</span>' : '-'));
+
+        var tdAcc = document.createElement('td');
+        var btnDel = document.createElement('button');
+        btnDel.type = 'button';
+        btnDel.className = 'delete-btn';
+        btnDel.title = 'Eliminar registro';
+        btnDel.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+        (function (regId, trabajadorId) {
+            btnDel.addEventListener('click', function () {
+                if (!confirm('¿Eliminar este registro?')) return;
+                var fd = new FormData();
+                fd.append('csrf_token', getCSRF());
+                fetch('/horas/eliminar_registro/' + regId, {
+                    method: 'POST', body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function (r) { return r.json(); }).then(function (data) {
+                    if (data.ok) {
+                        tr.remove();
+                        actualizarContadorTabla(-1);
+                        regsData = regsData.filter(function (r) { return r.id !== regId; });
+                        actualizarTotalModal(trabajadorId);
+                        actualizarContadorCard(trabajadorId);
+                    }
+                });
+            });
+        })(reg.id, reg.trabajador_id);
+        tdAcc.appendChild(btnDel);
+        tr.appendChild(tdAcc);
+        return tr;
+    }
+
+    function sincronizarFilaTabla(reg, esNuevo) {
+        var tbody = document.querySelector('.history-table tbody');
+        if (!tbody) return;
+        var existente = tbody.querySelector('tr[data-registro-id="' + reg.id + '"]');
+        if (existente) {
+            var nueva = crearFilaTabla(reg);
+            tbody.replaceChild(nueva, existente);
+        } else if (esNuevo) {
+            // Quitar fila de "sin registros" si existe
+            var sinRegs = tbody.querySelector('tr:not([data-dia]):not(#sinResultadosFiltro)');
+            if (sinRegs) sinRegs.remove();
+            tbody.insertBefore(crearFilaTabla(reg), tbody.firstChild);
+            actualizarContadorTabla(1);
+        }
+    }
+
+    function eliminarFilaTabla(registroId) {
+        var tbody = document.querySelector('.history-table tbody');
+        if (!tbody) return;
+        var tr = tbody.querySelector('tr[data-registro-id="' + registroId + '"]');
+        if (tr) {
+            tr.remove();
+            actualizarContadorTabla(-1);
         }
     }
 
