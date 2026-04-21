@@ -11,6 +11,8 @@ def _reg_dict(reg):
     return {
         'id': reg.id,
         'trabajador_id': reg.trabajador_id,
+        'nombre_completo': reg.trabajador.nombre_completo,
+        'no_empleado': reg.trabajador.no_empleado,
         'fecha': reg.fecha.strftime('%Y-%m-%d'),
         'hora_entrada': reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '',
         'hora_salida': reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '',
