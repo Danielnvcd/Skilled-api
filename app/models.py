@@ -419,7 +419,7 @@ class Almacen(db.Model):
     qr_code = db.Column(db.String(100), unique=True, nullable=False, index=True)
     activo = db.Column(db.Boolean, default=True)
     # Relación con estantes
-    estantes = db.relationship('Estante', backref='almacen', lazy='dynamic', cascade='all, delete-orphan')
+    estantes = db.relationship('Estante', backref='almacen', lazy='select', cascade='all, delete-orphan')
 
 class Estante(db.Model):
     """Subdivisión física dentro de un almacén (estante, rack, zona, etc.)

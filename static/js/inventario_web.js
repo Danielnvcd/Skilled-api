@@ -309,14 +309,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function renderizarProductos(productos) {
         if (!productsList) return;
-        if (!productos.length) {
-            productsList.innerHTML = `
-            <div class="flex flex-col items-center py-16 text-gray-300">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-4"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                <p class="text-sm font-semibold">No hay productos que mostrar</p>
-            </div>`;
-            return;
-        }
+        // Con tabla vacía igual mostramos el dashboard de categorías base
 
         // ── MODO 1: Vista Detallada de Categoría ──────────────────
         if (CATEGORIA_ACTUAL) {
@@ -338,6 +331,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // ── MODO 2: Búsqueda o filtro activo ─────────────────────
         const hayBusqueda = (searchProd?.value.trim() !== '') || (filterCat?.value !== '');
         if (hayBusqueda) {
+            if (!productos.length) {
+                productsList.innerHTML = `<div class="text-center p-8 text-gray-400 text-sm font-semibold">No se encontraron productos</div>`;
+                return;
+            }
             const itemsHTML = productos.map(p => prodCardHtml(p, true)).join('');
             productsList.innerHTML = `<div class="seccion-productos-grid">${itemsHTML}</div>`;
             bindAcciones(productsList);
@@ -355,9 +352,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const allCats = getAllCats();
         const catOrdenadas = [
-            ...allCats.filter(c => grupos[c]),                          // base+custom con productos
+            ...allCats,                                                  // todas las base+custom siempre
             ...Object.keys(grupos).filter(c => !allCats.includes(c)),   // productos en cats desconocidas
-            ...loadCustomCats().map(c => c.nombre).filter(c => !grupos[c]) // custom SIN productos aún
         ];
 
         const linkBase = '/inventario/catalogo/';
