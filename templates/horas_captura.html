@@ -187,9 +187,7 @@
                     <span style="font-size: 0.75rem; color: {% if ns.dias > 0 %}var(--success){% else %}var(--text-muted){% endif %}; font-weight: 600;">
                         {{ ns.dias }}/{{ semana_fechas|length }} días
                     </span>
-                    {% if ns.total > 0 %}
-                    <span style="font-size: 0.75rem; color: var(--primary); font-weight: 700;">· {{ "%.1f"|format(ns.total) }}h</span>
-                    {% endif %}
+                    <span style="font-size: 0.75rem; color: {% if ns.total > 0 %}var(--primary){% else %}var(--text-muted){% endif %}; font-weight: 700;">· {{ "%.1f"|format(ns.total) }}h</span>
                 </div>
             </div>
             {% endfor %}
