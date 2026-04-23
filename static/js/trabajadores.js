@@ -558,8 +558,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (credList) {
                     credList.innerHTML = '';
                     if (data.credenciales && data.credenciales.length > 0) {
+                        var today = new Date();
+                        today.setHours(0, 0, 0, 0);
+
                         data.credenciales.forEach(c => {
-                            credList.innerHTML += `<li><i class="fas fa-check-circle" style="color: #10b981; margin-right: 6px;"></i> <strong>${c.planta}</strong> (ID: ${c.credencial_id})</li>`;
+                            let isExpired = false;
+                            let statusBadge = '';
+                            let iconColor = '#10b981';
+                            let iconClass = 'fa-check-circle';
+
+                            if (c.fecha_caducidad) {
+                                let expDate = new Date(c.fecha_caducidad + 'T00:00:00');
+                                if (expDate < today) {
+                                    isExpired = true;
+                                    iconColor = '#ef4444';
+                                    iconClass = 'fa-times-circle';
+                                }
+                                statusBadge = `<span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${isExpired ? '#fee2e2' : '#d1fae5'}; color: ${isExpired ? '#991b1b' : '#065f46'}; margin-left: 8px;">
+                                    ${isExpired ? 'Caducada' : 'Vigente'} (${c.fecha_caducidad})
+                                </span>`;
+                            }
+
+                            credList.innerHTML += `<li><i class="fas ${iconClass}" style="color: ${iconColor}; margin-right: 6px;"></i> <strong>${c.planta}</strong> (ID: ${c.credencial_id})${statusBadge}</li>`;
                         });
                     } else {
                         credList.innerHTML = '<li style="color: #9ca3af; font-style: italic;">Ninguna registrada.</li>';
