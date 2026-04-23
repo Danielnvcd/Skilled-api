@@ -136,24 +136,6 @@
         tdC.appendChild(chkC);
         tr.appendChild(tdC);
 
-        // Viáticos
-        var tdV = document.createElement('td');
-        tdV.style.cssText = 'text-align:center; padding: 0.4rem 0.25rem;';
-        var chkV = chk('#D97706');
-        chkV.checked = reg ? reg.aplica_viaticos : false;
-        if (!BORRADOR) chkV.disabled = true;
-        tdV.appendChild(chkV);
-        tr.appendChild(tdV);
-
-        // Festivo
-        var tdF = document.createElement('td');
-        tdF.style.cssText = 'text-align:center; padding: 0.4rem 0.25rem;';
-        var chkF = chk('#7C3AED');
-        chkF.checked = reg ? reg.aplica_dia_festivo : false;
-        if (!BORRADOR) chkF.disabled = true;
-        tdF.appendChild(chkF);
-        tr.appendChild(tdF);
-
         // Incidencia
         var tdI = document.createElement('td');
         tdI.style.padding = '0.4rem 0.3rem';
@@ -185,7 +167,7 @@
             btnG.addEventListener('click', function () {
                 guardarDia(tr, trabajadorId, {
                     selE: selE, selS: selS, chkC: chkC,
-                    chkV: chkV, chkF: chkF, selI: selI,
+                    chkV: {checked: false}, chkF: {checked: false}, selI: selI,
                     tdHrs: tdHrs, statusDiv: statusDiv, btnG: btnG
                 });
             });
