@@ -691,7 +691,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Auto-capture pending credentials on save
-    form.addEventListener('submit', function (e) {
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
         const credencialIdInput = document.getElementById('credencialIdInput');
         const credencialCaducidadInput = document.getElementById('credencialCaducidadInput');
         if (credencialIdInput && credencialIdInput.value.trim() !== '') {
@@ -711,6 +713,57 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 updateCredentialsUI();
             }
+        }
+
+        const formData = new FormData(form);
+        const submitBtn = document.getElementById('btnSaveTrabajador');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Guardando...';
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                // If it was a new worker, update the form action and ID to act as edit for subsequent saves
+                if (form.action.includes('/agregar')) {
+                    form.action = `/trabajadores/editar/${result.id}`;
+                    currentWorkerId = result.id;
+                    const modalTitle = document.querySelector('.modal-header h3');
+                    if (modalTitle) modalTitle.textContent = `Editar Trabajador (${formData.get('no_empleado')})`;
+                    
+                    // Show Docs Tab since it's saved now
+                    const tabBtnDocumentos = document.getElementById('tabBtnDocumentos');
+                    if (tabBtnDocumentos) tabBtnDocumentos.style.display = 'inline-block';
+                }
+
+                // Show success message inside modal footer
+                const footer = document.querySelector('.modal-footer');
+                let msg = document.getElementById('successMsgSaved');
+                if(!msg) {
+                    msg = document.createElement('div');
+                    msg.id = 'successMsgSaved';
+                    msg.style.cssText = 'color: #10b981; display: flex; align-items: center; gap: 6px; font-weight: 500; margin-right: auto; padding-left: 1rem;';
+                    msg.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> ¡Guardado correctamente!';
+                    footer.insertBefore(msg, footer.firstChild);
+                }
+                setTimeout(() => { if(msg) msg.remove(); }, 4000);
+            } else {
+                alert(result.message || 'Error al guardar.');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Ocurrió un error de red al intentar guardar.');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
         }
     });
 
