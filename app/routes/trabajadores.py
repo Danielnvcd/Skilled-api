@@ -17,10 +17,7 @@ import pandas as pd
 _CURP_RE = re.compile(r'^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$')
 _RFC_RE  = re.compile(r'^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$')
 
-TIPOS_DOCUMENTO_VALIDOS = [
-    'Contrato', 'INE', 'CURP', 'RFC', 'NSS',
-    'ComprobanteDomicilio', 'CV', 'Otro'
-]
+
 
 bp = Blueprint('trabajadores', __name__, url_prefix='/trabajadores')
 
@@ -227,13 +224,21 @@ def agregar():
         db.session.add(nuevo_trabajador)
         db.session.commit()
         log_action(f"Agregó al trabajador {nuevo_trabajador.nombre} ({nuevo_trabajador.no_empleado})")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Trabajador agregado exitosamente.', 'id': nuevo_trabajador.id})
+            
         flash('Trabajador agregado exitosamente.', 'success')
         
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error saving worker: {e}\n{traceback.format_exc()}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Ocurrió un error al guardar el trabajador. Verifica los datos.'}), 500
         flash('Ocurrió un error al guardar el trabajador. Verifica los datos.', 'danger')
         
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': False, 'message': 'Operación fallida.'}), 400
     return redirect(url_for('trabajadores.index'))
 
 @bp.route('/importar', methods=['GET'])
@@ -724,13 +729,21 @@ def editar(id):
             
         db.session.commit()
         log_action(f"Actualizó al trabajador {t.nombre} ({t.no_empleado})")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'message': 'Trabajador actualizado exitosamente.', 'id': t.id})
+            
         flash('Trabajador actualizado exitosamente.', 'success')
         
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error updating worker: {e}\n{traceback.format_exc()}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Ocurrió un error al actualizar el trabajador.'}), 500
         flash('Ocurrió un error al actualizar el trabajador.', 'danger')
         
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': False, 'message': 'Operación fallida.'}), 400
     return redirect(url_for('trabajadores.index'))
 
 @bp.route('/credenciales/<int:id>', methods=['POST'])
@@ -1136,10 +1149,10 @@ def upload_documento(id):
         f_inicio = _parse_date(fecha_inicio_str) if fecha_inicio_str else None
         f_fin = _parse_date(fecha_fin_str) if fecha_fin_str else None
         
-        # Parse optional tipo_documento — validar contra lista blanca
+        # Parse optional tipo_documento (allow custom types up to 100 chars)
         tipo_doc = request.form.get('tipo_documento', '').strip() or None
-        if tipo_doc and tipo_doc not in TIPOS_DOCUMENTO_VALIDOS:
-            return jsonify({'error': 'Tipo de documento no válido'}), 400
+        if tipo_doc and len(tipo_doc) > 100:
+            return jsonify({'error': 'El tipo de documento es demasiado largo (máximo 100 caracteres)'}), 400
         
         # Relate to DB path
         db_path = f"trabajadores/{t.id}/{unique_filename}"
