@@ -385,6 +385,19 @@ def cerrar_prenomina(fecha_str):
         
         db.session.commit()
         log_action(f'cerrar_prenomina: Nómina global cerrada para la semana {fecha_str}')
+
+        try:
+            from app.models import crear_notif_admins
+            crear_notif_admins(
+                tipo='PRENOMINA_CERRADA',
+                titulo=f'Prenómina aprobada — semana {fecha_str}',
+                mensaje=f'La nómina de la semana del {fecha_str} fue cerrada y aprobada con {len(prenominas)} registro(s).',
+                url='/prenomina/',
+            )
+            db.session.commit()
+        except Exception:
+            current_app.logger.warning("No se pudo crear notificación de prenómina cerrada.", exc_info=True)
+
         return jsonify({'success': True, 'message': 'Nómina cerrada exitosamente. Ya no se pueden realizar cambios.'})
     except Exception as e:
         db.session.rollback()
