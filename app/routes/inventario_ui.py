@@ -1,7 +1,10 @@
-from flask import Blueprint, render_template, session, redirect, url_for, flash, jsonify, make_response, current_app
-from app.utils import login_required
-from app.models import User, Estante, Proyecto, SolicitudMaterial
+from flask import Blueprint, render_template, session, redirect, url_for, flash, jsonify, make_response, current_app, request, send_file
+from app.utils import login_required, log_action
+from app.models import User, Estante, Proyecto, SolicitudMaterial, Producto
+from app.extensions import db, limiter
 import io
+import os
+import traceback
 
 bp = Blueprint('inventario_ui', __name__, url_prefix='/inventario')
 
@@ -255,3 +258,259 @@ def mis_pedidos():
         flash('No tienes permiso para ver esta página.', 'danger')
         return redirect(url_for('main.home'))
     return render_template('inventario_mis_pedidos.html', user=user)
+
+
+# ─── IMPORTACIÓN MASIVA DE MATERIALES ────────────────────────────────────────
+
+_CATS_BASE = [
+    'Tornillería', 'Tuercas', 'Rondanas', 'Pijas',
+    'Abrazaderas', 'Soportería', 'Tubería/Accesorios',
+]
+
+
+def _normalizar_categoria(val, categorias_disponibles):
+    """Devuelve la categoría oficial más cercana usando coincidencia difusa."""
+    from difflib import get_close_matches
+    if not val:
+        return val
+    if val in categorias_disponibles:
+        return val
+    for c in categorias_disponibles:
+        if c.lower() == val.lower():
+            return c
+    matches = get_close_matches(val, categorias_disponibles, n=1, cutoff=0.75)
+    return matches[0] if matches else val
+
+
+@bp.route('/importar')
+@login_required
+def importar_materiales():
+    user = User.query.get(session.get('user_id'))
+    if user.role not in ['inventario', 'admin']:
+        flash('No tienes permiso.', 'danger')
+        return redirect(url_for('main.home'))
+    return render_template('importar_materiales.html', user=user)
+
+
+@bp.route('/plantilla_materiales')
+@login_required
+def plantilla_materiales():
+    """Genera y descarga la plantilla Excel para importar materiales."""
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Materiales'
+
+    columnas = ['Código (SKU)', 'Categoría', 'Descripción', 'Unidad', 'Stock Inicial', 'Stock Mínimo']
+
+    header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    thin = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'),
+    )
+    for col_idx, col_name in enumerate(columnas, 1):
+        cell = ws.cell(row=1, column=col_idx, value=col_name)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    ws.row_dimensions[1].height = 30
+    col_widths = [18, 24, 44, 14, 16, 16]
+    for i, w in enumerate(col_widths, 1):
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    wrap_align = Alignment(wrap_text=True, vertical='center')
+    for row in ws.iter_rows(min_row=2, max_row=500, min_col=1, max_col=len(columnas)):
+        for cell in row:
+            cell.alignment = wrap_align
+
+    # Dropdown: Categoría
+    cats_formula = '"' + ','.join(_CATS_BASE) + '"'
+    dv_cat = DataValidation(type="list", formula1=cats_formula, allow_blank=True, showErrorMessage=False)
+    ws.add_data_validation(dv_cat)
+    dv_cat.add('B2:B500')
+
+    # Dropdown: Unidad
+    dv_unidad = DataValidation(
+        type="list",
+        formula1='"Pza,Kg,Lt,Mt,Caja,Rollo,Juego,Par,Bolsa,Tramo"',
+        allow_blank=True, showErrorMessage=False,
+    )
+    ws.add_data_validation(dv_unidad)
+    dv_unidad.add('D2:D500')
+
+    ws.freeze_panes = 'A2'
+
+    # Hoja de instrucciones
+    ws2 = wb.create_sheet(title='Instrucciones')
+    instrucciones = [
+        ('A1', 'INSTRUCCIONES DE USO', True, 14),
+        ('A3', '• Código (SKU): identificador único — obligatorio, sin duplicados.', False, 11),
+        ('A4', '• Categoría: usa el desplegable o escribe el nombre; el sistema corregirá errores leves.', False, 11),
+        ('A5', '• Descripción: nombre completo del material — obligatorio.', False, 11),
+        ('A6', '• Unidad: Pza, Kg, Lt, Mt, Caja, etc. (usa el desplegable).', False, 11),
+        ('A7', '• Stock Inicial: cantidad disponible al importar (número, puede ser 0).', False, 11),
+        ('A8', '• Stock Mínimo: alerta de reorden cuando el stock baje de este valor.', False, 11),
+        ('A10', '• No alteres ni renombres los encabezados de la fila 1.', False, 11),
+        ('A11', '• Categorías base disponibles: ' + ', '.join(_CATS_BASE), False, 11),
+    ]
+    for cell_ref, text, bold, size in instrucciones:
+        cell = ws2[cell_ref]
+        cell.value = text
+        cell.font = Font(bold=bold, size=size)
+    ws2.column_dimensions['A'].width = 90
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name='plantilla_materiales.xlsx',
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+@bp.route('/procesar_importacion', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def procesar_importacion_materiales():
+    import filetype as ft
+    import pandas as pd
+
+    user = User.query.get(session.get('user_id'))
+    if user.role not in ['inventario', 'admin']:
+        flash('No tienes permiso.', 'danger')
+        return redirect(url_for('main.home'))
+
+    if 'archivo_excel' not in request.files:
+        flash('No se seleccionó ningún archivo.', 'danger')
+        return redirect(url_for('inventario_ui.importar_materiales'))
+
+    file = request.files['archivo_excel']
+    if not file.filename:
+        flash('El archivo está vacío.', 'danger')
+        return redirect(url_for('inventario_ui.importar_materiales'))
+
+    if not file.filename.lower().endswith(('.xlsx', '.xls')):
+        flash('Formato no válido. Debe ser .xlsx o .xls', 'danger')
+        return redirect(url_for('inventario_ui.importar_materiales'))
+
+    header = file.read(2048)
+    file.seek(0)
+    kind = ft.guess(header)
+    if not kind or kind.extension not in ['xlsx', 'xls', 'zip', 'cfb']:
+        flash('El archivo fue rechazado: no parece ser un documento Excel válido.', 'danger')
+        return redirect(url_for('inventario_ui.importar_materiales'))
+
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > 5 * 1024 * 1024:
+        flash('El archivo excede el tamaño máximo permitido (5 MB).', 'danger')
+        return redirect(url_for('inventario_ui.importar_materiales'))
+
+    # Categorías disponibles: base + las ya registradas en BD
+    cats_db = [r[0] for r in db.session.query(Producto.categoria).distinct().all() if r[0]]
+    categorias_disponibles = list(dict.fromkeys(_CATS_BASE + cats_db))
+
+    try:
+        df = pd.read_excel(file)
+        errores = []
+        correcciones = []
+        exitosos = 0
+        _FORMULA_CHARS = ('=', '+', '-', '@', '\t', '\r')
+
+        for index, row in df.iterrows():
+            row_errors = []
+
+            def get_str(col_name, max_len=None, _row=row, _re=row_errors):
+                val = _row.get(col_name, '')
+                s = str(val).strip() if pd.notna(val) else ''
+                if s and s[0] in _FORMULA_CHARS:
+                    s = s.lstrip('=+-@\t\r')
+                if max_len and len(s) > max_len:
+                    _re.append(f"'{col_name}' excede {max_len} caracteres.")
+                return s
+
+            def get_num(col_name, _row=row, _re=row_errors):
+                val = _row.get(col_name, 0)
+                if pd.isna(val) or val == '':
+                    return 0.0
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    _re.append(f"'{col_name}' no es un número válido.")
+                    return 0.0
+
+            codigo = get_str('Código (SKU)', 100)
+            if not codigo or codigo == 'nan':
+                errores.append(f"Fila {index+2}: Falta el Código (SKU).")
+                continue
+
+            if Producto.query.filter_by(codigo=codigo).first():
+                errores.append(f"Fila {index+2}: El código '{codigo}' ya existe en el catálogo.")
+                continue
+
+            descripcion = get_str('Descripción', 250)
+            if not descripcion or descripcion == 'nan':
+                errores.append(f"Fila {index+2} ({codigo}): Falta la Descripción.")
+                continue
+
+            cat_raw = get_str('Categoría', 100)
+            if cat_raw and cat_raw != 'nan':
+                cat_norm = _normalizar_categoria(cat_raw, categorias_disponibles)
+                if cat_norm != cat_raw:
+                    correcciones.append(f"Fila {index+2}: Categoría «{cat_raw}» → «{cat_norm}»")
+            else:
+                cat_norm = 'Sin categoría'
+
+            unidad = get_str('Unidad', 50)
+            if not unidad or unidad == 'nan':
+                unidad = 'Pza'
+
+            if row_errors:
+                errores.append(f"Fila {index+2} ({codigo}): " + "; ".join(row_errors))
+                continue
+
+            db.session.add(Producto(
+                codigo=codigo,
+                descripcion=descripcion,
+                categoria=cat_norm,
+                unidad=unidad,
+                stock_actual=get_num('Stock Inicial'),
+                stock_minimo=get_num('Stock Mínimo'),
+                created_by_id=user.id,
+            ))
+            exitosos += 1
+
+        if exitosos > 0:
+            db.session.commit()
+            log_action(f"Importó masivamente {exitosos} materiales desde Excel")
+            flash(f'¡Éxito! Se importaron {exitosos} materiales correctamente.', 'success')
+
+        if correcciones:
+            msg = f"Se corrigieron automáticamente {len(correcciones)} categoría(s):<br>" + "<br>".join(correcciones[:10])
+            flash(msg, 'info')
+
+        if errores:
+            msg = "Errores encontrados:<br>" + "<br>".join(errores[:10])
+            if len(errores) > 10:
+                msg += f"<br>...y {len(errores)-10} más."
+            flash(msg, 'warning')
+
+        if exitosos > 0 and not errores:
+            return redirect(url_for('inventario_ui.catalogo'))
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error procesando Excel materiales: {e}\n{traceback.format_exc()}")
+        flash('Error al leer el archivo Excel. Asegúrate de usar la plantilla correcta.', 'danger')
+
+    return redirect(url_for('inventario_ui.importar_materiales'))
