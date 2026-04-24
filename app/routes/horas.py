@@ -518,5 +518,19 @@ def cerrar_reporte(reporte_id):
         db.session.commit()
         log_action(f"Cerró reporte semanal ID: {reporte.id} Proyecto: {reporte.proyecto.numero_proyecto}")
         flash("El reporte semanal ha sido CERRADO. Ya no se pueden agregar más horas y está listo para Prenómina.", "success")
+
+        try:
+            from app.models import crear_notif_admins
+            num = reporte.proyecto.numero_proyecto if reporte.proyecto else '—'
+            semana = reporte.fecha_inicio_semana.strftime('%d/%m/%Y') if reporte.fecha_inicio_semana else ''
+            crear_notif_admins(
+                tipo='REPORTE_CERRADO',
+                titulo=f'Reporte de horas cerrado — Proyecto {num}',
+                mensaje=f'El reporte semanal del proyecto {num} (semana del {semana}) fue enviado y está listo para prenómina.',
+                url='/prenomina/',
+            )
+            db.session.commit()
+        except Exception:
+            current_app.logger.warning("No se pudo crear notificación de reporte cerrado.", exc_info=True)
         
     return redirect(url_for('horas.capturar', reporte_id=reporte.id))

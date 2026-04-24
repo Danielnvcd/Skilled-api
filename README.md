@@ -12,6 +12,7 @@ Un sistema integral basado en web para la gestión de nóminas, empleados y repo
 - **Seguridad Perimetral Anti-DDoS**: Protección con `Flask-Talisman` y *Rate Limiting* estricto (vía Redis y `Flask-Limiter`) en endpoints sensibles como subidas masivas y generación de reportes pesados.
 - **Validación Fuerte de Archivos**: Análisis profundo de *Magic Bytes* para restringir el tamaño de fotografías (máximo 5MB) garantizando eficiencia en almacenamiento.
 - **Rendimiento y Observabilidad**: Consultas consolidadas en el Dashboard (reduciendo llamadas a la BD a la mitad), índices de rendimiento específicos en PostgreSQL, y middleware de logging para rastrear peticiones lentas mayores a 500ms.
+- **Sistema de Notificaciones In-App**: Panel en tiempo real para administradores con avisos de reportes de horas cerrados, prenóminas aprobadas y actualizaciones del sistema. Las notificaciones leídas se eliminan automáticamente a los 30 días.
 - **Base de Datos Robusta**: Mapeo ORM con `SQLAlchemy` conectado a **PostgreSQL**.
 
 ---
@@ -150,6 +151,8 @@ flask db migrate -m "Modifique la tabla empleados"
 flask db upgrade
 ```
 
+> **Excepción — tabla `notificaciones`:** Esta tabla se crea automáticamente al arrancar la aplicación si no existe (usando `inspect().has_table()`). No requiere `flask db upgrade` ni en instalaciones nuevas ni al actualizar a producción. Basta con subir el código y reiniciar el servidor.
+
 ---
 
 ## Arquitectura del Código del Proyecto
@@ -277,6 +280,51 @@ server {
 - **ASGI + WSGI**: Gunicorn por defecto solo entiende Flask (WSGI). Al agregar `uvicorn.workers.UvicornWorker`, le permitimos procesar también FastAPI (ASGI) de forma eficiente.
 - **Protocolo HTTPS (X-Forwarded-Proto)**: FastAPI es estricto con la seguridad. Sin el encabezado `$http_x_forwarded_proto`, la documentación de la API (`/api/docs`) y las redirecciones intentarían usar `http`, provocando errores de **Contenido Mixto** que el navegador bloquearía.
 - **WebSockets**: Los encabezados de `Upgrade` y `Connection` permiten que FastAPI maneje conexiones persistentes en tiempo real si se requieren en el futuro.
+
+---
+
+---
+
+## Sistema de Notificaciones
+
+El panel de notificaciones aparece en la barra lateral para los roles `admin` y `super_admin`. Se actualiza automáticamente cada 45 segundos sin recargar la página.
+
+### Tipos de notificación
+
+| Tipo | Cuándo se genera |
+|---|---|
+| `REPORTE_CERRADO` | Al cerrar un reporte de horas desde el módulo Reporte de Horas |
+| `PRENOMINA_CERRADA` | Al aprobar/cerrar una prenómina |
+| `ACTUALIZACION` | Al arrancar la app cuando hay entradas nuevas en el `CHANGELOG` del código |
+
+### Expiración automática
+
+Las notificaciones **ya leídas** se eliminan de la base de datos automáticamente después de **30 días**. Las no leídas se conservan hasta que el administrador las abra. No se necesita ningún cron job ni tarea programada externa — la limpieza ocurre en cada llamada al endpoint de resumen.
+
+Para cambiar el período de retención, edita la constante en `app/routes/notificaciones.py`:
+```python
+DIAS_EXPIRACION = 30  # días hasta eliminar notificaciones leídas
+```
+
+### Agregar nuevas actualizaciones al changelog
+
+Cuando liberes una funcionalidad nueva, agrega una entrada al listado `CHANGELOG` en `app/routes/notificaciones.py`. La próxima vez que un admin abra la app verá la notificación automáticamente:
+
+```python
+CHANGELOG = [
+    {
+        'referencia': 'update_YYYY-MM-DD_nombre_unico',  # clave única, no cambiar después
+        'titulo': 'Título corto de la actualización',
+        'mensaje': 'Descripción de qué se agregó o mejoró.',
+        'url': '/ruta/opcional',  # o None si no aplica
+    },
+    # ... entradas anteriores
+]
+```
+
+### Despliegue a producción
+
+La tabla `notificaciones` **no requiere `flask db upgrade`**. Se crea sola al arrancar si no existe. Solo sube el código y reinicia el servidor.
 
 ---
 

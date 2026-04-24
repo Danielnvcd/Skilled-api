@@ -144,7 +144,7 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui, notificaciones
     app.register_blueprint(auth.bp)
 
 
@@ -165,6 +165,7 @@ def create_app():
     app.register_blueprint(ausencias.bp)
     app.register_blueprint(metricas.bp)
     app.register_blueprint(inventario_ui.bp)
+    app.register_blueprint(notificaciones.bp)
 
     # ── Handler global de CSRF ─────────────────────────────────────────
     # Se ejecuta en TODA la app cuando un token CSRF es inválido o expiró.
@@ -254,7 +255,11 @@ def create_app():
 
     with app.app_context():
         os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
-        # db.create_all() # User should use migrations
+        # Crear tabla de notificaciones si aún no existe (idempotente, no afecta otras tablas)
+        from sqlalchemy import inspect as _sqla_inspect
+        if not _sqla_inspect(db.engine).has_table('notificaciones'):
+            from app.models import Notificacion
+            Notificacion.__table__.create(db.engine)
 
     app.wsgi_app = ProxyFix(
         app.wsgi_app, 
