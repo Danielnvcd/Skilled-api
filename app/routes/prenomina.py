@@ -198,19 +198,35 @@ def imprimir_individual(fecha_str, trabajador_id):
     
     reporte_ids = [r.id for r in reportes]
     reporte_generico = reportes[0]
-    
-    registros_trabajador = RegistroDiarioHoras.query.filter(
-        RegistroDiarioHoras.reporte_id.in_(reporte_ids), 
+
+    registros_trabajador = RegistroDiarioHoras.query.options(
+        joinedload(RegistroDiarioHoras.reporte).joinedload(ReporteSemanal.proyecto)
+    ).filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids),
         RegistroDiarioHoras.trabajador_id == prenomina.trabajador_id
     ).order_by(RegistroDiarioHoras.fecha).all()
-    
+
     total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
-    
+
+    proyectos_vistos = {}
+    for reg in registros_trabajador:
+        if reg.reporte and reg.reporte.proyecto and not reg.incidencia:
+            proy = reg.reporte.proyecto
+            proyectos_vistos[proy.id] = proy
+    if proyectos_vistos:
+        nombre_proyecto = ' | '.join(proy.nombre for proy in proyectos_vistos.values())
+    else:
+        nombre_proyecto = reporte_generico.proyecto.nombre if reporte_generico.proyecto else 'Sin asignar'
+
     logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled_white_bg.jpg')
-    html_salida = render_template('recibo_pdf.html', reporte=reporte_generico, p=prenomina, 
-                                   registros_trabajador=registros_trabajador, 
-                                   total_hrs=total_hrs,
-                                   loop_last=True,
+    html_salida = render_template('recibo_pdf.html',
+                                   reporte=reporte_generico,
+                                   recibos_data=[{
+                                       'p': prenomina,
+                                       'registros_trabajador': registros_trabajador,
+                                       'total_hrs': total_hrs,
+                                       'nombre_proyecto': nombre_proyecto,
+                                   }],
                                    logo_path=logo_path)
                                    
     pdf = BytesIO()
