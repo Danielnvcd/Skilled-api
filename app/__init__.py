@@ -5,7 +5,7 @@ from datetime import timedelta
 from flask import Flask, render_template, flash, redirect, url_for, request, jsonify, session
 from flask_wtf.csrf import CSRFError
 from dotenv import load_dotenv
-from app.extensions import db, limiter, csrf, migrate
+from app.extensions import db, limiter, csrf, migrate, mail
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
 from flask_compress import Compress
@@ -82,6 +82,13 @@ def create_app():
 
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
 
+    app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+    app.config['MAIL_PORT'] = 587
+    app.config['MAIL_USE_TLS'] = True
+    app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+    app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+    app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
+
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     redis_url = os.environ.get('REDIS_URL')
@@ -110,6 +117,7 @@ def create_app():
     limiter.init_app(app)
     csrf.init_app(app)
     migrate.init_app(app, db)
+    mail.init_app(app)
     Compress(app)
 
     csp = {

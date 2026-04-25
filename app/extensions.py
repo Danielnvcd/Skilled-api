@@ -3,6 +3,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
+from flask_mail import Mail
 from flask import session, request as flask_request
 import ipaddress
 import redis
@@ -11,6 +12,7 @@ import os
 db = SQLAlchemy()
 csrf = CSRFProtect()
 migrate = Migrate()
+mail = Mail()
 
 # Rangos CIDR oficiales de Cloudflare (actualizar periódicamente desde https://www.cloudflare.com/ips/)
 _CF_CIDR_LIST = [
