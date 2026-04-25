@@ -9,6 +9,7 @@ WTForms==3.2.1
 Flask-Talisman==1.1.0
 Flask-Limiter==4.1.1
 email-validator==2.1.1
+flask-mail==0.10.0
 pyotp==2.9.0
 qrcode[pil]==7.4.2
 python-dotenv==1.2.1

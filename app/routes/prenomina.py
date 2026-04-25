@@ -5,6 +5,7 @@ import traceback
 from app.extensions import db, limiter
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
 from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
+from app.extensions import mail
 from sqlalchemy.orm import joinedload
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
@@ -231,6 +232,186 @@ def imprimir_individual(fecha_str, trabajador_id):
 
     response.headers['Content-Disposition'] = f'inline; filename="{nombre_archivo}"'
     return response
+
+@bp.route('/enviar_correo/<fecha_str>/<int:trabajador_id>', methods=['POST'])
+@login_required
+@limiter.limit("20 per minute")
+def enviar_correo_individual(fecha_str, trabajador_id):
+    try:
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Fecha inválida.'}), 400
+
+    reportes = ReporteSemanal.query.filter(
+        ReporteSemanal.fecha_inicio_semana == fecha_obj,
+        ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
+    ).all()
+    if not reportes:
+        return jsonify({'success': False, 'message': 'Semana no encontrada.'}), 404
+
+    prenomina = Prenomina.query.filter_by(fecha_inicio=fecha_obj, trabajador_id=trabajador_id).first()
+    if not prenomina:
+        all_prenominas = calcular_preview_prenomina(fecha_obj, reportes)
+        prenomina = next((p for p in all_prenominas if p.trabajador_id == trabajador_id), None)
+    if not prenomina:
+        return jsonify({'success': False, 'message': 'Trabajador no encontrado en esta nómina.'}), 404
+
+    destinatario = prenomina.trabajador.correo
+    if not destinatario:
+        return jsonify({'success': False, 'message': f'{prenomina.trabajador.nombre_completo} no tiene correo registrado.'}), 400
+
+    from xhtml2pdf import pisa
+    from io import BytesIO
+    from flask import make_response, current_app
+    from flask_mail import Message
+    import os
+
+    reporte_ids = [r.id for r in reportes]
+    reporte_generico = reportes[0]
+
+    registros_trabajador = RegistroDiarioHoras.query.options(
+        joinedload(RegistroDiarioHoras.reporte).joinedload(ReporteSemanal.proyecto)
+    ).filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids),
+        RegistroDiarioHoras.trabajador_id == trabajador_id
+    ).order_by(RegistroDiarioHoras.fecha).all()
+
+    total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
+    logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled_white_bg.jpg')
+
+    html_salida = render_template('recibo_pdf.html',
+        reporte=reporte_generico,
+        p=prenomina,
+        registros_trabajador=registros_trabajador,
+        total_hrs=total_hrs,
+        loop_last=True,
+        logo_path=logo_path
+    )
+
+    pdf_buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(BytesIO(html_salida.encode('utf-8')), dest=pdf_buffer)
+    if pisa_status.err:
+        return jsonify({'success': False, 'message': 'Error al generar el PDF.'}), 500
+
+    nombre_limpio = prenomina.trabajador.nombre_apellidos.replace(' ', '_')
+    nombre_archivo = f'Recibo_{nombre_limpio}_{fecha_obj.strftime("%d%m%Y")}.pdf'
+
+    msg = Message(
+        subject=f'Recibo de Nómina — Semana {fecha_obj.strftime("%d/%m/%Y")}',
+        recipients=[destinatario],
+        body=(
+            f'Hola {prenomina.trabajador.nombre_completo},\n\n'
+            f'Adjunto encontrarás tu recibo de nómina correspondiente a la semana del '
+            f'{fecha_obj.strftime("%d/%m/%Y")}.\n\n'
+            f'Cualquier duda comunícate con el área de administración.\n\nSaludos.'
+        )
+    )
+    msg.attach(nombre_archivo, 'application/pdf', pdf_buffer.getvalue())
+
+    mail.send(msg)
+    log_action(f'enviar_correo_prenomina: Recibo enviado a {destinatario} para semana {fecha_str}')
+    return jsonify({'success': True, 'message': f'Recibo enviado a {destinatario}'})
+
+@bp.route('/enviar_correo_todos/<fecha_str>', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def enviar_correo_todos(fecha_str):
+    try:
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Fecha inválida.'}), 400
+
+    reportes = ReporteSemanal.query.filter(
+        ReporteSemanal.fecha_inicio_semana == fecha_obj,
+        ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])
+    ).all()
+    if not reportes:
+        return jsonify({'success': False, 'message': 'Semana no encontrada.'}), 404
+
+    prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj).all()
+    if not prenominas:
+        prenominas = calcular_preview_prenomina(fecha_obj, reportes)
+
+    from xhtml2pdf import pisa
+    from io import BytesIO
+    from flask_mail import Message
+    import os
+
+    reporte_ids = [r.id for r in reportes]
+    reporte_generico = reportes[0]
+    logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled_white_bg.jpg')
+
+    todos_registros = RegistroDiarioHoras.query.options(
+        joinedload(RegistroDiarioHoras.reporte).joinedload(ReporteSemanal.proyecto)
+    ).filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids)
+    ).order_by(RegistroDiarioHoras.trabajador_id, RegistroDiarioHoras.fecha).all()
+
+    registros_por_trabajador = {}
+    for reg in todos_registros:
+        registros_por_trabajador.setdefault(reg.trabajador_id, []).append(reg)
+
+    resultados = []
+    enviados = sin_correo = errores = 0
+
+    for p in prenominas:
+        nombre = p.trabajador.nombre_completo
+        correo = p.trabajador.correo
+
+        if not correo:
+            sin_correo += 1
+            resultados.append({'nombre': nombre, 'correo': '—', 'estado': 'sin_correo'})
+            continue
+
+        try:
+            registros_trabajador = registros_por_trabajador.get(p.trabajador_id, [])
+            total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
+
+            html_salida = render_template('recibo_pdf.html',
+                reporte=reporte_generico,
+                p=p,
+                registros_trabajador=registros_trabajador,
+                total_hrs=total_hrs,
+                loop_last=True,
+                logo_path=logo_path
+            )
+
+            pdf_buffer = BytesIO()
+            pisa_status = pisa.CreatePDF(BytesIO(html_salida.encode('utf-8')), dest=pdf_buffer)
+            if pisa_status.err:
+                raise RuntimeError('Error al generar PDF')
+
+            nombre_limpio = p.trabajador.nombre_apellidos.replace(' ', '_')
+            nombre_archivo = f'Recibo_{nombre_limpio}_{fecha_obj.strftime("%d%m%Y")}.pdf'
+
+            msg = Message(
+                subject=f'Recibo de Nómina — Semana {fecha_obj.strftime("%d/%m/%Y")}',
+                recipients=[correo],
+                body=(
+                    f'Hola {nombre},\n\n'
+                    f'Adjunto encontrarás tu recibo de nómina correspondiente a la semana del '
+                    f'{fecha_obj.strftime("%d/%m/%Y")}.\n\n'
+                    f'Cualquier duda comunícate con el área de administración.\n\nSaludos.'
+                )
+            )
+            msg.attach(nombre_archivo, 'application/pdf', pdf_buffer.getvalue())
+            mail.send(msg)
+
+            enviados += 1
+            resultados.append({'nombre': nombre, 'correo': correo, 'estado': 'enviado'})
+
+        except Exception as e:
+            errores += 1
+            resultados.append({'nombre': nombre, 'correo': correo, 'estado': 'error', 'detalle': str(e)[:80]})
+
+    log_action(f'enviar_correo_todos: semana {fecha_str} — enviados={enviados}, sin_correo={sin_correo}, errores={errores}')
+    return jsonify({
+        'success': True,
+        'enviados': enviados,
+        'sin_correo': sin_correo,
+        'errores': errores,
+        'resultados': resultados
+    })
 
 @bp.route('/guardar/<fecha_str>', methods=['POST'])
 @login_required
