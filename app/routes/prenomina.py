@@ -109,18 +109,20 @@ def imprimir(fecha_str):
     
     recibos_data = []
     reporte_ids = [r.id for r in reportes]
-    # Usamos el primer reporte_id temporalmente solo para info genérica (el UI será refactorizado)
     reporte_generico = reportes[0]
-    
+
+    # Una sola query para todos los trabajadores (evita N queries dentro del loop)
+    todos_registros = RegistroDiarioHoras.query.filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids)
+    ).order_by(RegistroDiarioHoras.trabajador_id, RegistroDiarioHoras.fecha).all()
+
+    registros_por_trabajador = {}
+    for reg in todos_registros:
+        registros_por_trabajador.setdefault(reg.trabajador_id, []).append(reg)
+
     for p in prenominas:
-        # Obtener los registros consolidados del trabajador (todos los proyectos de esta semana)
-        registros_trabajador = RegistroDiarioHoras.query.filter(
-            RegistroDiarioHoras.reporte_id.in_(reporte_ids), 
-            RegistroDiarioHoras.trabajador_id == p.trabajador_id
-        ).order_by(RegistroDiarioHoras.fecha).all()
-        
+        registros_trabajador = registros_por_trabajador.get(p.trabajador_id, [])
         total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
-        
         recibos_data.append({
             'p': p,
             'registros_trabajador': registros_trabajador,
