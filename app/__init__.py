@@ -78,7 +78,7 @@ def create_app():
     # Access token corto: 20 minutos. El refresh token (cookie 'rt') extiende la sesión hasta 7 días.
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=20)
     is_prod = os.environ.get('FLASK_ENV') == 'production'
-    app.config['SESSION_COOKIE_SECURE'] = is_prod  # Set True in prod only
+    app.config['SESSION_COOKIE_SECURE'] = True  # Set True in prod only
 
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
 
