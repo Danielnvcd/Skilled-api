@@ -345,42 +345,25 @@
 
         {% for reg in registros_trabajador %}
         <tr>
-            {% if loop.first %}
-            <td rowspan="{{ registros_trabajador|length if registros_trabajador|length > 0 else 1 }}"
-                class="emp-name-box text-center" style="vertical-align: middle;">
-                {{ p.trabajador.nombre_completo }}
-            </td>
-            {% endif %}
-
-            <td width="4%" class="text-center">{{ ['lum', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'][reg.fecha.weekday()]
-                }}</td>
+            <td width="14%" class="emp-name-box text-center">{{ p.trabajador.nombre_completo }}</td>
+            <td width="4%" class="text-center">{{ ['lum', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'][reg.fecha.weekday()] }}</td>
             <td width="7%" class="text-center">{{ reg.fecha.strftime('%d-%m-%y') }}</td>
             <td width="6%" class="text-center">{{ reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '' }}</td>
             <td width="6%" class="text-center">{{ reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '' }}</td>
             <td width="5%" class="text-center">{{ 'SI' if reg.tomo_comida else '' }}</td>
-            <td width="7%" class="text-center">{{ reg.reporte.proyecto.numero_proyecto if not reg.incidencia else '' }}
-            </td>
+            <td width="7%" class="text-center">{{ reg.reporte.proyecto.numero_proyecto if not reg.incidencia else '' }}</td>
             <td width="8%" class="text-center">{{ reg.incidencia or '' }}</td>
             <td width="8%" class="text-center">{{ reg.tipo_nomina or p.trabajador.tipo_nomina }}</td>
-            <td width="5%" class="text-center">{{ "%.1f"|format(reg.horas_productivas) if reg.horas_productivas else
-                '0.0' }}</td>
-
+            <td width="5%" class="text-center">{{ "%.1f"|format(reg.horas_productivas) if reg.horas_productivas else '0.0' }}</td>
             <td width="18%" class="text-center">{{ p.trabajador.nombre_completo }}</td>
-
-            {% if loop.first %}
-            <td rowspan="{{ registros_trabajador|length if registros_trabajador|length > 0 else 1 }}"
-                class="total-hrs-box text-center" style="vertical-align: middle;">
-                {{ "%.1f"|format(total_hrs) }}
-            </td>
-            {% endif %}
+            <td width="12%" class="total-hrs-box text-center">{% if loop.first %}{{ "%.1f"|format(total_hrs) }}{% endif %}</td>
         </tr>
         {% else %}
-        <!-- Caso cuando no tiene registros diarios desglosados grabados en DB -->
         <tr>
-            <td class="emp-name-box text-center" style="vertical-align: middle;">{{ p.trabajador.nombre_completo }}</td>
+            <td class="emp-name-box text-center">{{ p.trabajador.nombre_completo }}</td>
             <td colspan="9" class="text-center">Sin desglose diario capturado para esta semana.</td>
             <td class="text-center">{{ p.trabajador.nombre_completo }}</td>
-            <td class="total-hrs-box text-center" style="vertical-align: middle;">{{ "%.1f"|format(total_hrs) }}</td>
+            <td class="total-hrs-box text-center">{{ "%.1f"|format(total_hrs) }}</td>
         </tr>
         {% endfor %}
     </table>
