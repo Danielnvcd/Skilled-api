@@ -180,11 +180,12 @@
 
 <body>
     {% set items = recibos_data if recibos_data else [{'p': p, 'registros_trabajador': registros_trabajador,
-    'total_hrs': total_hrs}] %}
+    'total_hrs': total_hrs, 'nombre_proyecto': reporte.proyecto.nombre if reporte.proyecto else 'Sin asignar'}] %}
     {% for item in items %}
     {% set p = item.p %}
     {% set registros_trabajador = item.registros_trabajador %}
     {% set total_hrs = item.total_hrs %}
+    {% set nombre_proyecto = item.nombre_proyecto %}
 
     <!-- Header -->
     <table class="header">
@@ -210,7 +211,7 @@
     <table class="info-table">
         <tr>
             <td width="15%"><strong>Proyecto:</strong></td>
-            <td width="35%">{{ reporte.proyecto.nombre if reporte.proyecto else 'Sin asignar' }}</td>
+            <td width="35%">{{ nombre_proyecto }}</td>
             <td width="15%" class="text-right"><strong>Trabajador:</strong></td>
             <td width="35%" class="text-right">{{ p.trabajador.no_empleado }} - {{ p.trabajador.nombre_completo }}</td>
         </tr>
