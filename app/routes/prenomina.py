@@ -126,10 +126,23 @@ def imprimir(fecha_str):
     for p in prenominas:
         registros_trabajador = registros_por_trabajador.get(p.trabajador_id, [])
         total_hrs = sum(r.horas_productivas or 0 for r in registros_trabajador)
+
+        # Determinar proyecto(s) del trabajador según sus registros reales
+        proyectos_vistos = {}
+        for reg in registros_trabajador:
+            if reg.reporte and reg.reporte.proyecto and not reg.incidencia:
+                proy = reg.reporte.proyecto
+                proyectos_vistos[proy.id] = proy
+        if proyectos_vistos:
+            nombre_proyecto = ' | '.join(p.nombre for p in proyectos_vistos.values())
+        else:
+            nombre_proyecto = reporte_generico.proyecto.nombre if reporte_generico.proyecto else 'Sin asignar'
+
         recibos_data.append({
             'p': p,
             'registros_trabajador': registros_trabajador,
-            'total_hrs': total_hrs
+            'total_hrs': total_hrs,
+            'nombre_proyecto': nombre_proyecto,
         })
         
     logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled_white_bg.jpg')
