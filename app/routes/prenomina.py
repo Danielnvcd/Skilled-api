@@ -5,6 +5,7 @@ import traceback
 from app.extensions import db, limiter
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
 from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
+from sqlalchemy.orm import joinedload
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
 
@@ -111,8 +112,10 @@ def imprimir(fecha_str):
     reporte_ids = [r.id for r in reportes]
     reporte_generico = reportes[0]
 
-    # Una sola query para todos los trabajadores (evita N queries dentro del loop)
-    todos_registros = RegistroDiarioHoras.query.filter(
+    # Una sola query con eager-load de reporte->proyecto (evita lazy loads en el template)
+    todos_registros = RegistroDiarioHoras.query.options(
+        joinedload(RegistroDiarioHoras.reporte).joinedload(ReporteSemanal.proyecto)
+    ).filter(
         RegistroDiarioHoras.reporte_id.in_(reporte_ids)
     ).order_by(RegistroDiarioHoras.trabajador_id, RegistroDiarioHoras.fecha).all()
 
