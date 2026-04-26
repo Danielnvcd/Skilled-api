@@ -70,6 +70,52 @@ document.addEventListener('DOMContentLoaded', function () {
     const btnEnviarTodos = document.getElementById('btnEnviarTodos');
     const btnCerrarModal = document.getElementById('btnCerrarModalCorreos');
 
+    const modalIndividual = document.getElementById('modalCorreoIndividual');
+    const btnCerrarModalInd = document.getElementById('btnCerrarModalIndividual');
+    const btnCerrarModalIndFooter = document.getElementById('btnCerrarModalIndividualFooter');
+
+    function abrirModalIndividual() {
+        document.getElementById('modalIndividualCargando').style.display = 'block';
+        document.getElementById('modalIndividualResultado').style.display = 'none';
+        btnCerrarModalIndFooter.style.display = 'none';
+        modalIndividual.style.display = 'flex';
+    }
+
+    function mostrarResultadoIndividual(data) {
+        document.getElementById('modalIndividualCargando').style.display = 'none';
+        const mensaje = document.getElementById('modalIndividualMensaje');
+        const spamAviso = document.getElementById('modalIndividualSpamAviso');
+        if (data.success) {
+            mensaje.innerHTML = `
+                <div style="display:flex;align-items:center;gap:0.75rem;background:#dcfce7;border-radius:8px;padding:1rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span style="color:#15803d;font-weight:600;">${data.message}</span>
+                </div>`;
+            spamAviso.style.display = 'flex';
+        } else {
+            mensaje.innerHTML = `
+                <div style="display:flex;align-items:center;gap:0.75rem;background:#fee2e2;border-radius:8px;padding:1rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                    <span style="color:#b91c1c;font-weight:600;">${data.message}</span>
+                </div>`;
+            spamAviso.style.display = 'none';
+        }
+        document.getElementById('modalIndividualResultado').style.display = 'block';
+        btnCerrarModalIndFooter.style.display = 'inline-block';
+    }
+
+    if (btnCerrarModalInd) {
+        btnCerrarModalInd.addEventListener('click', () => { modalIndividual.style.display = 'none'; });
+    }
+    if (btnCerrarModalIndFooter) {
+        btnCerrarModalIndFooter.addEventListener('click', () => { modalIndividual.style.display = 'none'; });
+    }
+    if (modalIndividual) {
+        modalIndividual.addEventListener('click', function (e) {
+            if (e.target === this) this.style.display = 'none';
+        });
+    }
+
     function abrirModal() {
         document.getElementById('modalCorreosCargando').style.display = 'block';
         document.getElementById('modalCorreosResultados').style.display = 'none';
@@ -149,6 +195,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const nombre = this.dataset.nombre;
             if (!confirm(`¿Enviar recibo por correo a ${nombre}?`)) return;
 
+            abrirModalIndividual();
             this.disabled = true;
             const textoOriginal = this.innerHTML;
             this.textContent = 'Enviando...';
@@ -162,9 +209,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 });
                 const data = await resp.json();
-                alert(data.message);
+                mostrarResultadoIndividual(data);
             } catch (e) {
-                alert('Error de red al enviar el correo.');
+                mostrarResultadoIndividual({ success: false, message: 'Error de red al enviar el correo.' });
             } finally {
                 this.disabled = false;
                 this.innerHTML = textoOriginal;
