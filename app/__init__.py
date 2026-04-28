@@ -152,7 +152,7 @@ def create_app():
     }
     Talisman(app, content_security_policy=csp, force_https=False)
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui, notificaciones
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui, notificaciones, manual_uso
     app.register_blueprint(auth.bp)
 
 
@@ -174,6 +174,7 @@ def create_app():
     app.register_blueprint(metricas.bp)
     app.register_blueprint(inventario_ui.bp)
     app.register_blueprint(notificaciones.bp)
+    app.register_blueprint(manual_uso.bp)
 
     # ── Handler global de CSRF ─────────────────────────────────────────
     # Se ejecuta en TODA la app cuando un token CSRF es inválido o expiró.

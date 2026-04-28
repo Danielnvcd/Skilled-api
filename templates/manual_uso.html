@@ -1,0 +1,752 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    .manual-wrapper {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 4rem;
+    }
+
+    .manual-header {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        border-radius: 1.25rem;
+        padding: 2rem 2.5rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+    }
+
+    .manual-header h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        margin: 0 0 0.4rem;
+        color: white;
+    }
+
+    .manual-header p {
+        margin: 0;
+        font-size: 0.95rem;
+        opacity: 0.88;
+        color: white;
+    }
+
+    .manual-toc {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    }
+
+    .manual-toc h2 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #374151;
+        margin: 0 0 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .toc-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.5rem;
+    }
+
+    .toc-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        background: #f8fafc;
+        color: #3b82f6;
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background 0.2s, color 0.2s;
+        border: 1px solid #e2e8f0;
+    }
+
+    .toc-item:hover {
+        background: #eff6ff;
+        color: #1d4ed8;
+        text-decoration: none;
+        border-color: #bfdbfe;
+    }
+
+    .manual-section {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 2rem 2.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        scroll-margin-top: 1rem;
+    }
+
+    .section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0 0 1.25rem;
+        padding-bottom: 0.875rem;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .section-icon {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.625rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .icon-blue   { background: #eff6ff; color: #3b82f6; }
+    .icon-green  { background: #f0fdf4; color: #22c55e; }
+    .icon-purple { background: #faf5ff; color: #a855f7; }
+    .icon-amber  { background: #fffbeb; color: #f59e0b; }
+    .icon-rose   { background: #fff1f2; color: #f43f5e; }
+    .icon-teal   { background: #f0fdfa; color: #14b8a6; }
+    .icon-indigo { background: #eef2ff; color: #6366f1; }
+
+    .section-title h2 {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0;
+    }
+
+    .section-title .section-num {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        display: block;
+        margin-top: 1px;
+    }
+
+    .manual-section p {
+        color: #475569;
+        font-size: 0.9rem;
+        line-height: 1.7;
+        margin-bottom: 0.75rem;
+    }
+
+    .manual-section h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #334155;
+        margin: 1.5rem 0 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .manual-section h3 i {
+        font-size: 0.85rem;
+        opacity: 0.7;
+    }
+
+    .step-list {
+        list-style: none;
+        padding: 0;
+        margin: 0.5rem 0 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .step-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        font-size: 0.9rem;
+        color: #475569;
+        line-height: 1.6;
+    }
+
+    .step-num {
+        background: #3b82f6;
+        color: white;
+        font-size: 0.7rem;
+        font-weight: 700;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .bullet-list {
+        list-style: none;
+        padding: 0;
+        margin: 0.5rem 0 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .bullet-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        font-size: 0.9rem;
+        color: #475569;
+        line-height: 1.6;
+    }
+
+    .bullet-list li::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        background: #3b82f6;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 0.55rem;
+    }
+
+    .info-box {
+        border-radius: 0.625rem;
+        padding: 0.875rem 1.125rem;
+        margin: 1rem 0;
+        display: flex;
+        gap: 0.75rem;
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+
+    .info-box i { margin-top: 1px; flex-shrink: 0; font-size: 0.95rem; }
+
+    .info-box.blue   { background: #eff6ff; color: #1e40af; border-left: 3px solid #3b82f6; }
+    .info-box.amber  { background: #fffbeb; color: #92400e; border-left: 3px solid #f59e0b; }
+    .info-box.green  { background: #f0fdf4; color: #166534; border-left: 3px solid #22c55e; }
+    .info-box.rose   { background: #fff1f2; color: #9f1239; border-left: 3px solid #f43f5e; }
+
+    .formula-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        padding: 0.875rem 1.25rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875rem;
+        color: #0f172a;
+        margin: 0.75rem 0;
+    }
+
+    .formula-box .formula-label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-family: inherit;
+        margin-bottom: 0.25rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0.5rem 0 1rem;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.3rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .badge.abierta  { background: #fef9c3; color: #854d0e; }
+    .badge.aprobado { background: #dcfce7; color: #166534; }
+    .badge.activo   { background: #dbeafe; color: #1e40af; }
+    .badge.liquidado{ background: #f1f5f9; color: #475569; }
+    .badge.cerrado  { background: #fce7f3; color: #9d174d; }
+
+    .cols-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin: 0.75rem 0;
+    }
+
+    .mini-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.625rem;
+        padding: 0.875rem 1rem;
+    }
+
+    .mini-card h4 {
+        font-size: 0.825rem;
+        font-weight: 700;
+        color: #334155;
+        margin: 0 0 0.4rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .mini-card p {
+        font-size: 0.825rem;
+        color: #64748b;
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .warn-banner {
+        background: linear-gradient(135deg, #fffbeb, #fef3c7);
+        border: 1px solid #fde68a;
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+        margin: 1rem 0;
+    }
+
+    .warn-banner i {
+        color: #f59e0b;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
+    .warn-banner p {
+        color: #78350f;
+        font-size: 0.875rem;
+        margin: 0;
+        line-height: 1.6;
+    }
+
+    .summary-card {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        border-radius: 1rem;
+        padding: 1.75rem 2rem;
+        margin-bottom: 1.5rem;
+        color: white;
+    }
+
+    .summary-card h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: white;
+        margin: 0 0 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .summary-item {
+        background: rgba(255,255,255,0.15);
+        border-radius: 0.625rem;
+        padding: 0.875rem 1rem;
+        backdrop-filter: blur(4px);
+    }
+
+    .summary-item i {
+        font-size: 1.25rem;
+        margin-bottom: 0.4rem;
+        display: block;
+        opacity: 0.9;
+    }
+
+    .summary-item p {
+        font-size: 0.825rem;
+        color: rgba(255,255,255,0.9);
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .divider { height: 1px; background: #f1f5f9; margin: 1rem 0; }
+
+    @media (max-width: 640px) {
+        .cols-2 { grid-template-columns: 1fr; }
+        .toc-grid { grid-template-columns: 1fr 1fr; }
+        .manual-section { padding: 1.25rem 1rem; }
+        .manual-header { padding: 1.5rem 1.25rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="manual-wrapper">
+
+    <!-- Header -->
+    <div class="manual-header">
+        <h1><i class="fas fa-book-open" style="margin-right: 10px;"></i>Manual de Uso del Sistema</h1>
+        <p>Prenómina, Préstamos y Ajuste Inbursa &mdash; Guía operativa para administradores</p>
+    </div>
+
+    <!-- Índice -->
+    <div class="manual-toc">
+        <h2><i class="fas fa-list"></i> Contenido</h2>
+        <div class="toc-grid">
+            <a href="#flujo" class="toc-item"><i class="fas fa-route"></i> Flujo general</a>
+            <a href="#prenomina" class="toc-item"><i class="fas fa-file-invoice-dollar"></i> Prenómina</a>
+            <a href="#calculo" class="toc-item"><i class="fas fa-calculator"></i> Cálculo</a>
+            <a href="#cierre" class="toc-item"><i class="fas fa-lock"></i> Cierre</a>
+            <a href="#prestamos" class="toc-item"><i class="fas fa-hand-holding-usd"></i> Préstamos</a>
+            <a href="#ajuste" class="toc-item"><i class="fas fa-sliders-h"></i> Ajuste Inbursa</a>
+            <a href="#reportes" class="toc-item"><i class="fas fa-table"></i> Reportes</a>
+            <a href="#recomendaciones" class="toc-item"><i class="fas fa-check-circle"></i> Recomendaciones</a>
+        </div>
+    </div>
+
+    <!-- 1. Flujo General -->
+    <div class="manual-section" id="flujo">
+        <div class="section-title">
+            <div class="section-icon icon-blue"><i class="fas fa-route"></i></div>
+            <div>
+                <span class="section-num">Sección 1</span>
+                <h2>Flujo General del Proceso</h2>
+            </div>
+        </div>
+        <p>El orden correcto de operación es fundamental para que los descuentos y abonos se apliquen sin diferencias.</p>
+        <ol class="step-list">
+            <li><span class="step-num">1</span> Capturar y cerrar las horas de la semana.</li>
+            <li><span class="step-num">2</span> Generar la vista previa de prenómina desde el menú <strong>Prenómina</strong>.</li>
+            <li><span class="step-num">3</span> Guardar la prenómina semanal — queda en estado <span class="badge abierta"><i class="fas fa-unlock-alt"></i> ABIERTA</span>.</li>
+            <li><span class="step-num">4</span> Mientras está abierta, aplicar ajustes: descuentos manuales, depósitos extra, viáticos y festivos.</li>
+            <li><span class="step-num">5</span> Validar todos los netos y presionar <strong>Cerrar Nómina Global</strong>.</li>
+            <li><span class="step-num">6</span> Al cerrarla pasa a <span class="badge aprobado"><i class="fas fa-check-circle"></i> APROBADO</span> y se aplican definitivamente los descuentos de préstamos y Ajuste Inbursa.</li>
+        </ol>
+        <div class="info-box blue">
+            <i class="fas fa-info-circle"></i>
+            <span>Solo se puede generar prenómina para semanas cuyos reportes estén en estado <strong>TERMINADO</strong> o <strong>PRENOMINA_CERRADA</strong>.</span>
+        </div>
+    </div>
+
+    <!-- 2. Prenómina -->
+    <div class="manual-section" id="prenomina">
+        <div class="section-title">
+            <div class="section-icon icon-green"><i class="fas fa-file-invoice-dollar"></i></div>
+            <div>
+                <span class="section-num">Sección 2</span>
+                <h2>Módulo de Prenómina</h2>
+            </div>
+        </div>
+
+        <h3><i class="fas fa-play-circle"></i> Cómo generar una prenómina</h3>
+        <ol class="step-list">
+            <li><span class="step-num">1</span> Entrar al menú <strong>Prenómina</strong>.</li>
+            <li><span class="step-num">2</span> Elegir la semana.</li>
+            <li><span class="step-num">3</span> Abrir la vista de cálculo y revisar la vista previa.</li>
+            <li><span class="step-num">4</span> Guardar la prenómina.</li>
+        </ol>
+        <p>Al guardar se crean registros por trabajador en estado <span class="badge abierta"><i class="fas fa-unlock-alt"></i> ABIERTA</span> y los reportes de esa semana quedan como <strong>PRENOMINA_CERRADA</strong>.</p>
+
+        <div class="divider"></div>
+
+        <h3><i class="fas fa-edit"></i> Qué se puede editar mientras está ABIERTA</h3>
+        <div class="cols-2">
+            <div class="mini-card">
+                <h4><i class="fas fa-plus-circle" style="color:#22c55e"></i> Se puede agregar</h4>
+                <p>Descuentos manuales, depósitos extra, ajuste de viáticos y festivos.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-times-circle" style="color:#f43f5e"></i> Se puede eliminar</h4>
+                <p>Descuentos manuales y depósitos extra que no estén ligados a nómina aprobada.</p>
+            </div>
+        </div>
+        <div class="info-box rose">
+            <i class="fas fa-ban"></i>
+            <span>Cuando la prenómina está en <strong>APROBADO</strong> ya no se puede editar.</span>
+        </div>
+    </div>
+
+    <!-- 3. Cálculo -->
+    <div class="manual-section" id="calculo">
+        <div class="section-title">
+            <div class="section-icon icon-purple"><i class="fas fa-calculator"></i></div>
+            <div>
+                <span class="section-num">Sección 3</span>
+                <h2>Cómo Calcula el Sistema</h2>
+            </div>
+        </div>
+
+        <h3><i class="fas fa-dollar-sign"></i> Salario base por tipo de nómina</h3>
+        <div class="cols-2">
+            <div class="mini-card">
+                <h4><i class="fas fa-clock" style="color:#3b82f6"></i> Por hora</h4>
+                <p>Horas trabajadas × salario pactado semanal.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-calendar-check" style="color:#a855f7"></i> Cuadrado / Semanal</h4>
+                <p>Salario pactado semanal fijo (independiente de horas).</p>
+            </div>
+        </div>
+
+        <h3><i class="fas fa-bolt"></i> Horas extra</h3>
+        <p>Solo aplica para nómina <strong>Semanal</strong>. Si el trabajador rebasa 50 horas productivas:</p>
+        <div class="formula-box">
+            <div class="formula-label">Fórmula</div>
+            pago_horas_extras = (horas_totales - 50) × hr_extra
+        </div>
+
+        <h3><i class="fas fa-car-side"></i> Viáticos</h3>
+        <p>Se suman por registro diario cuando el día tiene activado <strong>aplica_viaticos</strong>. Si el registro tiene monto manual se usa ese; si no, se usa el viático del perfil del trabajador.</p>
+
+        <h3><i class="fas fa-star"></i> Festivos</h3>
+        <div class="formula-box">
+            <div class="formula-label">Fórmula</div>
+            pago_festivos = núm_días_festivos_marcados × pago_dia_festivo_del_trabajador
+        </div>
+
+        <h3><i class="fas fa-home"></i> Infonavit</h3>
+        <p>Se toma directamente del campo financiero del trabajador: <code style="background:#f1f5f9; padding: 2px 6px; border-radius:4px;">descuento_infonavit</code>.</p>
+
+        <h3><i class="fas fa-sliders-h"></i> Ajuste Inbursa</h3>
+        <ul class="bullet-list">
+            <li>Si existen descuentos del módulo Ajuste con fecha dentro de esa semana, se suman todos esos descuentos.</li>
+            <li>Si no hay descuentos semanales, el sistema usa el valor fijo <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px;">ajuste_inbursa</code> del trabajador.</li>
+        </ul>
+        <div class="info-box amber">
+            <i class="fas fa-lightbulb"></i>
+            <span>Los descuentos del módulo Ajuste tienen <strong>prioridad</strong> sobre el valor fijo del trabajador cuando hay registros para esa semana.</span>
+        </div>
+
+        <h3><i class="fas fa-hand-holding-usd"></i> Préstamos</h3>
+        <div class="formula-box">
+            <div class="formula-label">Fórmula</div>
+            descuento_prestamos = Σ descuento_semanal de todos los préstamos activos
+        </div>
+
+        <h3><i class="fas fa-exclamation-triangle"></i> Incidencias</h3>
+        <p>Aparecen en la vista de edición pero el sistema <strong>no descuenta dinero automáticamente</strong>. El administrador debe agregar el descuento manualmente.</p>
+
+        <div class="divider"></div>
+
+        <h3><i class="fas fa-sigma"></i> Fórmula final</h3>
+        <div class="formula-box">
+            <div class="formula-label">Total percepciones</div>
+            salario_base + horas_extras + viáticos + festivos + depósitos_otros
+        </div>
+        <div class="formula-box">
+            <div class="formula-label">Total deducciones</div>
+            infonavit + ajuste_inbursa + incidencias + préstamos + descuentos_otros
+        </div>
+        <div class="formula-box" style="border-color:#3b82f6; background:#eff6ff;">
+            <div class="formula-label" style="color:#3b82f6;">Neto a pagar</div>
+            total_percepciones − total_deducciones
+        </div>
+    </div>
+
+    <!-- 4. Cierre -->
+    <div class="manual-section" id="cierre">
+        <div class="section-title">
+            <div class="section-icon icon-rose"><i class="fas fa-lock"></i></div>
+            <div>
+                <span class="section-num">Sección 4</span>
+                <h2>Cómo Cerrar una Prenómina</h2>
+            </div>
+        </div>
+
+        <ol class="step-list">
+            <li><span class="step-num">1</span> Entrar a <strong>Editar Prenómina</strong>.</li>
+            <li><span class="step-num">2</span> Validar netos, descuentos, depósitos, viáticos y festivos.</li>
+            <li><span class="step-num">3</span> Presionar <strong>Cerrar Nómina Global</strong>.</li>
+        </ol>
+
+        <p>Al cerrarla ocurren tres cosas simultáneas:</p>
+        <div class="cols-2">
+            <div class="mini-card">
+                <h4><i class="fas fa-lock" style="color:#f43f5e"></i> Semana bloqueada</h4>
+                <p>Todas las prenóminas abiertas de esa semana pasan a <span class="badge aprobado">APROBADO</span>.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-sliders-h" style="color:#f59e0b"></i> Ajuste Inbursa cobrado</h4>
+                <p>Los descuentos de esa semana se marcan como <strong>cobrado = True</strong>.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-hand-holding-usd" style="color:#3b82f6"></i> Abono real a préstamos</h4>
+                <p>Los préstamos activos reciben su abono y baja el saldo restante.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-history" style="color:#a855f7"></i> Histórico</h4>
+                <p>Solo aparecen prenóminas en estado <span class="badge aprobado">APROBADO</span> — resultado final pagado.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Préstamos -->
+    <div class="manual-section" id="prestamos">
+        <div class="section-title">
+            <div class="section-icon icon-amber"><i class="fas fa-hand-holding-usd"></i></div>
+            <div>
+                <span class="section-num">Sección 5</span>
+                <h2>Módulo de Préstamos</h2>
+            </div>
+        </div>
+
+        <h3><i class="fas fa-plus-circle"></i> Registrar un préstamo</h3>
+        <p>En <strong>Préstamos → Nuevo Préstamo</strong> se captura: trabajador, monto total, plazo en semanas, descuento por periodo, frecuencia, fecha de inicio y motivo.</p>
+        <p>Al guardar el préstamo queda en estado <span class="badge activo"><i class="fas fa-check"></i> ACTIVO</span> y el sistema recalcula las prenóminas abiertas del trabajador.</p>
+
+        <h3><i class="fas fa-sync-alt"></i> Cuándo baja realmente la deuda</h3>
+        <div class="info-box blue">
+            <i class="fas fa-info-circle"></i>
+            <span>El préstamo se refleja en la prenómina desde que está activo, pero la deuda <strong>solo baja al cerrar la prenómina</strong>.</span>
+        </div>
+        <p>Al cerrar, el sistema aplica como abono el menor entre el descuento programado y el saldo restante, registra un abono tipo <strong>NOMINA</strong> y, si la deuda llega a cero, el préstamo pasa a <span class="badge liquidado"><i class="fas fa-check-double"></i> LIQUIDADO</span>.</p>
+
+        <h3><i class="fas fa-coins"></i> Abonos manuales y liquidación</h3>
+        <div class="cols-2">
+            <div class="mini-card">
+                <h4><i class="fas fa-hand-holding-usd" style="color:#22c55e"></i> Abono manual</h4>
+                <p>Descuenta inmediatamente del saldo y recalcula prenóminas abiertas. Se guarda como abono tipo <strong>MANUAL</strong>.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-check-double" style="color:#6366f1"></i> Liquidación total</h4>
+                <p>Genera un abono por el saldo restante, deja la deuda en cero y cambia el estado a <span class="badge liquidado">LIQUIDADO</span>.</p>
+            </div>
+        </div>
+
+        <h3><i class="fas fa-eye"></i> Dónde debe reflejarse un préstamo</h3>
+        <ol class="step-list">
+            <li><span class="step-num">1</span> En <strong>Préstamos</strong>, como saldo activo o liquidado.</li>
+            <li><span class="step-num">2</span> En la edición de prenómina, dentro de <strong>Préstamos Activos</strong>.</li>
+            <li><span class="step-num">3</span> En la prenómina semanal como <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px;">descuento_prestamos</code>.</li>
+            <li><span class="step-num">4</span> En el historial del préstamo como abonos NOMINA o MANUAL.</li>
+        </ol>
+
+        <div class="warn-banner">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>Crear un préstamo <strong>no genera automáticamente</strong> un depósito en la prenómina. Si la empresa necesita reflejar el dinero entregado, debe registrarse como depósito extra en la prenómina correspondiente.</p>
+        </div>
+    </div>
+
+    <!-- 6. Ajuste Inbursa -->
+    <div class="manual-section" id="ajuste">
+        <div class="section-title">
+            <div class="section-icon icon-teal"><i class="fas fa-sliders-h"></i></div>
+            <div>
+                <span class="section-num">Sección 6</span>
+                <h2>Módulo de Ajuste Inbursa</h2>
+            </div>
+        </div>
+
+        <p>Sirve para recuperar descuentos relacionados con depósitos adelantados de Inbursa dentro de un periodo de ajuste.</p>
+
+        <h3><i class="fas fa-calendar-plus"></i> Crear un periodo</h3>
+        <p>En <strong>Ajuste</strong> se crea un periodo con nombre, fecha inicio, fecha fin, trabajadores y monto meta por trabajador.</p>
+        <ul class="bullet-list">
+            <li>La fecha inicial debe ser menor que la final.</li>
+            <li>No puede haber otro periodo con fechas traslapadas.</li>
+            <li>Debe seleccionarse al menos un trabajador.</li>
+        </ul>
+
+        <h3><i class="fas fa-keyboard"></i> Capturar descuentos</h3>
+        <ol class="step-list">
+            <li><span class="step-num">1</span> Elegir al trabajador dentro del detalle del periodo.</li>
+            <li><span class="step-num">2</span> Capturar el monto y la fecha exacta del descuento.</li>
+            <li><span class="step-num">3</span> Agregar notas si es necesario.</li>
+        </ol>
+
+        <h3><i class="fas fa-calendar-check"></i> Cuándo entra a la prenómina</h3>
+        <p>El descuento entra a la prenómina cuando la <strong>fecha_descuento</strong> cae dentro de la semana de prenómina del trabajador. El sistema suma todos los descuentos de esa semana y los coloca en el campo <code style="background:#f1f5f9; padding:2px 6px; border-radius:4px;">ajuste_inbursa</code>.</p>
+
+        <div class="info-box green">
+            <i class="fas fa-check-circle"></i>
+            <span>El ajuste se considera <strong>cobrado</strong> hasta que se cierra la prenómina. Al aprobarla, los registros se marcan y ya no se pueden eliminar del periodo.</span>
+        </div>
+
+        <h3><i class="fas fa-eye"></i> Dónde debe reflejarse</h3>
+        <ul class="bullet-list">
+            <li>En el detalle del periodo: meta, descontado, restante, progreso y detalle por fecha.</li>
+            <li>En la prenómina semanal como <strong>Ajuste Inbursa</strong>.</li>
+            <li>En el recibo PDF y reportes Excel de prenómina.</li>
+            <li>En el histórico cuando la prenómina ya fue aprobada.</li>
+        </ul>
+    </div>
+
+    <!-- 7. Reportes -->
+    <div class="manual-section" id="reportes">
+        <div class="section-title">
+            <div class="section-icon icon-indigo"><i class="fas fa-table"></i></div>
+            <div>
+                <span class="section-num">Sección 7</span>
+                <h2>Reportes Excel</h2>
+            </div>
+        </div>
+
+        <div class="cols-2">
+            <div class="mini-card">
+                <h4><i class="fas fa-file-excel" style="color:#22c55e"></i> Excel de Prenómina</h4>
+                <p>Salario base, horas extras, viáticos, festivos, otros depósitos, ajuste Inbursa, otros descuentos, abono préstamos, descuento incidencias, total deducciones y total a pagar.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-file-excel" style="color:#3b82f6"></i> Excel de Préstamos</h4>
+                <p>Monto original, total abonado, saldo restante, descuento semanal, estado y motivo.</p>
+            </div>
+            <div class="mini-card">
+                <h4><i class="fas fa-file-excel" style="color:#a855f7"></i> Excel de Ajustes</h4>
+                <p>Resumen por trabajador: meta, total descontado, saldo restante y detalle por fecha de descuento.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. Recomendaciones -->
+    <div class="manual-section" id="recomendaciones">
+        <div class="section-title">
+            <div class="section-icon icon-green"><i class="fas fa-check-double"></i></div>
+            <div>
+                <span class="section-num">Sección 8</span>
+                <h2>Recomendaciones Operativas</h2>
+            </div>
+        </div>
+
+        <p>Para evitar diferencias en el pago, seguir siempre este orden:</p>
+        <ol class="step-list">
+            <li><span class="step-num">1</span> Cerrar primero las horas de la semana.</li>
+            <li><span class="step-num">2</span> Crear o actualizar préstamos <strong>antes</strong> de cerrar prenómina.</li>
+            <li><span class="step-num">3</span> Capturar descuentos Inbursa con su fecha real dentro del periodo.</li>
+            <li><span class="step-num">4</span> Guardar prenómina y revisarla en estado <span class="badge abierta">ABIERTA</span>.</li>
+            <li><span class="step-num">5</span> Aplicar manualmente descuentos por incidencias cuando corresponda.</li>
+            <li><span class="step-num">6</span> Agregar depósitos extras solo si deben aumentar el neto real a pagar.</li>
+            <li><span class="step-num">7</span> Aprobar la prenómina <strong>solo cuando todo esté validado</strong>.</li>
+        </ol>
+    </div>
+
+    <!-- Resumen Ejecutivo -->
+    <div class="summary-card">
+        <h2><i class="fas fa-star"></i> Reglas Clave del Sistema</h2>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <i class="fas fa-hand-holding-usd"></i>
+                <p><strong>Préstamo activo</strong> se ve en prenómina desde antes, pero la deuda baja hasta <strong>aprobar</strong> la semana.</p>
+            </div>
+            <div class="summary-item">
+                <i class="fas fa-sliders-h"></i>
+                <p><strong>Ajuste Inbursa</strong> entra según su fecha, pero se considera cobrado hasta <strong>aprobar</strong> la prenómina.</p>
+            </div>
+            <div class="summary-item">
+                <i class="fas fa-user-clock"></i>
+                <p><strong>Incidencias</strong> se muestran, pero el descuento lo decide y captura <strong>el administrador</strong>.</p>
+            </div>
+            <div class="summary-item">
+                <i class="fas fa-sync-alt"></i>
+                <p><strong>Depósitos extra</strong> y ajustes manuales recalculan el neto mientras la prenómina siga <strong>abierta</strong>.</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -111,6 +111,10 @@
 
             {% endif %}
 
+            {% if session.get('role') == 'admin' %}
+            {{ menu_link('manual_uso.index', false, 'fas fa-book-open', 'Manual de Uso', true) }}
+            {% endif %}
+
             {{ menu_link('https://nube.skilledmx.cloud', true, 'iconos/nube.png', 'Nube') }}
         </nav>
 
