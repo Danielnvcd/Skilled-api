@@ -95,7 +95,7 @@ def profile():
     if request.method == 'POST':
         new_password = request.form.get('new_password')
         confirm_password = request.form.get('confirm_password')
-        
+
         if new_password:
             if new_password != confirm_password:
                 flash('Las contraseñas no coinciden.', 'danger')
@@ -112,8 +112,7 @@ def profile():
                 session['password_version'] = user.password_version
                 flash('Contraseña actualizada correctamente.', 'success')
                 log_action(f"Contraseña actualizada para {user.username}")
-            
-    if request.method == 'POST':
+
         profile_pic = request.files.get('profile_pic')
         if profile_pic and profile_pic.filename != '':
             from werkzeug.utils import secure_filename
@@ -125,7 +124,7 @@ def profile():
                 unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
                 upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
                 profile_pic.save(upload_path)
-                
+
                 if user.profile_pic and user.profile_pic != 'default.png':
                     old_pic_path = os.path.join(current_app.config['UPLOAD_FOLDER'], user.profile_pic)
                     if os.path.exists(old_pic_path):
@@ -133,7 +132,7 @@ def profile():
                             os.remove(old_pic_path)
                         except Exception as e:
                             current_app.logger.warning(f"No se pudo eliminar foto antigua: {e}")
-                
+
                 user.profile_pic = unique_filename
                 db.session.commit()
                 flash('Foto de perfil actualizada correctamente.', 'success')
@@ -341,8 +340,7 @@ def verify_2fa():
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(code, valid_window=1):
             remember = session.get('remember', False)
-            session.pop('pre_2fa_user_id', None)
-            session.pop('remember', None)
+            session.clear()
             _build_session(user, permanent=remember)
             log_action(f"Login 2FA exitoso para {user.username}")
 

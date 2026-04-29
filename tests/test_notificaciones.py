@@ -289,13 +289,13 @@ class TestApiResumen:
         resp = client.get('/notificaciones/api/resumen')
         assert resp.status_code in (302, 303, 308)
 
-    def test_coordinador_devuelve_conteo_cero_y_lista_vacia(self, logged_in_coordinador, db, coordinador_user):
-        _crear_notif(db, coordinador_user.id, tipo='TEST')  # notif directa, edge case
+    def test_coordinador_es_redirigido_por_rbac(self, logged_in_coordinador, db, coordinador_user):
+        """El RBAC de login_required bloquea al coordinador antes de llegar al endpoint.
+        La campana de notificaciones no aparece en la UI del coordinador (base.html:142),
+        por lo que este rol no debe tener acceso a ninguna ruta de notificaciones."""
+        _crear_notif(db, coordinador_user.id, tipo='TEST')
         resp = logged_in_coordinador.get('/notificaciones/api/resumen')
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data['no_leidas'] == 0
-        assert data['items'] == []
+        assert resp.status_code in (302, 303, 308)
 
     def test_admin_recibe_sus_notificaciones(self, logged_in_admin, db, admin_user):
         _crear_notif(db, admin_user.id, tipo='REPORTE_CERRADO')
@@ -461,12 +461,13 @@ class TestMarcarLeida:
         db.session.refresh(n2)
         assert n2.leida is False  # solo n1 debe haber cambiado
 
-    # BUG-1 CORREGIDO: marcar_leida ahora verifica rol
-    def test_bug1_coordinador_recibe_403_en_marcar_leida(self, logged_in_coordinador, db, coordinador_user):
-        """BUG-1 CORREGIDO: Un coordinador recibe 403 al llamar a marcar_leida."""
+    def test_coordinador_es_redirigido_por_rbac_en_marcar_leida(self, logged_in_coordinador, db, coordinador_user):
+        """El RBAC bloquea al coordinador antes de llegar al endpoint (302, no 403).
+        El coordinador no tiene la UI de notificaciones, por lo que el acceso
+        se deniega en la capa de ROLE_PERMISSIONS, no dentro del endpoint."""
         n = _crear_notif(db, coordinador_user.id, leida=False)
         resp = logged_in_coordinador.post(f'/notificaciones/api/marcar_leida/{n.id}')
-        assert resp.status_code == 403
+        assert resp.status_code in (302, 303, 308)
         db.session.refresh(n)
         assert n.leida is False  # no debe haber cambiado
 
@@ -519,12 +520,13 @@ class TestMarcarTodas:
         assert n_super.leida is True
         assert n_admin.leida is False  # no debe haberse tocado
 
-    # BUG-1 CORREGIDO: marcar_todas ahora verifica rol
-    def test_bug1_coordinador_recibe_403_en_marcar_todas(self, logged_in_coordinador, db, coordinador_user):
-        """BUG-1 CORREGIDO: Un coordinador recibe 403 al llamar a marcar_todas."""
+    def test_coordinador_es_redirigido_por_rbac_en_marcar_todas(self, logged_in_coordinador, db, coordinador_user):
+        """El RBAC bloquea al coordinador antes de llegar al endpoint (302, no 403).
+        El coordinador no tiene la UI de notificaciones, por lo que el acceso
+        se deniega en la capa de ROLE_PERMISSIONS, no dentro del endpoint."""
         _crear_notif(db, coordinador_user.id, leida=False)
         resp = logged_in_coordinador.post('/notificaciones/api/marcar_todas')
-        assert resp.status_code == 403
+        assert resp.status_code in (302, 303, 308)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
