@@ -148,19 +148,20 @@ def delete_user(user_id):
 
     return redirect(url_for('users.list_users'))
 
-@bp.route('/profile_pic/<path:filename>')
+@bp.route('/profile_pic/<string:filename>')
 @login_required
 def serve_profile_pic(filename):
-    """Serve user profile pictures securely (IDOR protection)."""
+    """Serve user profile pictures securely (IDOR + path traversal protection)."""
+    if '/' in filename or '\\' in filename or '..' in filename:
+        return jsonify({'error': 'Ruta inválida'}), 400
+
     user_id = session.get('user_id')
     user = User.query.get(user_id)
-    
+
     if not user:
         return jsonify({'error': 'No autorizado'}), 403
-        
-    # El usuario solo puede ver su propia foto, a menos que sea admin
-    # "default.png" o similar (si existiera una general) también debe permitirse si se usa en la UI
+
     if user.role not in ['admin', 'super_admin'] and user.profile_pic != filename and filename != 'default.png':
         return jsonify({'error': 'Acceso denegado'}), 403
-        
+
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)

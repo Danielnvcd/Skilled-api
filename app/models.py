@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from app.extensions import db
+from app.extensions import db, EncryptedString
 
 def _now_utc():
     """Retorna el datetime actual en UTC con tzinfo. Usar como default en modelos."""
@@ -12,7 +12,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='user')
-    totp_secret = db.Column(db.String(32), nullable=True)
+    totp_secret = db.Column(EncryptedString(500), nullable=True)
     # Incrementado cada vez que se cambia la contraseña; invalida todas las sesiones anteriores.
     password_version = db.Column(db.Integer, nullable=False, default=1, server_default='1')
 

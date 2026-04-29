@@ -279,6 +279,22 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Verificación completa de sesión: login, existencia del usuario y versión de contraseña.
+        # Hace que el decorador sea seguro aunque se use sin @login_required encima.
+        if 'user_id' not in session:
+            return redirect(url_for('auth.login'))
+
+        from app.models import User
+        db_user = User.query.get(session['user_id'])
+        if db_user is None:
+            session.clear()
+            flash('Tu sesión ya no es válida.', 'danger')
+            return redirect(url_for('auth.login'))
+        if session.get('password_version', 1) != (db_user.password_version or 1):
+            session.clear()
+            flash('Tu contraseña fue cambiada. Inicia sesión de nuevo.', 'warning')
+            return redirect(url_for('auth.login'))
+
         if session.get('role') not in ['admin', 'super_admin']:
             flash('Acceso denegado.', 'danger')
             return redirect(url_for('main.home'))

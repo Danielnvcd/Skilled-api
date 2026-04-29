@@ -1178,7 +1178,11 @@ def get_documento(doc_id):
     t = doc.trabajador
     if not is_authorized_for_worker(t):
         return jsonify({'error': 'Acceso denegado'}), 403
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], doc.ruta_archivo)
+    return send_from_directory(
+        current_app.config['UPLOAD_FOLDER'],
+        doc.ruta_archivo,
+        as_attachment=True,
+    )
 
 @bp.route('/foto/<int:id>', methods=['GET'])
 @login_required

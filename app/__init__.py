@@ -68,7 +68,7 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 
-    app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'xlsm', 'jpg', 'png', 'mp4', 'mp3', 'wav', 'heic'}
+    app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'png', 'mp4', 'mp3', 'wav', 'heic'}
     
     app.config['COMPRESS_ALGORITHM'] = ['brotli', 'gzip', 'deflate']
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000 # 1 año de caché para estáticos
