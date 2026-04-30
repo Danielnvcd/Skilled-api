@@ -260,3 +260,5 @@ def _recalcular_prenominas_abiertas(trabajador_id):
     
     for p in prenominas_abiertas:
         recalcular_totales_prenomina(p)
+    if prenominas_abiertas:
+        db.session.commit()

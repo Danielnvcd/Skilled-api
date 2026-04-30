@@ -1,7 +1,7 @@
 import os
 import logging
 from fastapi import FastAPI, Depends, HTTPException, APIRouter, Response, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from decimal import Decimal
 import datetime
 import uuid
@@ -174,9 +174,16 @@ def get_solicitudes(db: Session = Depends(get_db), current_user = Depends(get_cu
     elif current_user.role not in ['inventario', 'admin']:
         raise HTTPException(status_code=403, detail="No tienes permiso")
 
-    solicitudes = query.order_by(SolicitudMaterial.fecha_creacion.desc()).all()
-    
-    # Enriquecer con nombres de solicitantes y productos
+    solicitudes = query\
+        .options(
+            joinedload(SolicitudMaterial.solicitante),
+            selectinload(SolicitudMaterial.detalles)
+                .joinedload(SolicitudMaterialDetalle.producto)
+        )\
+        .order_by(SolicitudMaterial.fecha_creacion.desc())\
+        .all()
+
+    # Enriquecer con nombres de solicitantes y productos (datos ya en memoria)
     for s in solicitudes:
         s.solicitante_nombre = s.solicitante.username if s.solicitante else "Desconocido"
         for d in s.detalles:
@@ -501,7 +508,7 @@ def create_movimiento(
     if mov.tipo in ['ENTRADA', 'SALIDA', 'TRASPASO'] and mov.cantidad <= 0:
         raise HTTPException(status_code=422, detail="La cantidad debe ser positiva para este tipo de movimiento")
 
-    producto = db.query(Producto).with_for_update().filter(Producto.id == mov.producto_id).first()
+    producto = db.query(Producto).with_for_update(nowait=True).filter(Producto.id == mov.producto_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     

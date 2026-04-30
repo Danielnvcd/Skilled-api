@@ -666,7 +666,7 @@ def api_agregar_descuento():
         db.session.commit()
         
         recalcular_totales_prenomina(prenomina)
-        
+        db.session.commit()
         return jsonify({'success': True, 'message': 'Descuento agregado.', 'id': desc.id,
             'total_deducciones': float(prenomina.total_deducciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -691,7 +691,7 @@ def api_eliminar_descuento(id):
         db.session.delete(desc)
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
-        
+        db.session.commit()
         return jsonify({'success': True, 'message': 'Descuento eliminado.',
             'total_deducciones': float(prenomina.total_deducciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -741,7 +741,7 @@ def api_agregar_deposito():
         db.session.add(dep)
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
-        
+        db.session.commit()
         return jsonify({'success': True, 'message': 'Depósito agregado.', 'id': dep.id,
             'total_percepciones': float(prenomina.total_percepciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -766,7 +766,7 @@ def api_eliminar_deposito(id):
         db.session.delete(dep)
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
-        
+        db.session.commit()
         return jsonify({'success': True, 'message': 'Depósito eliminado.',
             'total_percepciones': float(prenomina.total_percepciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -809,6 +809,7 @@ def api_actualizar_viaticos():
         prenomina.pago_viaticos = monto_viaticos
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
+        db.session.commit()
 
         return jsonify({
             'success': True,
@@ -856,6 +857,7 @@ def api_actualizar_festivos():
         prenomina.pago_festivos = monto_festivos
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
+        db.session.commit()
 
         return jsonify({
             'success': True,
@@ -878,12 +880,21 @@ def calcular_preview_prenomina(fecha_obj, reportes):
     y traduce esas horas sumadas para cada trabajador devolviendo Prenominas globales simuladas.
     """
     preview = []
-    
+
+    # Batch-load de registros para todos los reportes: evita 1 query por reporte (N+1)
+    reporte_ids = [r.id for r in reportes]
+    registros_bulk = RegistroDiarioHoras.query.filter(
+        RegistroDiarioHoras.reporte_id.in_(reporte_ids)
+    ).all()
+    registros_por_reporte = {}
+    for reg in registros_bulk:
+        registros_por_reporte.setdefault(reg.reporte_id, []).append(reg)
+
     # Obtenemos ids únicos de los trabajadores involucrados en esta semana
     trabajadores_ids = set()
-    all_registros = []  # Recopilar todos los registros una sola vez
+    all_registros = []
     for r in reportes:
-        for reg in r.registros:
+        for reg in registros_por_reporte.get(r.id, []):
             trabajadores_ids.add(reg.trabajador_id)
             all_registros.append(reg)
             

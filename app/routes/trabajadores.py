@@ -3,7 +3,7 @@ import io
 from sqlalchemy import or_, func
 from sqlalchemy.orm import selectinload
 from app.extensions import db, limiter
-from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
+from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador, Proyecto
 from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file, validate_lengths
 from werkzeug.utils import secure_filename
 import traceback
@@ -503,9 +503,15 @@ def get_trabajador(id):
     documentos = [d.to_dict() for d in t.documentos]
 
     # Extraer coordinadores de los proyectos activos asignados
+    # joinedload evita N+1: carga coordinador en el mismo query en lugar de 1 query por proyecto
+    from sqlalchemy.orm import joinedload as _jl
+    proyectos_activos = (t.proyectos
+        .options(_jl(Proyecto.coordinador))
+        .filter_by(activo=True)
+        .all())
     coordinadores_set = set()
-    for p in t.proyectos:
-        if p.activo and p.coordinador:
+    for p in proyectos_activos:
+        if p.coordinador:
             coordinadores_set.add(p.coordinador.full_name or p.coordinador.username)
 
     coordinadores_asignados = ", ".join(coordinadores_set) if coordinadores_set else "Ninguno asignado"
