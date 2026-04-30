@@ -22,15 +22,15 @@ def create_app():
     @app.context_processor
     def inject_context():
         from datetime import datetime
-        from flask import session
-        
-        # Local import to prevent circular dependency
+        from flask import session, g
         from app.models import User
-        
+
         current_user = None
         if 'user_id' in session:
-            current_user = User.query.get(session.get('user_id'))
-            
+            if not hasattr(g, '_current_user'):
+                g._current_user = User.query.get(session.get('user_id'))
+            current_user = g._current_user
+
         return {'now': datetime.now, 'current_user': current_user}
         
     @app.template_filter('fecha_es')
@@ -65,8 +65,22 @@ def create_app():
     app.config['BASE_DIR'] = BASE_DIR
     app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
     
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
+    _db_uri = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = _db_uri
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # Pool y timeouts: solo para PostgreSQL — SQLite (tests) usa NullPool y no los necesita
+    if not _db_uri.startswith('sqlite'):
+        _engine_opts = {
+            'pool_pre_ping': True,  # descarta conexiones muertas antes de usarlas
+            'pool_recycle': 1800,   # renueva conexiones inactivas cada 30 min
+            'pool_timeout': 30,     # falla si no hay conexión libre en 30 s
+        }
+        if _db_uri.startswith('postgresql'):
+            _engine_opts['connect_args'] = {
+                'options': '-c statement_timeout=30000 -c lock_timeout=5000'
+            }
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _engine_opts
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 
     app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'png', 'mp4', 'mp3', 'wav', 'heic'}
     

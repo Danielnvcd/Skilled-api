@@ -9,11 +9,20 @@ from app.utils import login_required, admin_required, is_strong_password, allowe
 
 bp = Blueprint('users', __name__, url_prefix='/users')
 
+_ROLE_ORDER = {
+    'super_admin': 0,
+    'admin': 1,
+    'coordinador': 2,
+    'inventario': 3,
+    'solicitante_material': 4,
+}
+
 @bp.route('/')
 @login_required
 @admin_required
 def list_users():
     users = User.query.all()
+    users = sorted(users, key=lambda u: (_ROLE_ORDER.get(u.role, 99), u.username or ''))
     return render_template('users.html', users=users)
 
 @bp.route('/add', methods=['POST'])

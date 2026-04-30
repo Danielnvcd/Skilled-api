@@ -17,6 +17,14 @@ def app():
     """Crea la app Flask con SQLite en memoria para tests."""
     os.environ['SECRET_KEY'] = 'test-secret-key-do-not-use-in-prod'
     os.environ['DATABASE_URL'] = 'sqlite://'  # In-memory SQLite
+    os.environ['REDIS_URL'] = ''  # Desactivar Redis en tests (evita colisiones con datos de producción)
+    # Clave Fernet independiente para tests (no usa la de producción)
+    from cryptography.fernet import Fernet
+    os.environ['TOTP_ENCRYPTION_KEY'] = Fernet.generate_key().decode()
+
+    # Resetear el singleton de Redis por si ya se conectó en otro import
+    import app.extensions as _ext
+    _ext._redis_client = None
 
     # Directorio temporal aislado para uploads: evita contaminar uploads/ de producción
     tmp_upload = tempfile.mkdtemp(prefix='test_uploads_')

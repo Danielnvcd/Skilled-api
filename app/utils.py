@@ -236,6 +236,15 @@ ROLE_PERMISSIONS = {
     },
 }
 
+def _get_session_user():
+    """Carga el User de la sesión una sola vez por request, usando cache en g."""
+    from flask import g
+    from app.models import User
+    if not hasattr(g, '_current_user'):
+        g._current_user = User.query.get(session['user_id'])
+    return g._current_user
+
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -244,8 +253,7 @@ def login_required(f):
 
         # Verificar que la versión de contraseña en sesión coincide con la BD.
         # Si el usuario cambió su contraseña desde otro dispositivo, esta sesión queda inválida.
-        from app.models import User
-        db_user = User.query.get(session['user_id'])
+        db_user = _get_session_user()
         if db_user is None:
             session.clear()
             flash('Tu sesión ya no es válida.', 'danger')
@@ -284,8 +292,7 @@ def admin_required(f):
         if 'user_id' not in session:
             return redirect(url_for('auth.login'))
 
-        from app.models import User
-        db_user = User.query.get(session['user_id'])
+        db_user = _get_session_user()
         if db_user is None:
             session.clear()
             flash('Tu sesión ya no es válida.', 'danger')
@@ -410,5 +417,4 @@ def recalcular_totales_prenomina(prenomina):
     prenomina.total_percepciones = to_dec(prenomina.salario_base) + to_dec(prenomina.pago_horas_extras) + to_dec(prenomina.pago_viaticos) + to_dec(prenomina.pago_festivos) + to_dec(prenomina.depositos_otros)
     prenomina.total_deducciones = to_dec(prenomina.descuento_infonavit) + to_dec(prenomina.ajuste_inbursa) + to_dec(prenomina.descuento_incidencias) + to_dec(prenomina.descuento_prestamos) + to_dec(prenomina.descuentos_otros)
     prenomina.total_a_pagar = prenomina.total_percepciones - prenomina.total_deducciones
-
-    db.session.commit()
+    # No hace commit — el caller controla la transacción

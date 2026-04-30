@@ -1,5 +1,6 @@
 """Tests de hardening: upload de fotos, autorización de proyectos, respuestas 403."""
 import io
+import os
 import json
 import pytest
 from app.models import Proyecto, Trabajador, User, DocumentoTrabajador
@@ -339,3 +340,100 @@ class TestDocumentosNoRegresion:
         result = resp.get_json()
         assert result is not None
         assert 'nombre_archivo' in result
+
+
+# ══════════════════════════════════════════════
+# 5. PATH TRAVERSAL EN PROFILE PIC (A3)
+# ══════════════════════════════════════════════
+
+class TestPathTraversalProfilePic:
+    """A3: serve_profile_pic debe rechazar filenames con '..' o '\\'."""
+
+    def test_doble_punto_en_nombre_rechazado(self, logged_in_admin):
+        """Filename con '..' → 400 con error JSON."""
+        resp = logged_in_admin.get('/users/profile_pic/foo..bar.jpg')
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data is not None and 'error' in data
+
+    def test_barra_invertida_en_nombre_rechazada(self, logged_in_admin):
+        """Filename con '\\' (URL-encoded %5C) → 400."""
+        # %5C es el URL-encoding de backslash; Werkzeug lo decodifica antes de rutear
+        resp = logged_in_admin.get('/users/profile_pic/foo%5Cbar.jpg')
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data is not None and 'error' in data
+
+    def test_nombre_sin_caracteres_peligrosos_no_bloqueado(self, logged_in_admin):
+        """Filename normal sin '..' ni '\\' → no bloqueado por path traversal (puede ser 404)."""
+        resp = logged_in_admin.get('/users/profile_pic/foto_normal.jpg')
+        # 404 porque el archivo no existe, pero NO 400 por path traversal
+        assert resp.status_code != 400
+
+
+# ══════════════════════════════════════════════
+# 6. EXTENSIONES PROHIBIDAS: XLSM (M5)
+# ══════════════════════════════════════════════
+
+class TestExtensionesProhibidas:
+    """M5: .xlsm debe estar bloqueado en ALLOWED_EXTENSIONS."""
+
+    # XLSM es ZIP-based; magic bytes del formato ZIP
+    ZIP_MAGIC = b'PK\x03\x04' + b'\x00' * 100
+
+    def test_xlsm_rechazado_con_400(self, logged_in_admin, db, trabajador):
+        """.xlsm → 400 porque no está en ALLOWED_EXTENSIONS."""
+        data = {
+            'documento': (io.BytesIO(self.ZIP_MAGIC), 'macro_peligroso.xlsm'),
+        }
+        resp = logged_in_admin.post(
+            f'/trabajadores/{trabajador.id}/documentos',
+            data=data,
+            content_type='multipart/form-data'
+        )
+        assert resp.status_code == 400
+        result = resp.get_json()
+        assert result is not None and 'error' in result
+
+    def test_xlsx_sigue_aceptado(self, logged_in_admin, db, trabajador):
+        """.xlsx (sin macros) debe seguir siendo aceptado tras quitar xlsm."""
+        data = {
+            'documento': (io.BytesIO(self.ZIP_MAGIC), 'reporte.xlsx'),
+        }
+        resp = logged_in_admin.post(
+            f'/trabajadores/{trabajador.id}/documentos',
+            data=data,
+            content_type='multipart/form-data'
+        )
+        assert resp.status_code == 201
+
+
+# ══════════════════════════════════════════════
+# 7. CONTENT-DISPOSITION: ATTACHMENT (M6)
+# ══════════════════════════════════════════════
+
+class TestContentDisposition:
+    """M6: Los documentos se deben descargar con Content-Disposition: attachment."""
+
+    def test_documento_incluye_header_attachment(self, logged_in_admin, db, trabajador, app):
+        """El endpoint /documento/<id> debe responder con Content-Disposition: attachment."""
+        upload_folder = app.config['UPLOAD_FOLDER']
+        subdir = os.path.join(upload_folder, f'trabajadores/{trabajador.id}')
+        os.makedirs(subdir, exist_ok=True)
+
+        file_path = os.path.join(subdir, 'contrato_cd_test.pdf')
+        with open(file_path, 'wb') as f:
+            f.write(b'%PDF-1.4 test content for Content-Disposition header')
+
+        doc = DocumentoTrabajador(
+            trabajador_id=trabajador.id,
+            nombre_archivo='contrato_cd_test.pdf',
+            ruta_archivo=f'trabajadores/{trabajador.id}/contrato_cd_test.pdf',
+        )
+        db.session.add(doc)
+        db.session.commit()
+
+        resp = logged_in_admin.get(f'/trabajadores/documento/{doc.id}')
+        assert resp.status_code == 200
+        cd = resp.headers.get('Content-Disposition', '')
+        assert 'attachment' in cd, f"Se esperaba 'attachment' en Content-Disposition, got: '{cd}'"

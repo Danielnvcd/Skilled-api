@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from urllib.parse import urlparse, urljoin
 from app.extensions import db, limiter, get_redis
 from app.models import User, RefreshToken
-from app.utils import log_action, login_required, is_strong_password
+from app.utils import log_action, login_required, is_strong_password, _get_session_user
 from app.constants import REFRESH_TOKEN_LIFETIME_DAYS
 import pyotp
 import qrcode
@@ -85,8 +85,8 @@ bp = Blueprint('auth', __name__)
 @bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
-    user = User.query.get(session['user_id'])
-    
+    user = g._current_user  # ya cargado por login_required, sin query adicional
+
     if not user:
         session.clear()
         flash('Tu sesión es inválida. Por favor inicia sesión de nuevo.', 'danger')
@@ -237,7 +237,7 @@ def update_last_seen():
 
         # Key expiró o no existe → actualizar BD y renovar cache
         try:
-            user = User.query.get(user_id)
+            user = _get_session_user()  # reutiliza g._current_user si ya está cargado
             if user:
                 user.last_seen = datetime.now()
                 db.session.commit()
@@ -253,7 +253,7 @@ def update_last_seen():
         if now - last_update < 300:  # 5 minutos
             return
         try:
-            user = User.query.get(user_id)
+            user = _get_session_user()  # reutiliza g._current_user si ya está cargado
             if user:
                 user.last_seen = datetime.now()
                 db.session.commit()
@@ -367,7 +367,7 @@ def verify_2fa():
 @bp.route('/setup-2fa', methods=['GET', 'POST'])
 @login_required
 def setup_2fa():
-    user = User.query.get(session['user_id'])
+    user = g._current_user  # ya cargado por login_required, sin query adicional
     
     if request.method == 'POST':
         secret = session.get('totp_secret_setup')
@@ -410,7 +410,7 @@ def setup_2fa():
 @login_required
 def logout():
     # Registrar actividad ANTES de limpiar sesión
-    user = User.query.get(session.get('user_id'))
+    user = g._current_user  # ya cargado por login_required, sin query adicional
     if user:
         user.last_seen = datetime.now()
         db.session.commit()
