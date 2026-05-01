@@ -1,6 +1,6 @@
 import os
 import uuid
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, send_from_directory, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, send_from_directory, jsonify, make_response
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from app.models import User
@@ -173,4 +173,6 @@ def serve_profile_pic(filename):
     if user.role not in ['admin', 'super_admin'] and user.profile_pic != filename and filename != 'default.png':
         return jsonify({'error': 'Acceso denegado'}), 403
 
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
+    response = make_response(send_from_directory(current_app.config['UPLOAD_FOLDER'], filename))
+    response.headers['Cache-Control'] = 'private, max-age=86400'
+    return response
