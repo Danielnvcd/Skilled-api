@@ -86,6 +86,7 @@ def create_app():
     
     app.config['COMPRESS_ALGORITHM'] = ['brotli', 'gzip', 'deflate']
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000 # 1 año de caché para estáticos
+    app.config['USE_X_ACCEL_REDIRECT'] = os.environ.get('USE_X_ACCEL_REDIRECT', 'false').lower() == 'true'
     
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
