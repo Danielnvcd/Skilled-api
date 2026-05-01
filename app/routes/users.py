@@ -173,6 +173,12 @@ def serve_profile_pic(filename):
     if user.role not in ['admin', 'super_admin'] and user.profile_pic != filename and filename != 'default.png':
         return jsonify({'error': 'Acceso denegado'}), 403
 
+    if current_app.config.get('USE_X_ACCEL_REDIRECT'):
+        response = make_response('')
+        response.headers['X-Accel-Redirect'] = f'/x-accel-uploads/{filename}'
+        response.headers['Cache-Control'] = 'private, max-age=86400'
+        return response
+
     response = make_response(send_from_directory(current_app.config['UPLOAD_FOLDER'], filename))
     response.headers['Cache-Control'] = 'private, max-age=86400'
     return response
