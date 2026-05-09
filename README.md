@@ -81,17 +81,39 @@ El sistema utiliza variables de entorno secretas. En la carpeta raíz del proyec
 > [!NOTE]
 > Puedes usar el siguiente comando rápido en la terminal (PowerShell o bash) para crear tu archivo `.env`:
 
-**En Windows (PowerShell) / Mac / Linux:**
-```bash
-echo FLASK_APP=run.py >> .env
-echo FLASK_ENV=development >> .env
-echo SECRET_KEY=una_clave_secreta_super_segura12345 >> .env
-echo "DATABASE_URL=postgresql+psycopg2://tu_usuario:tu_contrasena@localhost:5432/nombre_base_de_datos" >> .env
-echo REDIS_URL=redis://localhost:6379/0 >> .env
+Crea el archivo `.env` en la raíz del proyecto con el siguiente contenido como base:
+
+```env
+FLASK_APP=run.py
+
+# 'development' en local, 'production' en el servidor real
+FLASK_ENV=development
+
+# Generar con: python -c "import secrets; print(secrets.token_hex(64))"
+SECRET_KEY=una_clave_secreta_super_segura12345
+
+# Reemplaza con tus credenciales reales de PostgreSQL
+DATABASE_URL=postgresql+psycopg2://tu_usuario:tu_contrasena@localhost:5432/nombre_base_de_datos
+
+REDIS_URL=redis://localhost:6379/0
+
+MAIL_USERNAME=tu_correo@gmail.com
+MAIL_PASSWORD=tu_app_password_de_gmail
+
+# Dominios permitidos para CORS (separados por coma)
+ALLOWED_ORIGIN=https://tu-dominio.com
+
+# Clave Fernet para cifrar 2FA. Generar con:
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+TOTP_ENCRYPTION_KEY=GENERAR_CLAVE_AQUI
+
+# Solo activar en producción con Nginx configurado (ver sección de Nginx)
+# Hace que Nginx sirva las fotos de perfil directamente desde disco (~20ms vs ~600ms)
+USE_X_ACCEL_REDIRECT=false
 ```
 
 **MUY IMPORTANTE**:
-Abre el nuevo archivo `.env` que se creó. Asegúrate de modificar `tu_usuario`, `tu_contrasena` y `nombre_base_de_datos` con tus accesos reales configurados de PostgreSQL.
+Modifica `tu_usuario`, `tu_contrasena` y `nombre_base_de_datos` con tus accesos reales de PostgreSQL. En producción cambia `USE_X_ACCEL_REDIRECT=true`.
 
 ---
 
@@ -235,8 +257,8 @@ sudo systemctl start nominas
 sudo systemctl status nominas
 ```
 
-### 5. Configuración de Nginx (`/etc/nginx/sites-available/default`)
-Para un correcto funcionamiento (especialmente con HTTPS/Cloudflare), asegúrate de que tu bloque de Nginx tenga los encabezados de proxy adecuados:
+### 5. Configuración de Nginx (`/etc/nginx/sites-available/nominas`)
+Para un correcto funcionamiento (especialmente con HTTPS/Cloudflare), usa la siguiente configuración completa:
 
 ```nginx
 server {
@@ -244,35 +266,73 @@ server {
     server_name _;
     client_max_body_size 50M;
 
+    # IPs reales de Cloudflare
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    real_ip_header CF-Connecting-IP;
+
     # Compresión gzip
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 256;
 
-    # Archivos estáticos
+    # Archivos estáticos (CSS, JS, imágenes)
     location /static/ {
         alias /opt/nominas/static/;
         expires 1y;
         add_header Cache-Control "public, immutable";
+        access_log off;
     }
 
-    # Proxy Principal
+    # Uploads directos (no fotos de perfil)
+    location /uploads/ {
+        alias /opt/nominas/uploads/;
+        expires 7d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
+    # Internal: Nginx sirve fotos de perfil directamente tras validación de Flask
+    # Requiere USE_X_ACCEL_REDIRECT=true en el .env de producción
+    location /x-accel-uploads/ {
+        internal;
+        alias /opt/nominas/uploads/;
+        expires 7d;
+        add_header Cache-Control "private, max-age=86400";
+    }
+
+    # Todo lo demás (HTML, API)
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        
-        # IMPORTANTE para FastAPI: respetar el protocolo original (HTTPS)
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-
-        # Soporte para WebSockets
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        
         proxy_read_timeout 120s;
+        add_header Cache-Control "no-store, no-cache";
     }
 }
+```
+
+Aplicar cambios:
+```bash
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### ¿Por qué es necesaria esta configuración?
@@ -280,6 +340,7 @@ server {
 - **ASGI + WSGI**: Gunicorn por defecto solo entiende Flask (WSGI). Al agregar `uvicorn.workers.UvicornWorker`, le permitimos procesar también FastAPI (ASGI) de forma eficiente.
 - **Protocolo HTTPS (X-Forwarded-Proto)**: FastAPI es estricto con la seguridad. Sin el encabezado `$http_x_forwarded_proto`, la documentación de la API (`/api/docs`) y las redirecciones intentarían usar `http`, provocando errores de **Contenido Mixto** que el navegador bloquearía.
 - **WebSockets**: Los encabezados de `Upgrade` y `Connection` permiten que FastAPI maneje conexiones persistentes en tiempo real si se requieren en el futuro.
+- **X-Accel-Redirect (`/x-accel-uploads/`)**: Flask valida permisos de foto de perfil (IDOR), luego delega a Nginx para servir el archivo directo desde disco. Reduce la latencia de ~600ms a ~20ms en producción.
 
 ---
 

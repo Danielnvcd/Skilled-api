@@ -3,6 +3,7 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_editar.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -10,16 +11,16 @@
     <div class="reporte-info-bar">
         <div class="details">
             <div class="info-item">
-                <label>Semana</label>
+                <label><i class="fa-regular fa-calendar-days" style="margin-right:4px;"></i> Semana</label>
                 <span>{{ fecha_inicio.strftime('%d/%m/%Y') }} - {{ fecha_fin.strftime('%d/%m/%Y') if fecha_fin else ''
                     }}</span>
             </div>
             <div class="info-item">
-                <label>Trabajadores</label>
+                <label><i class="fa-solid fa-users" style="margin-right:4px;"></i> Trabajadores</label>
                 <span>{{ prenominas|length }}</span>
             </div>
             <div class="info-item">
-                <label>Estado</label>
+                <label><i class="fa-solid fa-circle-info" style="margin-right:4px;"></i> Estado</label>
                 {% if estado_actual == 'ABIERTA' %}
                 <span class="badge"
                     style="background:#D1FAE5; color:#064E3B; padding: 4px 10px; border-radius:12px; font-weight:600;">🟢
@@ -32,8 +33,8 @@
             </div>
         </div>
         <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <a href="{{ url_for('prenomina.generar', fecha_str=fecha_str) }}" class="btn-secondary">← Regresar a Vista
-                Previa</a>
+            <a href="{{ url_for('prenomina.generar', fecha_str=fecha_str) }}" class="btn-secondary">
+                <i class="fa-solid fa-arrow-left"></i> Regresar a Vista Previa</a>
             {% if estado_actual == 'ABIERTA' %}
             <button id="btnCerrarNomina" data-fecha="{{ fecha_str }}" class="btn-primary"
                 style="background: linear-gradient(135deg, #DC2626, #EF4444);">
@@ -50,19 +51,19 @@
             <!-- Header -->
             <div class="recibo-header" style="cursor: pointer;" data-toggle-id="worker-body-{{ p.id }}">
                 <div class="empleado-info">
-                    <span class="nombre">{{ p.trabajador.nombre_completo }}</span>
+                    <span class="nombre"><i class="fa-solid fa-user-tie" style="color:#4F46E5; margin-right:6px; font-size:0.95rem;"></i>{{ p.trabajador.nombre_completo }}</span>
                     <span class="meta">
-                        Nº Emp: {{ p.trabajador.no_empleado }} |
-                        Nomina: <strong>{{ p.trabajador.tipo_nomina or 'N/A' }}</strong> |
-                        Pago: <strong>{{ p.tipo_pago }}</strong> |
-                        Hrs Laboradas: <strong>{{ "%.2f"|format(p.total_horas_calculadas or 0) }}</strong>
+                        <i class="fa-solid fa-id-badge" style="color:#94A3B8;"></i> Nº Emp: {{ p.trabajador.no_empleado }} |
+                        <i class="fa-solid fa-file-invoice" style="color:#94A3B8;"></i> Nomina: <strong>{{ p.trabajador.tipo_nomina or 'N/A' }}</strong> |
+                        <i class="fa-solid fa-money-check-dollar" style="color:#94A3B8;"></i> Pago: <strong>{{ p.tipo_pago }}</strong> |
+                        <i class="fa-regular fa-clock" style="color:#94A3B8;"></i> Hrs Laboradas: <strong>{{ "%.2f"|format(p.total_horas_calculadas or 0) }}</strong>
                     </span>
                 </div>
                 <div style="display: flex; gap: 1rem; align-items: center;">
                     <div style="text-align: right;">
                         <span
-                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Neto
-                            a Pagar</span>
+                            style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing:0.04em;">
+                            <i class="fa-solid fa-wallet" style="margin-right:3px;"></i> Neto a Pagar</span>
                         <div style="font-size: 1.5rem; font-weight: 800; color: #059669;" id="neto-{{ p.id }}">
                             ${{ "%.2f"|format(p.total_a_pagar) }}
                         </div>
@@ -76,45 +77,53 @@
             <div id="worker-body-{{ p.id }}" class="worker-edit-body"
                 style="display: none; padding: 1.5rem; border-top: 1px solid var(--border);">
 
-                <!-- Current Totals -->
-                <div
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; background: #F9FAFB; padding: 1rem; border-radius: 8px;">
-                    <div>
-                        <span
-                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total
-                            Percepciones</span>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: #1e40af;" id="percepciones-{{ p.id }}">
-                            ${{ "%.2f"|format(p.total_percepciones) }}</div>
+                <!-- KPI Strip with Icons -->
+                <div class="kpi-strip">
+                    <div class="kpi-card">
+                        <div class="kpi-icon percepciones">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Total Percepciones</span>
+                            <span class="kpi-value percepciones" id="percepciones-{{ p.id }}">${{ "%.2f"|format(p.total_percepciones) }}</span>
+                        </div>
                     </div>
-                    <div>
-                        <span
-                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Total
-                            Deducciones</span>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: #DC2626;" id="deducciones-{{ p.id }}">
-                            -${{ "%.2f"|format(p.total_deducciones) }}</div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon deducciones">
+                            <i class="fa-solid fa-arrow-trend-down"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Total Deducciones</span>
+                            <span class="kpi-value deducciones" id="deducciones-{{ p.id }}">-${{ "%.2f"|format(p.total_deducciones) }}</span>
+                        </div>
                     </div>
-                    <div>
-                        <span
-                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Préstamos
-                            Activos</span>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: #7C3AED;" id="prestamos-{{ p.id }}">-${{
-                            "%.2f"|format(p.descuento_prestamos) }}</div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon prestamos">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Préstamos Activos</span>
+                            <span class="kpi-value prestamos" id="prestamos-{{ p.id }}">-${{ "%.2f"|format(p.descuento_prestamos) }}</span>
+                        </div>
                     </div>
-                    <div>
-                        <span
-                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Viáticos</span>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
-                            <span style="font-size: 1rem; color: #D97706; font-weight: 700;" id="viaticos-display-{{ p.id }}">${{ "%.2f"|format(p.pago_viaticos or 0) }}</span>
-                            {% if estado_actual == 'ABIERTA' %}
-                            <button class="btn-editar-viaticos" data-prenomina-id="{{ p.id }}"
-                                title="Editar viáticos"
-                                style="background: none; border: none; color: #D97706; cursor: pointer; font-size: 0.85rem; padding: 2px 4px;">
-                                <i class="fa-solid fa-pen"></i>
-                            </button>
-                            {% endif %}
+                    <div class="kpi-card">
+                        <div class="kpi-icon viaticos">
+                            <i class="fa-solid fa-car-side"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Viáticos</span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span class="kpi-value viaticos" id="viaticos-display-{{ p.id }}">${{ "%.2f"|format(p.pago_viaticos or 0) }}</span>
+                                {% if estado_actual == 'ABIERTA' %}
+                                <button class="btn-editar-viaticos btn-inline-edit" data-prenomina-id="{{ p.id }}"
+                                    title="Editar viáticos" style="color: #D97706;">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                {% endif %}
+                            </div>
                         </div>
                         {% if estado_actual == 'ABIERTA' %}
-                        <div id="viaticos-form-{{ p.id }}" style="display: none; margin-top: 6px; display: none;">
+                        <div id="viaticos-form-{{ p.id }}" style="display: none; margin-top: 6px;">
                             <div style="display: flex; gap: 4px; align-items: center;">
                                 <input type="number" step="0.01" min="0"
                                     class="form-control viaticos-input"
@@ -135,18 +144,21 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div>
-                        <span
-                            style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Festivos</span>
-                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
-                            <span style="font-size: 1rem; color: #7C3AED; font-weight: 700;" id="festivos-display-{{ p.id }}">${{ "%.2f"|format(p.pago_festivos or 0) }}</span>
-                            {% if estado_actual == 'ABIERTA' %}
-                            <button class="btn-editar-festivos" data-prenomina-id="{{ p.id }}"
-                                title="Editar festivos"
-                                style="background: none; border: none; color: #7C3AED; cursor: pointer; font-size: 0.85rem; padding: 2px 4px;">
-                                <i class="fa-solid fa-pen"></i>
-                            </button>
-                            {% endif %}
+                    <div class="kpi-card">
+                        <div class="kpi-icon festivos">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Festivos</span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span class="kpi-value festivos" id="festivos-display-{{ p.id }}">${{ "%.2f"|format(p.pago_festivos or 0) }}</span>
+                                {% if estado_actual == 'ABIERTA' %}
+                                <button class="btn-editar-festivos btn-inline-edit" data-prenomina-id="{{ p.id }}"
+                                    title="Editar festivos" style="color: #7C3AED;">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                {% endif %}
+                            </div>
                         </div>
                         {% if estado_actual == 'ABIERTA' %}
                         <div id="festivos-form-{{ p.id }}" style="display: none; margin-top: 6px;">
@@ -172,42 +184,44 @@
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                <div class="edit-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
                     <!-- LEFT: Incidencias + Descuentos -->
                     <div>
-                        <h4 style="margin: 0 0 1rem 0; color: var(--text-main);">
-                            <i class="fa-solid fa-exclamation-triangle" style="color: #F59E0B;"></i> Incidencias de la
-                            Semana
-                        </h4>
+                        <div class="section-header">
+                            <div class="sh-icon warning">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                            </div>
+                            <h4>Incidencias de la Semana</h4>
+                        </div>
                         {% if p.trabajador_id in incidencias_por_trabajador %}
-                        <div
-                            style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+                        <div class="incidencia-box">
                             {% for inc in incidencias_por_trabajador[p.trabajador_id] %}
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #FDE68A; font-size: 0.85rem;">
-                                <span><strong>{{ inc.fecha }}</strong> — {{ inc.incidencia }}</span>
+                            <div class="incidencia-row">
+                                <span><i class="fa-regular fa-calendar-xmark" style="margin-right:5px;"></i><strong>{{ inc.fecha }}</strong> — {{ inc.incidencia }}</span>
                                 <button class="btn-aplicar-incidencia"
                                     style="background: #F59E0B; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;"
                                     data-prenomina-id="{{ p.id }}"
                                     data-concepto="{{ inc.incidencia }} ({{ inc.fecha }})" data-fecha="{{ inc.fecha }}">
-                                    Descontar
+                                    <i class="fa-solid fa-scissors" style="margin-right:3px;"></i> Descontar
                                 </button>
                             </div>
                             {% endfor %}
                         </div>
                         {% else %}
-                        <p style="color: var(--text-muted); font-size: 0.85rem;">Sin incidencias registradas esta
+                        <p style="color: var(--text-muted); font-size: 0.85rem;"><i class="fa-regular fa-circle-check" style="color:#10B981; margin-right:4px;"></i>Sin incidencias registradas esta
                             semana.</p>
                         {% endif %}
 
-                        <h4 style="margin: 1.5rem 0 0.75rem 0; color: var(--text-main);">
-                            <i class="fa-solid fa-minus-circle" style="color: #DC2626;"></i> Descuentos Aplicados
-                        </h4>
+                        <div class="section-header" style="margin-top: 1.5rem;">
+                            <div class="sh-icon danger">
+                                <i class="fa-solid fa-circle-minus"></i>
+                            </div>
+                            <h4>Descuentos Aplicados</h4>
+                        </div>
                         <div id="descuentos-list-{{ p.id }}">
                             {% for d in p.descuentos_detalle %}
-                            <div class="descuento-item" id="descuento-item-{{ d.id }}"
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #FEF2F2; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
-                                <span><strong>{{ d.tipo }}:</strong> {{ d.concepto }}</span>
+                            <div class="item-row descuento" id="descuento-item-{{ d.id }}">
+                                <span><i class="fa-solid fa-tag" style="color:#EF4444; margin-right:5px; font-size:0.75rem;"></i><strong>{{ d.tipo }}:</strong> {{ d.concepto }}</span>
                                 <span style="display: flex; align-items: center; gap: 8px;">
                                     <strong style="color: #DC2626;">-${{ "%.2f"|format(d.monto) }}</strong>
                                     {% if estado_actual == 'ABIERTA' %}
@@ -223,12 +237,11 @@
                         </div>
 
                         {% if estado_actual == 'ABIERTA' %}
-                        <div
-                            style="margin-top: 1rem; padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--border);">
-                            <span
-                                style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Agregar
-                                Descuento Manual</span>
-                            <div style="display: flex; gap: 0.5rem; margin-top: 8px;">
+                        <div class="add-form-box">
+                            <span class="add-label">
+                                <i class="fa-solid fa-plus-circle"></i> Agregar Descuento Manual
+                            </span>
+                            <div class="add-row">
                                 <input type="text" class="form-control desc-concepto" placeholder="Concepto"
                                     data-prenomina-id="{{ p.id }}"
                                     style="flex: 2; font-size: 0.85rem; padding: 6px 10px;">
@@ -246,14 +259,16 @@
 
                     <!-- RIGHT: Depósitos -->
                     <div>
-                        <h4 style="margin: 0 0 1rem 0; color: var(--text-main);">
-                            <i class="fa-solid fa-plus-circle" style="color: #059669;"></i> Depósitos Extras
-                        </h4>
+                        <div class="section-header">
+                            <div class="sh-icon success">
+                                <i class="fa-solid fa-circle-plus"></i>
+                            </div>
+                            <h4>Depósitos Extras</h4>
+                        </div>
                         <div id="depositos-list-{{ p.id }}">
                             {% for d in p.depositos_detalle %}
-                            <div class="deposito-item" id="deposito-item-{{ d.id }}"
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #F0FDF4; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem;">
-                                <span>{{ d.concepto }}</span>
+                            <div class="item-row deposito" id="deposito-item-{{ d.id }}">
+                                <span><i class="fa-solid fa-receipt" style="color:#059669; margin-right:5px; font-size:0.75rem;"></i>{{ d.concepto }}</span>
                                 <span style="display: flex; align-items: center; gap: 8px;">
                                     <strong style="color: #059669;">+${{ "%.2f"|format(d.monto) }}</strong>
                                     {% if estado_actual == 'ABIERTA' %}
@@ -269,12 +284,11 @@
                         </div>
 
                         {% if estado_actual == 'ABIERTA' %}
-                        <div
-                            style="margin-top: 1rem; padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--border);">
-                            <span
-                                style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Agregar
-                                Depósito</span>
-                            <div style="display: flex; gap: 0.5rem; margin-top: 8px;">
+                        <div class="add-form-box">
+                            <span class="add-label">
+                                <i class="fa-solid fa-plus-circle" style="color:#059669;"></i> Agregar Depósito
+                            </span>
+                            <div class="add-row">
                                 <input type="text" class="form-control dep-concepto" placeholder="Concepto"
                                     data-prenomina-id="{{ p.id }}"
                                     style="flex: 2; font-size: 0.85rem; padding: 6px 10px;">
@@ -290,13 +304,15 @@
                         {% endif %}
 
                         {% if p.trabajador_id in prestamos_por_trabajador %}
-                        <h4 style="margin: 1.5rem 0 0.75rem 0; color: var(--text-main);">
-                            <i class="fa-solid fa-hand-holding-dollar" style="color: #7C3AED;"></i> Préstamos Activos
-                        </h4>
+                        <div class="section-header" style="margin-top: 1.5rem;">
+                            <div class="sh-icon purple">
+                                <i class="fa-solid fa-hand-holding-dollar"></i>
+                            </div>
+                            <h4>Préstamos Activos</h4>
+                        </div>
                         {% for pr in prestamos_por_trabajador[p.trabajador_id] %}
-                        <div
-                            style="padding: 8px; background: #F5F3FF; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem; display: flex; justify-content: space-between;">
-                            <span>{{ pr.motivo or 'Préstamo' }} — Restante: ${{ "%.2f"|format(pr.monto_restante)
+                        <div class="item-row prestamo">
+                            <span><i class="fa-solid fa-file-contract" style="color:#7C3AED; margin-right:5px; font-size:0.75rem;"></i>{{ pr.motivo or 'Préstamo' }} — Restante: ${{ "%.2f"|format(pr.monto_restante)
                                 }}</span>
                             <strong style="color: #7C3AED;">-${{ "%.2f"|format(pr.descuento_semanal) }}/sem</strong>
                         </div>
