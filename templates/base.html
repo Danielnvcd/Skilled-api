@@ -149,9 +149,9 @@
                         <span>Notificaciones</span>
                     </div>
                     <span id="notif-badge"
-                        style="display:none; min-width: 20px;"
+                        style="{% if notif_count == 0 %}display:none;{% endif %} min-width: 20px;"
                         class="bg-red-500 text-white text-xs font-bold rounded-full h-5 inline-flex items-center justify-center leading-none px-1.5">
-                        0
+                        {{ notif_count if notif_count <= 99 else '99+' }}
                     </span>
                 </button>
             </div>
