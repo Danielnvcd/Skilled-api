@@ -34,7 +34,10 @@ def create_app():
 
             if session.get('role') in ('admin', 'super_admin'):
                 from app.models import Notificacion
-                notif_count = Notificacion.query.filter_by(leida=False).count()
+                notif_count = Notificacion.query.filter_by(
+                    usuario_id=session.get('user_id'),
+                    leida=False,
+                ).count()
 
         return {'now': datetime.now, 'current_user': current_user, 'notif_count': notif_count}
         
