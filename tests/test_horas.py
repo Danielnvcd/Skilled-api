@@ -39,7 +39,7 @@ class TestHorasEdgeCases:
         return reporte
 
     def test_guardar_horas_negativas(self, logged_in_admin, db, reporte_test, trabajador):
-        """No debe registrar si las horas están invertidas sin lógica adecuada (e.g. salida antes que entrada)."""
+        """Turno nocturno (salida < entrada) debe aceptarse como turno que cruza medianoche."""
         resp = logged_in_admin.post(f'/horas/guardar_registro/{reporte_test.id}',
             data={
                 'trabajador_id': trabajador.id,
@@ -49,9 +49,15 @@ class TestHorasEdgeCases:
             },
             follow_redirects=True
         )
-        # Debería lanzar error por horas inconsistentes
-        html_response = resp.data.decode('utf-8')
-        assert 'antes que la hora de entrada' in html_response.lower() or 'no puede ser anterior' in html_response.lower() or 'traslapan' in html_response.lower() or 'negativas' in html_response.lower()
+        assert resp.status_code == 200
+        # El registro debe haberse creado con ~15h productivas (turno 18:00 → 09:00 del día siguiente)
+        registro = RegistroDiarioHoras.query.filter_by(
+            reporte_id=reporte_test.id,
+            trabajador_id=trabajador.id,
+            fecha=date(2025, 1, 1)
+        ).first()
+        assert registro is not None
+        assert float(registro.horas_productivas) == pytest.approx(15.0, abs=0.1)
 
     def test_guardar_horas_excesivas(self, logged_in_admin, db, reporte_test, trabajador):
         """No debe permitir jornadas imposibles (ej. más de 24h)"""

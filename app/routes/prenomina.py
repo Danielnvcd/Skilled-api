@@ -552,6 +552,14 @@ def editar(fecha_str):
 def cerrar_prenomina(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+
+        reporte_terminado = ReporteSemanal.query.filter(
+            ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA']),
+            ReporteSemanal.fecha_inicio_semana == fecha_obj
+        ).first()
+        if not reporte_terminado:
+            return jsonify({'success': False, 'message': 'No existe un reporte de horas TERMINADO para esta fecha.'}), 400
+
         prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj, estado='ABIERTA').all()
         if not prenominas:
             return jsonify({'success': False, 'message': 'No hay prenóminas abiertas para cerrar.'}), 400
@@ -1024,7 +1032,7 @@ def calcular_preview_prenomina(fecha_obj, reportes):
         prestamos_activos = prestamos_por_trabajador.get(t_id, [])
         p.descuento_prestamos = sum((to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
              
-        p.total_percepciones = to_dec(p.salario_base) + to_dec(p.pago_horas_extras) + to_dec(p.pago_viaticos) + to_dec(p.pago_festivos)
+        p.total_percepciones = to_dec(p.salario_base) + to_dec(p.pago_horas_extras) + to_dec(p.pago_viaticos) + to_dec(p.pago_festivos) + to_dec(p.depositos_otros)
         p.total_deducciones = to_dec(p.descuento_infonavit) + to_dec(p.ajuste_inbursa) + to_dec(p.descuento_incidencias) + to_dec(p.descuento_prestamos) + to_dec(p.descuentos_otros)
         p.total_a_pagar = p.total_percepciones - p.total_deducciones
         

@@ -68,6 +68,7 @@ def index():
 
 @bp.route('/crear_reporte', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def crear_reporte():
     try:
         data = request.form
@@ -215,6 +216,7 @@ def capturar(reporte_id):
 
 @bp.route('/guardar_registro/<int:reporte_id>', methods=['POST'])
 @login_required
+@limiter.limit("60 per minute")
 def guardar_registro(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -265,10 +267,12 @@ def guardar_registro(reporte_id):
         monto_viaticos_manual = None
         if aplica_viaticos:
             if viaticos_modo == 'manual':
+                if not monto_viaticos_manual_str:
+                    return err("Error: Debes ingresar un monto para los viáticos manuales.")
                 try:
-                    monto_viaticos_manual = float(monto_viaticos_manual_str) if monto_viaticos_manual_str else 0
+                    monto_viaticos_manual = float(monto_viaticos_manual_str)
                 except (ValueError, TypeError):
-                    monto_viaticos_manual = 0
+                    return err("Error: El monto de viáticos ingresado no es un número válido.")
                 if monto_viaticos_manual <= 0:
                     return err("Error: El monto manual de viáticos debe ser mayor a $0.00.")
             else:
@@ -291,9 +295,6 @@ def guardar_registro(reporte_id):
 
             if hora_entrada == hora_salida:
                 return err("La hora de salida debe ser distinta a la hora de entrada.")
-
-            if hora_salida < hora_entrada:
-                return err("La hora de salida no puede ser anterior a la hora de entrada en el mismo día.")
 
             registros_existentes = RegistroDiarioHoras.query.join(ReporteSemanal).filter(
                 RegistroDiarioHoras.trabajador_id == trabajador.id,
@@ -345,6 +346,7 @@ def guardar_registro(reporte_id):
 
 @bp.route('/eliminar_registro/<int:registro_id>', methods=['POST'])
 @login_required
+@limiter.limit("30 per minute")
 def eliminar_registro(registro_id):
     registro = RegistroDiarioHoras.query.get_or_404(registro_id)
     reporte_id = registro.reporte_id
@@ -378,6 +380,7 @@ def eliminar_registro(registro_id):
 
 @bp.route('/editar_registro/<int:registro_id>', methods=['POST'])
 @login_required
+@limiter.limit("60 per minute")
 def editar_registro(registro_id):
     registro = RegistroDiarioHoras.query.get_or_404(registro_id)
     reporte = registro.reporte
@@ -415,10 +418,12 @@ def editar_registro(registro_id):
         monto_viaticos_manual = None
         if aplica_viaticos:
             if viaticos_modo == 'manual':
+                if not monto_viaticos_manual_str:
+                    return err("Error: Debes ingresar un monto para los viáticos manuales.")
                 try:
-                    monto_viaticos_manual = float(monto_viaticos_manual_str) if monto_viaticos_manual_str else 0
+                    monto_viaticos_manual = float(monto_viaticos_manual_str)
                 except (ValueError, TypeError):
-                    monto_viaticos_manual = 0
+                    return err("Error: El monto de viáticos ingresado no es un número válido.")
                 if monto_viaticos_manual <= 0:
                     return err("Error: El monto manual de viáticos debe ser mayor a $0.00.")
             else:
@@ -442,9 +447,6 @@ def editar_registro(registro_id):
             if hora_entrada == hora_salida:
                 return err("La hora de salida debe ser distinta a la hora de entrada.")
 
-            if hora_salida < hora_entrada:
-                return err("La hora de salida no puede ser anterior a la hora de entrada.")
-
             registros_existentes = RegistroDiarioHoras.query.join(ReporteSemanal).filter(
                 RegistroDiarioHoras.trabajador_id == trabajador.id,
                 RegistroDiarioHoras.fecha == registro.fecha,
@@ -460,7 +462,10 @@ def editar_registro(registro_id):
 
             if horas_override_str:
                 try:
-                    horas_productivas = round(float(horas_override_str), 2)
+                    horas_override = round(float(horas_override_str), 2)
+                    if not (0 <= horas_override <= 24):
+                        return err("Error: El override de horas debe estar entre 0 y 24.")
+                    horas_productivas = horas_override
                 except (ValueError, TypeError):
                     from app.utils import calcular_horas_productivas
                     horas_productivas = calcular_horas_productivas(
@@ -506,6 +511,7 @@ def editar_registro(registro_id):
 
 @bp.route('/cerrar_reporte/<int:reporte_id>', methods=['POST'])
 @login_required
+@limiter.limit("10 per minute")
 def cerrar_reporte(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
 
@@ -614,6 +620,9 @@ def qr_check():
         if reporte is None:
             return jsonify({'ok': False, 'error': 'No hay reporte activo para este trabajador hoy'}), 404
 
+    # WITH FOR UPDATE serializa requests simultáneos del mismo reporte (evita duplicados por race condition)
+    ReporteSemanal.query.filter_by(id=reporte.id).with_for_update().first()
+
     registro = RegistroDiarioHoras.query.filter_by(
         reporte_id=reporte.id,
         trabajador_id=trabajador.id,
@@ -684,6 +693,7 @@ def admin_qr():
 
 @bp.route('/admin/qr/generar', methods=['POST'])
 @login_required
+@limiter.limit("20 per minute")
 def admin_qr_generar():
     role = session.get('role', 'user')
     if role not in ('admin', 'super_admin'):

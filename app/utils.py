@@ -95,7 +95,7 @@ def log_action(action):
         db.session.add(log)
         db.session.commit()
     except Exception as e:
-        logger.warning(f"Error guardando log: {e}")
+        logger.warning(f"Error guardando log de auditoría (acción: {str(action)[:100]}): {e}")
 
 # Strict MIME Type Whitelist
 STRICT_MIMETYPES = {
