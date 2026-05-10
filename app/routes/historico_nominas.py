@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, flash, redirect, url_for, make_response, request
-from app.utils import login_required
+from app.utils import login_required, admin_required
 from app.extensions import db
 from app.models import Prenomina, ReporteSemanal, RegistroDiarioHoras, Proyecto
 from sqlalchemy import func
@@ -10,6 +10,7 @@ bp = Blueprint('historico', __name__, url_prefix='/historico')
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     page = request.args.get('page', 1, type=int)
     search_date_str = request.args.get('search_date', '')
@@ -39,6 +40,7 @@ def index():
 
 @bp.route('/detalle/<fecha_str>')
 @login_required
+@admin_required
 def detalle(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -81,6 +83,7 @@ def detalle(fecha_str):
 
 @bp.route('/imprimir_proyecto/<fecha_str>/<int:proyecto_id>')
 @login_required
+@admin_required
 def imprimir_proyecto(fecha_str, proyecto_id):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()

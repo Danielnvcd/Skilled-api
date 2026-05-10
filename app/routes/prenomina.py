@@ -4,7 +4,7 @@ from decimal import Decimal
 import traceback
 from app.extensions import db, limiter
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
-from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
+from app.utils import login_required, admin_required, log_action, to_dec, recalcular_totales_prenomina
 from app.extensions import mail
 from sqlalchemy.orm import joinedload
 
@@ -12,6 +12,7 @@ bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     # Obtener reportes TERMINADOS (pendientes) o PRENOMINA_CERRADA (históricos)
     reportes = ReporteSemanal.query.filter(ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA'])).order_by(ReporteSemanal.fecha_inicio_semana.desc()).all()
@@ -40,6 +41,7 @@ def index():
 
 @bp.route('/generar/<fecha_str>', methods=['GET'])
 @login_required
+@admin_required
 def generar(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -85,6 +87,7 @@ def generar(fecha_str):
 
 @bp.route('/imprimir/<fecha_str>', methods=['GET'])
 @login_required
+@admin_required
 def imprimir(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -165,6 +168,7 @@ def imprimir(fecha_str):
 
 @bp.route('/imprimir_individual/<fecha_str>/<int:trabajador_id>', methods=['GET'])
 @login_required
+@admin_required
 def imprimir_individual(fecha_str, trabajador_id):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -251,6 +255,7 @@ def imprimir_individual(fecha_str, trabajador_id):
 
 @bp.route('/enviar_correo/<fecha_str>/<int:trabajador_id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("20 per minute")
 def enviar_correo_individual(fecha_str, trabajador_id):
     try:
@@ -330,6 +335,7 @@ def enviar_correo_individual(fecha_str, trabajador_id):
 
 @bp.route('/enviar_correo_todos/<fecha_str>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("5 per minute")
 def enviar_correo_todos(fecha_str):
     try:
@@ -431,6 +437,7 @@ def enviar_correo_todos(fecha_str):
 
 @bp.route('/guardar/<fecha_str>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def guardar(fecha_str):
     try:
@@ -468,6 +475,7 @@ def guardar(fecha_str):
 
 @bp.route('/editar/<fecha_str>')
 @login_required
+@admin_required
 def editar(fecha_str):
     try:
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
@@ -539,6 +547,7 @@ def editar(fecha_str):
 
 @bp.route('/cerrar/<fecha_str>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def cerrar_prenomina(fecha_str):
     try:
@@ -667,6 +676,7 @@ def api_agregar_descuento():
         
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        log_action(f"descuento_agregado: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} tipo={tipo} monto={monto}")
         return jsonify({'success': True, 'message': 'Descuento agregado.', 'id': desc.id,
             'total_deducciones': float(prenomina.total_deducciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -692,6 +702,7 @@ def api_eliminar_descuento(id):
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        log_action(f"descuento_eliminado: descuento_id={id} prenomina_id={prenomina.id} trabajador_id={prenomina.trabajador_id}")
         return jsonify({'success': True, 'message': 'Descuento eliminado.',
             'total_deducciones': float(prenomina.total_deducciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -742,6 +753,7 @@ def api_agregar_deposito():
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        log_action(f"deposito_agregado: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} monto={monto} concepto={str(concepto)[:50]}")
         return jsonify({'success': True, 'message': 'Depósito agregado.', 'id': dep.id,
             'total_percepciones': float(prenomina.total_percepciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -767,6 +779,7 @@ def api_eliminar_deposito(id):
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        log_action(f"deposito_eliminado: deposito_id={id} prenomina_id={prenomina.id} trabajador_id={prenomina.trabajador_id}")
         return jsonify({'success': True, 'message': 'Depósito eliminado.',
             'total_percepciones': float(prenomina.total_percepciones),
             'total_a_pagar': float(prenomina.total_a_pagar)})
@@ -810,6 +823,7 @@ def api_actualizar_viaticos():
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        log_action(f"viaticos_actualizados: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} monto={monto_viaticos}")
 
         return jsonify({
             'success': True,
@@ -858,6 +872,7 @@ def api_actualizar_festivos():
         db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        log_action(f"festivos_actualizados: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} monto={monto_festivos}")
 
         return jsonify({
             'success': True,

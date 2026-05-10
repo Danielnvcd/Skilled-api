@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 from app.extensions import db, limiter
 from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina, AbonoPrestamo
-from app.utils import login_required, log_action, to_dec, recalcular_totales_prenomina
+from app.utils import login_required, admin_required, log_action, to_dec, recalcular_totales_prenomina
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 import traceback
@@ -10,6 +10,7 @@ bp = Blueprint('prestamos', __name__, url_prefix='/prestamos')
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
@@ -33,6 +34,7 @@ def index():
 
 @bp.route('/crear', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def crear():
     try:
@@ -85,6 +87,7 @@ def crear():
 
 @bp.route('/editar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def editar(id):
     try:
@@ -141,6 +144,7 @@ def editar(id):
 
 @bp.route('/abonar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def abonar(id):
     try:
@@ -193,6 +197,7 @@ def abonar(id):
 
 @bp.route('/liquidar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def liquidar(id):
     try:
@@ -227,6 +232,7 @@ def liquidar(id):
 
 @bp.route('/get/<int:id>', methods=['GET'])
 @login_required
+@admin_required
 def get_detalles(id):
     prestamo = Prestamo.query.get_or_404(id)
     abonos_list = []

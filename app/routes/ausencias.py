@@ -8,6 +8,11 @@ from sqlalchemy import or_, and_
 
 bp = Blueprint('ausencias', __name__, url_prefix='/ausencias')
 
+@bp.before_request
+def _ruta_desactivada():
+    from flask import abort
+    abort(404)
+
 @bp.route('/')
 @login_required
 def index():

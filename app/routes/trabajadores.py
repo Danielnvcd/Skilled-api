@@ -68,6 +68,7 @@ def index():
 
 @bp.route('/bajas', methods=['GET'])
 @login_required
+@admin_required
 def bajas():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
@@ -312,7 +313,7 @@ def procesar_importacion():
                 s = str(val).strip() if pd.notna(val) else ''
                 # Sanitizar formula injection: remover caracteres de inicio de fórmula CSV/Excel
                 if s and s[0] in _FORMULA_CHARS:
-                    s = s.lstrip('=+-@\t\r')
+                    s = "'" + s
                 if max_len and len(s) > max_len:
                     row_errors.append(f"El campo '{col_name}' excede el límite de {max_len} caracteres (recibidos: {len(s)}).")
                 return s

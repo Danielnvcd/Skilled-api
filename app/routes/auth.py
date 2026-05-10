@@ -291,6 +291,7 @@ def login():
 
             if u.totp_secret:
                 session['pre_2fa_user_id'] = u.id
+                session['pre_2fa_pw_version'] = u.password_version or 1
                 session['remember'] = remember
                 return redirect(url_for('auth.verify_2fa'))
 
@@ -339,6 +340,10 @@ def verify_2fa():
         
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(code, valid_window=1):
+            if session.get('pre_2fa_pw_version', 1) != (user.password_version or 1):
+                session.clear()
+                flash('Tu contraseña fue cambiada. Inicia sesión de nuevo.', 'warning')
+                return redirect(url_for('auth.login'))
             remember = session.get('remember', False)
             session.clear()
             _build_session(user, permanent=remember)
@@ -366,6 +371,7 @@ def verify_2fa():
 
 @bp.route('/setup-2fa', methods=['GET', 'POST'])
 @login_required
+@limiter.limit("4 per minute", methods=['POST'])
 def setup_2fa():
     user = g._current_user  # ya cargado por login_required, sin query adicional
     

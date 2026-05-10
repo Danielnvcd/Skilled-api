@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify
-from app.utils import login_required
+from app.utils import login_required, admin_required
 from app.models import AuditLog
 from app.extensions import db
 from datetime import datetime
@@ -12,6 +12,7 @@ IP_GEO_CACHE = {}
 
 @bp.route('/', methods=['GET'])
 @login_required
+@admin_required
 def index():
     page = request.args.get('page', 1, type=int)
     fecha_filtro = request.args.get('fecha_filtro', '')
@@ -42,6 +43,7 @@ def index():
 
 @bp.route('/api/log/<int:log_id>', methods=['GET'])
 @login_required
+@admin_required
 def get_log_detail(log_id):
     """
     Obtiene el detalle de un log específico por ID y trata de geolocalizar la IP

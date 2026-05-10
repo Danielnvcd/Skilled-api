@@ -170,7 +170,10 @@ def serve_profile_pic(filename):
     if not user:
         return jsonify({'error': 'No autorizado'}), 403
 
-    if user.role not in ['admin', 'super_admin'] and user.profile_pic != filename and filename != 'default.png':
+    is_own_pic = (filename == user.profile_pic)
+    is_default = (filename == 'default.png')
+    is_admin = user.role in ['admin', 'super_admin']
+    if not (is_own_pic or is_default or is_admin):
         return jsonify({'error': 'Acceso denegado'}), 403
 
     if current_app.config.get('USE_X_ACCEL_REDIRECT'):

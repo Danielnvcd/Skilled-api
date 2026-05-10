@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from app.extensions import db, limiter
 from app.models import AjustePeriodo, AjusteTrabajadorPeriodo, AjusteDescuento, Trabajador
-from app.utils import login_required, log_action
+from app.utils import login_required, admin_required, log_action
 from datetime import datetime
 from decimal import Decimal
 import traceback
@@ -11,6 +11,7 @@ bp = Blueprint('ajustes', __name__, url_prefix='/ajustes')
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
@@ -35,6 +36,7 @@ def index():
 
 @bp.route('/crear_periodo', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def crear_periodo():
     try:
@@ -97,6 +99,7 @@ def crear_periodo():
 
 @bp.route('/periodo/<int:periodo_id>')
 @login_required
+@admin_required
 def detalle(periodo_id):
     periodo = AjustePeriodo.query.get_or_404(periodo_id)
     trabajadores_all = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
@@ -141,6 +144,7 @@ def detalle(periodo_id):
 
 @bp.route('/agregar_descuento/<int:periodo_id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def agregar_descuento(periodo_id):
     periodo = AjustePeriodo.query.get_or_404(periodo_id)
@@ -200,6 +204,7 @@ def agregar_descuento(periodo_id):
 
 @bp.route('/eliminar_descuento/<int:descuento_id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def eliminar_descuento(descuento_id):
     descuento = AjusteDescuento.query.get_or_404(descuento_id)
@@ -226,6 +231,7 @@ def eliminar_descuento(descuento_id):
 
 @bp.route('/cerrar_periodo/<int:periodo_id>', methods=['POST'])
 @login_required
+@admin_required
 @limiter.limit("10 per minute")
 def cerrar_periodo(periodo_id):
     periodo = AjustePeriodo.query.get_or_404(periodo_id)

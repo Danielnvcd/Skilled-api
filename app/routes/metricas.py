@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, jsonify
-from app.utils import login_required
+from app.utils import login_required, admin_required
 from sqlalchemy import func
 from app.extensions import db
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador
@@ -9,6 +9,7 @@ bp = Blueprint('metricas', __name__, url_prefix='/metricas')
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     # --- Credenciales por Planta ---
     creds_por_planta = (
