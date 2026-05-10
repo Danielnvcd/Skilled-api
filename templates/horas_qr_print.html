@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR — {{ trabajador.nombre_completo }}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+            text-align: center;
+            color: #1e293b;
+        }
+        .logo { max-width: 160px; height: auto; margin-bottom: 24px; }
+        .nombre { font-size: 1.4rem; font-weight: bold; margin-bottom: 6px; }
+        .numero { font-size: 1rem; color: #64748b; margin-bottom: 24px; }
+        .qr-img {
+            width: 280px; height: 280px;
+            border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px;
+        }
+        .instruccion { font-size: 0.9rem; color: #64748b; margin-top: 16px; }
+        @media print {
+            body { padding: 20px; }
+            @page { margin: 15mm; }
+        }
+    </style>
+</head>
+<body>
+    <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled" class="logo">
+    <div class="nombre">{{ trabajador.nombre_completo }}</div>
+    <div class="numero">No. Empleado: {{ trabajador.no_empleado }}</div>
+    <img src="{{ url_for('horas.qr_imagen', qr_code=trabajador.qr_code) }}" alt="QR" class="qr-img">
+    <div class="instruccion">Escanear para registrar asistencia</div>
+    <script src="{{ url_for('static', filename='js/horas_qr_print.js') }}?v=1"></script>
+</body>
+</html>

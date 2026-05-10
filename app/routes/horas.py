@@ -1,9 +1,9 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session, current_app
-from app.extensions import db
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session, current_app, send_file
+from app.extensions import db, limiter
 from app.models import Proyecto, ReporteSemanal, RegistroDiarioHoras, Trabajador
 from app.utils import login_required, log_action
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 bp = Blueprint('horas', __name__, url_prefix='/horas')
 
@@ -36,6 +36,11 @@ def _verificar_ownership_proyecto(proyecto):
 def index():
     user_id = session.get('user_id')
     user_role = session.get('role', 'user')
+
+    if user_role == 'coordinador' and not request.args.get('desktop'):
+        is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
+        if is_mobile:
+            return redirect(url_for('horas.movil'))
 
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
@@ -503,17 +508,17 @@ def editar_registro(registro_id):
 @login_required
 def cerrar_reporte(reporte_id):
     reporte = ReporteSemanal.query.get_or_404(reporte_id)
-    
+
     if not _verificar_ownership_proyecto(reporte.proyecto):
         flash("Acceso denegado. No eres coordinador de este proyecto.", "danger")
         return redirect(url_for('horas.index'))
-    
+
     if reporte.estado == 'BORRADOR':
         # Validar que tenga al menos un registro de horas
         if not reporte.registros:
             flash("No se puede cerrar el reporte sin horas registradas. Añade al menos un registro para cerrarlo.", "danger")
             return redirect(url_for('horas.capturar', reporte_id=reporte.id))
-            
+
         reporte.estado = 'TERMINADO'
         db.session.commit()
         log_action(f"Cerró reporte semanal ID: {reporte.id} Proyecto: {reporte.proyecto.numero_proyecto}")
@@ -532,5 +537,287 @@ def cerrar_reporte(reporte_id):
             db.session.commit()
         except Exception:
             current_app.logger.warning("No se pudo crear notificación de reporte cerrado.", exc_info=True)
-        
+
     return redirect(url_for('horas.capturar', reporte_id=reporte.id))
+
+
+# ─── Módulo Móvil Coordinadores ──────────────────────────────────────────────
+
+@bp.route('/movil', methods=['GET'])
+@login_required
+def movil():
+    role = session.get('role', 'user')
+    if role not in ('coordinador', 'admin', 'super_admin'):
+        flash("Acceso denegado.", "danger")
+        return redirect(url_for('main.home'))
+
+    user_id = session.get('user_id')
+    hoy = date.today()
+
+    if role == 'coordinador':
+        proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=user_id).all()
+    else:
+        proyectos = Proyecto.query.filter_by(activo=True).all()
+
+    proyecto_ids = [p.id for p in proyectos]
+    if proyecto_ids:
+        reportes = ReporteSemanal.query.filter(
+            ReporteSemanal.estado == 'BORRADOR',
+            ReporteSemanal.proyecto_id.in_(proyecto_ids)
+        ).order_by(ReporteSemanal.fecha_fin_semana.desc()).all()
+    else:
+        reportes = []
+
+    return render_template('horas_movil.html', proyectos=proyectos, reportes=reportes, hoy=hoy)
+
+
+@bp.route('/qr_check', methods=['POST'])
+@login_required
+@limiter.limit("30 per minute")
+def qr_check():
+    role = session.get('role', 'user')
+    if role not in ('coordinador', 'admin', 'super_admin'):
+        return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
+
+    payload = request.get_json(silent=True)
+    if not payload or 'qr_code' not in payload:
+        return jsonify({'ok': False, 'error': 'Datos inválidos'}), 400
+
+    qr_value = payload['qr_code']
+    reporte_id = payload.get('reporte_id')
+
+    trabajador = Trabajador.query.filter_by(qr_code=qr_value, activo=True).first()
+    if not trabajador:
+        return jsonify({'ok': False, 'error': 'QR no reconocido'}), 404
+
+    hoy = date.today()
+
+    if reporte_id:
+        reporte = ReporteSemanal.query.get(int(reporte_id))
+        if not reporte or reporte.estado != 'BORRADOR':
+            return jsonify({'ok': False, 'error': 'El reporte ya fue cerrado o no existe'}), 404
+        if trabajador not in reporte.proyecto.participantes:
+            return jsonify({'ok': False, 'error': f'{trabajador.nombre_completo} no está asignado a este proyecto'}), 404
+        if not (reporte.fecha_inicio_semana <= hoy <= reporte.fecha_fin_semana):
+            return jsonify({'ok': False, 'error': (
+                f'La fecha de hoy ({hoy.strftime("%d/%m/%Y")}) no pertenece al periodo '
+                f'{reporte.fecha_inicio_semana.strftime("%d/%m/%Y")} – {reporte.fecha_fin_semana.strftime("%d/%m/%Y")}. '
+                f'Selecciona el reporte correcto.'
+            )}), 400
+    else:
+        reportes_activos = ReporteSemanal.query.filter(
+            ReporteSemanal.estado == 'BORRADOR',
+            ReporteSemanal.fecha_inicio_semana <= hoy,
+            ReporteSemanal.fecha_fin_semana >= hoy
+        ).all()
+        reporte = next((r for r in reportes_activos if trabajador in r.proyecto.participantes), None)
+        if reporte is None:
+            return jsonify({'ok': False, 'error': 'No hay reporte activo para este trabajador hoy'}), 404
+
+    registro = RegistroDiarioHoras.query.filter_by(
+        reporte_id=reporte.id,
+        trabajador_id=trabajador.id,
+        fecha=hoy
+    ).first()
+
+    _now = datetime.now()
+    _total_min = _now.hour * 60 + _now.minute
+    _rounded = round(_total_min / 30) * 30
+    from datetime import time as _dtime
+    now_time = _dtime((_rounded // 60) % 24, _rounded % 60)
+
+    try:
+        if registro is None:
+            registro = RegistroDiarioHoras(
+                reporte_id=reporte.id,
+                trabajador_id=trabajador.id,
+                fecha=hoy,
+                hora_entrada=now_time,
+                tipo_nomina=trabajador.tipo_nomina or 'Semanal'
+            )
+            db.session.add(registro)
+            db.session.commit()
+            return jsonify({
+                'ok': True,
+                'tipo': 'ENTRADA',
+                'hora': now_time.strftime('%H:%M'),
+                'nombre': trabajador.nombre_completo
+            })
+
+        if registro.hora_entrada and not registro.hora_salida:
+            from app.utils import calcular_horas_productivas
+            registro.hora_salida = now_time
+            registro.horas_productivas = calcular_horas_productivas(
+                registro.hora_entrada, now_time,
+                tipo_nomina=registro.tipo_nomina or 'Semanal',
+                tomo_comida=bool(registro.tomo_comida)
+            )
+            db.session.commit()
+            return jsonify({
+                'ok': True,
+                'tipo': 'SALIDA',
+                'hora': now_time.strftime('%H:%M'),
+                'nombre': trabajador.nombre_completo
+            })
+
+        return jsonify({'ok': False, 'error': 'Ya tiene entrada y salida registradas hoy'}), 409
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error("Error en qr_check: %s", traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Error interno'}), 500
+
+
+# ─── Panel Admin QR ──────────────────────────────────────────────────────────
+
+@bp.route('/admin/qr', methods=['GET'])
+@login_required
+def admin_qr():
+    role = session.get('role', 'user')
+    if role not in ('admin', 'super_admin'):
+        flash("Acceso denegado.", "danger")
+        return redirect(url_for('horas.index'))
+
+    trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
+    return render_template('horas_admin_qr.html', trabajadores=trabajadores)
+
+
+@bp.route('/admin/qr/generar', methods=['POST'])
+@login_required
+def admin_qr_generar():
+    role = session.get('role', 'user')
+    if role not in ('admin', 'super_admin'):
+        return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
+
+    trabajador_id = request.form.get('trabajador_id')
+    if not trabajador_id:
+        return jsonify({'ok': False, 'error': 'Datos inválidos'}), 400
+
+    trabajador = Trabajador.query.get_or_404(trabajador_id)
+
+    try:
+        import uuid
+        trabajador.qr_code = str(uuid.uuid4())
+        db.session.commit()
+        imagen_url = url_for('horas.qr_imagen', qr_code=trabajador.qr_code)
+        return jsonify({'ok': True, 'qr_code': trabajador.qr_code, 'imagen_url': imagen_url})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error("Error generando QR: %s", traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Error al generar QR'}), 500
+
+
+@bp.route('/admin/qr/imagen/<qr_code>', methods=['GET'])
+@login_required
+def qr_imagen(qr_code):
+    import qrcode
+    import io
+    img = qrcode.make(qr_code)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+
+
+@bp.route('/admin/qr/print/<int:trabajador_id>', methods=['GET'])
+@login_required
+def qr_print(trabajador_id):
+    role = session.get('role', 'user')
+    if role not in ('admin', 'super_admin'):
+        flash("Acceso denegado.", "danger")
+        return redirect(url_for('horas.index'))
+
+    trabajador = Trabajador.query.get_or_404(trabajador_id)
+    if not trabajador.qr_code:
+        flash("Este trabajador no tiene QR asignado.", "warning")
+        return redirect(url_for('horas.admin_qr'))
+
+    return render_template('horas_qr_print.html', trabajador=trabajador)
+
+
+@bp.route('/capturar_movil/<int:reporte_id>', methods=['GET'])
+@login_required
+def capturar_movil(reporte_id):
+    reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    user_id = session.get('user_id')
+    user_role = session.get('role', 'user')
+    if user_role == 'coordinador' and reporte.proyecto.coordinador_id != user_id:
+        flash("Acceso denegado.", "danger")
+        return redirect(url_for('horas.lista_movil'))
+
+    trabajadores = sorted(reporte.proyecto.participantes, key=lambda t: t.nombre)
+    incidencias_lista = [
+        "Casamiento", "Descanso", "Falta", "Incapacidad", "Luto", "Paternidad",
+        "Permiso", "Time x Time", "Vacaciones", "Viaje de Ida", "Viaje de vuelta a Pue.",
+        "Retardo", "Levantamiento en campo", "Falta checada de entrada", "Falta checada de salida"
+    ]
+
+    semana_fechas = []
+    d = reporte.fecha_inicio_semana
+    while d <= reporte.fecha_fin_semana:
+        semana_fechas.append(d)
+        d += timedelta(days=1)
+
+    registros_json = [
+        {
+            'id': reg.id,
+            'trabajador_id': reg.trabajador_id,
+            'fecha': reg.fecha.strftime('%Y-%m-%d'),
+            'hora_entrada': reg.hora_entrada.strftime('%H:%M') if reg.hora_entrada else '',
+            'hora_salida': reg.hora_salida.strftime('%H:%M') if reg.hora_salida else '',
+            'tomo_comida': bool(reg.tomo_comida),
+            'incidencia': reg.incidencia or '',
+            'horas_productivas': float(reg.horas_productivas) if reg.horas_productivas else 0.0,
+        }
+        for reg in reporte.registros
+    ]
+    semana_fechas_json = [
+        {
+            'fecha': d.strftime('%Y-%m-%d'),
+            'label': d.strftime('%d/%m'),
+            'dia': ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][d.weekday()],
+            'fin_semana': d.weekday() >= 5,
+        }
+        for d in semana_fechas
+    ]
+
+    return render_template(
+        'horas_captura_movil.html',
+        reporte=reporte,
+        trabajadores=trabajadores,
+        incidencias_lista=incidencias_lista,
+        registros_json=registros_json,
+        semana_fechas_json=semana_fechas_json,
+    )
+
+
+@bp.route('/lista', methods=['GET'])
+@login_required
+def lista_movil():
+    user_id = session.get('user_id')
+    user_role = session.get('role', 'user')
+
+    if user_role not in ('coordinador', 'admin', 'super_admin'):
+        flash("Acceso denegado.", "danger")
+        return redirect(url_for('main.home'))
+
+    q = request.args.get('q', '').strip()
+
+    if user_role == 'coordinador':
+        proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=user_id).all()
+        proyecto_ids = [p.id for p in proyectos]
+        query = ReporteSemanal.query.filter(ReporteSemanal.proyecto_id.in_(proyecto_ids))
+    else:
+        proyectos = Proyecto.query.filter_by(activo=True).all()
+        query = ReporteSemanal.query
+
+    if q:
+        query = query.join(Proyecto).filter(
+            db.or_(
+                Proyecto.nombre.ilike(f'%{q}%'),
+                Proyecto.numero_proyecto.ilike(f'%{q}%')
+            )
+        )
+
+    reportes = query.order_by(ReporteSemanal.created_at.desc()).limit(60).all()
+    return render_template('horas_lista_movil.html', reportes=reportes, proyectos=proyectos, q=q)

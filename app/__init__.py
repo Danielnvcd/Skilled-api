@@ -260,6 +260,29 @@ def create_app():
     # ── Observabilidad: logging de requests lentos y errores ──
     import time as _time
 
+    # Mapa de endpoints de escritorio → móvil para coordinadores
+    _MOVIL_REDIRECT = {
+        'horas.index':     'horas.movil',
+        'ficha.index':     'ficha.movil',
+        'proyectos.index': 'proyectos.movil',
+        'horas.capturar':  'horas.capturar_movil',
+    }
+
+    @app.before_request
+    def _redirect_coordinador_movil():
+        if request.method != 'GET':
+            return
+        if request.args.get('desktop'):
+            return
+        if session.get('role') != 'coordinador':
+            return
+        dest = _MOVIL_REDIRECT.get(request.endpoint)
+        if not dest:
+            return
+        ua = request.user_agent.string.lower()
+        if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'mobi' in ua:
+            return redirect(url_for(dest, **(request.view_args or {})))
+
     @app.before_request
     def _start_timer():
         request._start_time = _time.time()

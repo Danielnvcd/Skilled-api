@@ -1,0 +1,104 @@
+{% extends "base_movil.html" %}
+
+{% block title %}Mis Proyectos{% endblock %}
+
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas_movil.css') }}?v=2">
+<style>
+    .proy-card { background:rgba(255,255,255,0.9); border-radius:14px; margin-bottom:10px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.06); border:1px solid rgba(255,255,255,0.5); }
+    .proy-header { display:flex; align-items:flex-start; justify-content:space-between; padding:14px 16px 10px; gap:10px; }
+    .proy-numero { font-size:0.73rem; font-weight:700; color:#2563eb; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:3px; }
+    .proy-nombre { font-size:0.95rem; font-weight:600; color:#1e293b; line-height:1.3; }
+    .badge-activo { background:#dcfce7; color:#166534; padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
+    .badge-inactivo { background:#f1f5f9; color:#64748b; padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
+    .proy-meta { padding:0 16px 14px; display:flex; gap:16px; }
+    .proy-stat { display:flex; align-items:center; gap:6px; font-size:0.8rem; color:#64748b; }
+    .proy-stat i { color:#94a3b8; }
+    .proy-workers { border-top:1px solid #f1f5f9; padding:10px 16px 0; }
+    .worker-chip { display:inline-flex; align-items:center; gap:5px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:20px; padding:4px 10px; font-size:0.75rem; color:#475569; margin:0 4px 6px 0; }
+    .toggle-workers { background:none; border:none; cursor:pointer; font-family:inherit; width:100%; text-align:left; padding:10px 16px; font-size:0.78rem; color:#2563eb; font-weight:600; display:flex; align-items:center; gap:6px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; min-height:100vh;">
+
+    <header class="app-header">
+        <a href="{{ url_for('horas.movil') }}" class="btn-icon" title="Volver">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/>
+                <polyline points="12 19 5 12 12 5"/>
+            </svg>
+        </a>
+        <h2 class="header-title">Mis Proyectos</h2>
+        <div style="width:40px;"></div>
+    </header>
+
+    <!-- Buscador -->
+    <div style="padding:14px 20px 8px; position:relative;">
+        <i class="fas fa-search" style="position:absolute;left:32px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:0.85rem;"></i>
+        <input id="proy-search" type="search" placeholder="Buscar proyecto..." autocomplete="off"
+            style="width:100%;padding:10px 12px 10px 34px;border:1px solid #e2e8f0;border-radius:12px;font-size:0.88rem;background:rgba(255,255,255,0.9);color:#1e293b;outline:none;">
+    </div>
+
+    <!-- Proyectos -->
+    <div style="padding:6px 20px 40px; flex:1;">
+        {% if not proyectos %}
+        <div style="text-align:center; padding:60px 20px; color:#94a3b8;">
+            <i class="fas fa-folder-open" style="font-size:2.5rem; margin-bottom:14px; display:block;"></i>
+            <p style="font-size:0.95rem; font-weight:500;">Sin proyectos asignados</p>
+        </div>
+        {% else %}
+        {% for p in proyectos %}
+        <div class="proy-card" data-texto="{{ p.numero_proyecto }} {{ p.nombre or '' }}">
+            <div class="proy-header">
+                <div style="min-width:0;">
+                    <div class="proy-numero">{{ p.numero_proyecto }}</div>
+                    <div class="proy-nombre">{{ p.nombre or '(Sin nombre)' }}</div>
+                </div>
+                <span class="{{ 'badge-activo' if p.activo else 'badge-inactivo' }}">
+                    {{ 'Activo' if p.activo else 'Inactivo' }}
+                </span>
+            </div>
+
+            <div class="proy-meta">
+                <div class="proy-stat">
+                    <i class="fas fa-users"></i>
+                    {{ p.participantes|length }} trabajador{{ 'es' if p.participantes|length != 1 else '' }}
+                </div>
+                {% if p.participantes %}
+                <div class="proy-stat">
+                    <i class="fas fa-hard-hat"></i>
+                    {{ (p.participantes|selectattr('activo')|list)|length }} activo{{ 's' if (p.participantes|selectattr('activo')|list)|length != 1 else '' }}
+                </div>
+                {% endif %}
+            </div>
+
+            {% set activos = p.participantes|selectattr('activo')|list %}
+            {% if activos %}
+            <button class="toggle-workers" data-target="workers-{{ p.id }}" aria-expanded="false">
+                <i class="fas fa-chevron-down" style="transition:transform 0.2s; font-size:0.75rem;"></i>
+                Ver trabajadores
+            </button>
+            <div id="workers-{{ p.id }}" class="proy-workers" style="display:none; padding-bottom:12px;">
+                {% for t in activos %}
+                <span class="worker-chip">
+                    <i class="fas fa-user" style="font-size:0.65rem;"></i>
+                    {{ t.nombre_completo }}
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/proyectos_movil.js') }}?v=1"></script>
+{% endblock %}

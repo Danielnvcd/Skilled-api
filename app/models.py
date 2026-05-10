@@ -54,7 +54,8 @@ class Trabajador(db.Model):
     # Identificadores
     id = db.Column(db.Integer, primary_key=True)
     no_empleado = db.Column(db.String(50), unique=True, nullable=False)
-    
+    qr_code = db.Column(db.String(100), unique=True, nullable=True, index=True)
+
     # Credenciales de plantas (One-to-Many)
     credenciales = db.relationship('CredencialPlanta', backref='trabajador', lazy=True, cascade="all, delete-orphan")
     

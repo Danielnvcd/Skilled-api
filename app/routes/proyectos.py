@@ -170,5 +170,28 @@ def editar(id):
         db.session.rollback()
         current_app.logger.error(f"Error actualizando proyecto: {e}\n{traceback.format_exc()}")
         flash('Falló la modificación del proyecto.', 'danger')
-        
+
     return redirect(url_for('proyectos.index'))
+
+
+@bp.route('/movil', methods=['GET'])
+@login_required
+def movil():
+    from flask import session as _session
+    user_id = _session.get('user_id')
+    user_role = _session.get('role', 'user')
+
+    if user_role not in ('coordinador', 'admin', 'super_admin'):
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.home'))
+
+    if user_role == 'coordinador':
+        proyectos = Proyecto.query.options(
+            selectinload(Proyecto.participantes)
+        ).filter_by(activo=True, coordinador_id=user_id).all()
+    else:
+        proyectos = Proyecto.query.options(
+            selectinload(Proyecto.participantes)
+        ).filter_by(activo=True).all()
+
+    return render_template('proyectos_movil.html', proyectos=proyectos)
