@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from app.models import User, RefreshToken
 from app.extensions import db, limiter
-from app.utils import login_required, admin_required, is_strong_password, allowed_image_file
+from app.utils import login_required, admin_required, is_strong_password, allowed_image_file, log_action
 
 bp = Blueprint('users', __name__, url_prefix='/users')
 
@@ -139,6 +139,9 @@ def update_password(user_id):
         # Si el admin cambia su propia contraseña, sincronizar sesión para no desloguear
         if user.id == session.get('user_id'):
             session['password_version'] = user.password_version
+            log_action(f"Cambio de contraseña propio")
+        else:
+            log_action(f"Admin cambió contraseña del usuario '{user.username}'")
         flash(f'Contraseña actualizada para {user.username}.', 'success')
     except Exception as e:
         db.session.rollback()
