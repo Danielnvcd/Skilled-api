@@ -2,6 +2,12 @@ $(document).ready(function () {
     var totalMeta = 0;
     var trabajadoresAgregados = {};
 
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     $('#selectorTrabajador').select2({
         placeholder: "Busca por nombre o num. de empleado...",
         allowClear: true,
@@ -35,11 +41,11 @@ $(document).ready(function () {
         var tr = document.createElement('tr');
         tr.id = 'row-' + tId;
         tr.innerHTML =
-            '<td>' + noEmp + '</td>' +
-            '<td>' + nombre + '</td>' +
+            '<td>' + esc(noEmp) + '</td>' +
+            '<td>' + esc(nombre) + '</td>' +
             '<td style="text-align:right; font-weight:600; color:#4F46E5;">$' + monto.toFixed(2) + '</td>' +
-            '<td><button type="button" class="delete-btn" data-tid="' + tId + '" data-monto="' + monto + '">✕</button>' +
-            '<input type="hidden" name="trabajador_ids" value="' + tId + '">' +
+            '<td><button type="button" class="delete-btn" data-tid="' + esc(tId) + '" data-monto="' + monto + '">✕</button>' +
+            '<input type="hidden" name="trabajador_ids" value="' + esc(tId) + '">' +
             '<input type="hidden" name="montos_meta" value="' + monto.toFixed(2) + '">' +
             '</td>';
         tbody.appendChild(tr);

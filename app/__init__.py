@@ -239,8 +239,8 @@ def create_app():
             # En producción no exponer trazas completas (podrían revelar paths/secretos)
             if is_prod:
                 app.logger.error(
-                    "Internal Server Error [%s]: %s",
-                    type(e).__name__, str(e)[:300]
+                    "Internal Server Error [%s] %s %s",
+                    type(e).__name__, request.method, request.path
                 )
             else:
                 app.logger.error(
@@ -286,6 +286,13 @@ def create_app():
     @app.before_request
     def _start_timer():
         request._start_time = _time.time()
+
+    @app.after_request
+    def _security_headers(response):
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)')
+        return response
 
     @app.after_request
     def _log_request(response):

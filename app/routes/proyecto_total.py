@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request
 from decimal import Decimal
-from app.utils import login_required, to_dec
+from app.utils import login_required, admin_required, to_dec
 from app.extensions import db
 from app.models import Proyecto, Prenomina, ReporteSemanal, RegistroDiarioHoras
 from sqlalchemy import func
@@ -17,6 +17,7 @@ _MONEY_KEYS = [
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     """
     Vista que muestra por cada proyecto:

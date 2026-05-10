@@ -19,6 +19,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const credencialesJson = document.getElementById('credencialesJson');
     const observacionesInput = document.getElementById('observacionesInput');
 
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     let currentWorkerId = null;
     let credentialsArray = [];
 
@@ -57,7 +63,11 @@ document.addEventListener('DOMContentLoaded', function () {
             // Populate modal
             var avatarDiv = document.getElementById('fichaAvatar');
             if (foto) {
-                avatarDiv.innerHTML = '<img src="' + foto + '" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">';
+                var img = document.createElement('img');
+                img.src = foto;
+                img.style.cssText = 'width:100%; height:100%; border-radius:50%; object-fit:cover;';
+                avatarDiv.innerHTML = '';
+                avatarDiv.appendChild(img);
                 avatarDiv.style.background = 'transparent';
                 avatarDiv.style.border = '3px solid rgba(255, 255, 255, 0.3)';
             } else {
@@ -105,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (expDate < today) {
                             isExpired = true;
                         }
-                        expText = ' <span style="font-size: 0.7rem; color: ' + (isExpired ? '#ef4444' : '#6b7280') + '; margin-left: 4px;">(' + (isExpired ? 'Caducada: ' : 'Vence: ') + caducidad + ')</span>';
+                        expText = ' <span style="font-size: 0.7rem; color: ' + (isExpired ? '#ef4444' : '#6b7280') + '; margin-left: 4px;">(' + (isExpired ? 'Caducada: ' : 'Vence: ') + esc(caducidad) + ')</span>';
                     }
 
                     var chipColor = isExpired ? '#fee2e2' : '#ecfdf5';
@@ -118,8 +128,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     chip.style.background = chipColor;
                     chip.style.borderColor = borderColor;
                     chip.innerHTML = '<i class="fas ' + iconClass + '" style="color: ' + iconColor + '; margin-right: 4px;"></i>' +
-                        '<strong>' + planta + '</strong>' +
-                        '<span class="cred-id">' + cid + '</span>' + expText;
+                        '<strong>' + esc(planta) + '</strong>' +
+                        '<span class="cred-id">' + esc(cid) + '</span>' + expText;
                     chipsContainer.appendChild(chip);
                 });
             } else {
@@ -177,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     isExpired = true;
                 }
                 statusBadge = `<span style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: ${isExpired ? '#fee2e2' : '#d1fae5'}; color: ${isExpired ? '#991b1b' : '#065f46'}; margin-left: 8px;">
-                    ${isExpired ? 'Caducada' : 'Vigente'} (${cred.fecha_caducidad})
+                    ${isExpired ? 'Caducada' : 'Vigente'} (${esc(cred.fecha_caducidad)})
                 </span>`;
             }
 
@@ -192,8 +202,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             li.innerHTML = `
                 <div>
-                    <strong style="color: #1f2937;">${cred.planta}</strong>
-                    <span style="color: #6b7280; font-family: monospace; margin-left: 8px;">ID: ${cred.credencial_id}</span>
+                    <strong style="color: #1f2937;">${esc(cred.planta)}</strong>
+                    <span style="color: #6b7280; font-family: monospace; margin-left: 8px;">ID: ${esc(cred.credencial_id)}</span>
                     ${statusBadge}
                 </div>
                 <button type="button" class="btn-remove-cred" data-index="${index}" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">X</button>

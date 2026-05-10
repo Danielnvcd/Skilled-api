@@ -13,6 +13,12 @@
     var workerActivo = null;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function getCSRF() {
         var el = document.querySelector('input[name="csrf_token"]');
         return el ? el.value : '';
@@ -119,8 +125,8 @@
         // Día
         var tdDia = document.createElement('td');
         tdDia.style.cssText = 'padding: 0.55rem 0.75rem; white-space: nowrap;';
-        tdDia.innerHTML = '<strong style="' + (esFinSemana ? 'color:#7C3AED;' : '') + '">' + fechaObj.dia + '</strong>'
-            + '<br><span style="font-size:0.73rem; color:var(--text-muted);">' + fechaObj.label + '</span>';
+        tdDia.innerHTML = '<strong style="' + (esFinSemana ? 'color:#7C3AED;' : '') + '">' + esc(fechaObj.dia) + '</strong>'
+            + '<br><span style="font-size:0.73rem; color:var(--text-muted);">' + esc(fechaObj.label) + '</span>';
         tr.appendChild(tdDia);
 
         // Entrada
@@ -376,16 +382,16 @@
             return el;
         }
 
-        tr.appendChild(td('<strong>' + diaCorto + '</strong>'));
-        tr.appendChild(td('<span style="font-family:monospace;">' + (reg.no_empleado || '') + '</span>'));
-        tr.appendChild(td(reg.nombre_completo || ''));
-        tr.appendChild(td(reg.hora_entrada || '-'));
-        tr.appendChild(td(reg.hora_salida || '-'));
+        tr.appendChild(td('<strong>' + esc(diaCorto) + '</strong>'));
+        tr.appendChild(td('<span style="font-family:monospace;">' + esc(reg.no_empleado || '') + '</span>'));
+        tr.appendChild(td(esc(reg.nombre_completo || '')));
+        tr.appendChild(td(esc(reg.hora_entrada || '-')));
+        tr.appendChild(td(esc(reg.hora_salida || '-')));
         tr.appendChild(td(reg.tomo_comida ? '<span style="color:var(--primary);font-weight:bold;">Sí</span>' : '<span style="color:var(--text-muted);">No</span>'));
         tr.appendChild(td(reg.aplica_viaticos ? '<span style="color:#D97706;font-weight:bold;">Sí</span>' : '<span style="color:var(--text-muted);">No</span>'));
         tr.appendChild(td(reg.aplica_dia_festivo ? '<span style="color:#7C3AED;font-weight:bold;">Sí</span>' : '<span style="color:var(--text-muted);">No</span>'));
         tr.appendChild(td((reg.horas_productivas || 0).toFixed(2) + ' hrs.', 'font-weight:bold; color:var(--success);'));
-        tr.appendChild(td(reg.incidencia ? '<span class="badge" style="background:#FEE2E2;color:#B91C1C;">' + reg.incidencia + '</span>' : '-'));
+        tr.appendChild(td(reg.incidencia ? '<span class="badge" style="background:#FEE2E2;color:#B91C1C;">' + esc(reg.incidencia) + '</span>' : '-'));
 
         var tdAcc = document.createElement('td');
         var btnDel = document.createElement('button');
