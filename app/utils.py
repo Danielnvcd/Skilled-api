@@ -220,8 +220,8 @@ ROLE_PERMISSIONS = {
         'default_redirect': 'main.home',
     },
     'coordinador': {
-        'allowed': ['horas.', 'auth.', 'ficha.', 'trabajadores.', 'main.credenciales', 'users.serve_profile_pic'],
-        'default_redirect': 'horas.index',
+        'allowed': ['horas.', 'auth.', 'ficha.', 'trabajadores.', 'proyectos.', 'main.credenciales', 'users.serve_profile_pic'],
+        'default_redirect': 'horas.movil',
         'deny_message': 'Acceso denegado. Tu rol solo permite acceder a Horas, Ficha Técnica y Credenciales.',
     },
     'inventario': {

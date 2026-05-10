@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=3">
+<style>
+    .qr-table { width: 100%; border-collapse: collapse; }
+    .qr-table th {
+        background: #f8fafc; font-weight: 600; font-size: 0.8rem;
+        color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
+        padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0;
+    }
+    .qr-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .qr-table tbody tr:hover td { background: #f8fafc; }
+    .qr-img-thumb { width: 48px; height: 48px; border-radius: 6px; border: 1px solid #e2e8f0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="horas-wrapper">
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title"><i class="fas fa-qrcode" style="color:#3b82f6; margin-right:10px;"></i>QR Trabajadores</h1>
+            <p class="subtitle">Genera y administra códigos QR para el registro de asistencia</p>
+        </div>
+    </div>
+
+    <!-- Buscador -->
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+        <div class="search-container" style="flex: 1; position: relative; max-width: 400px;">
+            <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #9CA3AF;"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <input type="search" id="qr-search" autocomplete="off" placeholder="Buscar por nombre, No. o área..."
+                style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none; background: var(--bg-card); color: var(--text-main);">
+        </div>
+    </div>
+
+    <p id="search-count" class="text-xs text-gray-400 mb-2 hidden"></p>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-auto">
+        <table class="qr-table">
+            <thead>
+                <tr>
+                    <th>No. Emp</th>
+                    <th>Nombre</th>
+                    <th>Área</th>
+                    <th>QR</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in trabajadores %}
+                <tr id="row-{{ t.id }}">
+                    <td class="font-mono text-sm text-gray-600">{{ t.no_empleado }}</td>
+                    <td class="font-medium text-gray-800">{{ t.nombre_completo }}</td>
+                    <td class="text-gray-500 text-sm">{{ t.area or '—' }}</td>
+                    <td id="qr-cell-{{ t.id }}">
+                        {% if t.qr_code %}
+                        <img src="{{ url_for('horas.qr_imagen', qr_code=t.qr_code) }}" alt="QR" class="qr-img-thumb">
+                        {% else %}
+                        <span class="text-gray-400 text-sm italic">Sin QR</span>
+                        {% endif %}
+                    </td>
+                    <td id="acc-cell-{{ t.id }}" data-nombre="{{ t.nombre_completo | e }}" data-trabajador-id="{{ t.id }}">
+                        <div class="flex gap-2 flex-wrap">
+                            {% if t.qr_code %}
+                            <button
+                                data-action="regenerar"
+                                data-id="{{ t.id }}"
+                                data-nombre="{{ t.nombre_completo | e }}"
+                                class="px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors border-0 cursor-pointer">
+                                Regenerar
+                            </button>
+                            <a href="{{ url_for('horas.qr_print', trabajador_id=t.id) }}" target="_blank"
+                                class="px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors no-underline">
+                                Imprimir
+                            </a>
+                            {% else %}
+                            <button
+                                data-action="generar"
+                                data-id="{{ t.id }}"
+                                class="px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors border-0 cursor-pointer">
+                                Generar QR
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not trabajadores %}
+                <tr>
+                    <td colspan="5" class="text-center text-gray-400 py-8">No hay trabajadores activos</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Confirmar Regenerar -->
+<div id="modal-confirmar" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 mx-4">
+        <h3 class="text-lg font-bold text-gray-800 mb-2">¿Regenerar QR?</h3>
+        <p class="text-sm text-gray-600 mb-4">
+            El QR actual de <strong id="modal-confirmar-nombre"></strong> quedará inválido. ¿Deseas continuar?
+        </p>
+        <div class="flex gap-3">
+            <button id="btn-cancelar-regen"
+                class="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-xl font-semibold text-sm border-0 cursor-pointer">
+                Cancelar
+            </button>
+            <button id="btn-confirmar-regen"
+                class="flex-1 py-2 px-4 bg-amber-500 text-white rounded-xl font-semibold text-sm border-0 cursor-pointer">
+                Regenerar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: QR Generado -->
+<div id="modal-qr-generado" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 mx-4 text-center">
+        <h3 class="text-lg font-bold text-gray-800 mb-4">QR Generado</h3>
+        <img id="modal-qr-img" src="" alt="QR"
+            class="w-48 h-48 mx-auto rounded-xl border border-gray-200 mb-4" style="display:block;">
+        <p class="text-sm text-gray-600 mb-4" id="modal-qr-nombre"></p>
+        <button id="btn-cerrar-qr-modal"
+            class="w-full py-2 px-4 bg-blue-600 text-white rounded-xl font-semibold text-sm border-0 cursor-pointer">
+            Cerrar
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/horas_admin_qr.js') }}?v=2"></script>
+{% endblock %}

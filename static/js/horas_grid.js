@@ -91,6 +91,20 @@
         }
     }
 
+    // Asigna un valor a un <select>; si no existe como opción, lo agrega.
+    // Necesario cuando el QR guardó una hora exacta (ej. 08:23) fuera de los intervalos de 30 min.
+    function setSelectValor(sel, valor) {
+        if (!valor) return;
+        var existe = Array.from(sel.options).some(function (o) { return o.value === valor; });
+        if (!existe) {
+            var opt = document.createElement('option');
+            opt.value = valor;
+            opt.textContent = valor;
+            sel.insertBefore(opt, sel.options[1]);
+        }
+        sel.value = valor;
+    }
+
     // ── Construir fila de día ─────────────────────────────────────────────────
     function crearFilaDia(fechaObj, trabajadorId) {
         var fecha   = fechaObj.fecha;
@@ -113,7 +127,7 @@
         var tdE = document.createElement('td');
         tdE.style.padding = '0.4rem 0.3rem';
         var selE = selectHoras('sel-entrada');
-        selE.value = reg ? reg.hora_entrada : '';
+        if (reg && reg.hora_entrada) setSelectValor(selE, reg.hora_entrada);
         if (!BORRADOR) selE.disabled = true;
         tdE.appendChild(selE);
         tr.appendChild(tdE);
@@ -122,7 +136,7 @@
         var tdS = document.createElement('td');
         tdS.style.padding = '0.4rem 0.3rem';
         var selS = selectHoras('sel-salida');
-        selS.value = reg ? reg.hora_salida : '';
+        if (reg && reg.hora_salida) setSelectValor(selS, reg.hora_salida);
         if (!BORRADOR) selS.disabled = true;
         tdS.appendChild(selS);
         tr.appendChild(tdS);

@@ -271,13 +271,13 @@ def login():
         if next_url and _is_safe_url(next_url) and '/login' not in next_url:
             return redirect(next_url)
         role = session.get('role', '')
+        is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
         if role == 'inventario':
-            is_mobile = request.user_agent.platform in ['android', 'iphone', 'ipad'] or 'mobi' in request.user_agent.string.lower()
             dest = url_for('inventario_ui.movil') if is_mobile else url_for('inventario_ui.web')
         elif role == 'solicitante_material':
             dest = url_for('inventario_ui.solicitar')
         elif role == 'coordinador':
-            dest = url_for('horas.index')
+            dest = url_for('horas.movil') if is_mobile else url_for('horas.index')
         else:
             dest = url_for('main.home')
         return redirect(dest)
@@ -305,7 +305,7 @@ def login():
             elif u.role == 'solicitante_material':
                 dest = url_for('inventario_ui.solicitar')
             elif u.role == 'coordinador':
-                dest = url_for('horas.index')
+                dest = url_for('horas.movil') if is_mobile else url_for('horas.index')
             else:
                 dest = url_for('main.home')
 
@@ -350,7 +350,7 @@ def verify_2fa():
             elif user.role == 'solicitante_material':
                 dest = url_for('inventario_ui.solicitar')
             elif user.role == 'coordinador':
-                dest = url_for('horas.index')
+                dest = url_for('horas.movil') if is_mobile else url_for('horas.index')
             else:
                 dest = url_for('main.home')
 

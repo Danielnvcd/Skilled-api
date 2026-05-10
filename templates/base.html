@@ -112,6 +112,7 @@
             {% endif %}
 
             {% if session.get('role') == 'admin' %}
+            {{ menu_link('horas.admin_qr', false, 'fas fa-qrcode', 'QR Trabajadores', true) }}
             {{ menu_link('manual_uso.index', false, 'fas fa-book-open', 'Manual de Uso', true) }}
             {% endif %}
 
