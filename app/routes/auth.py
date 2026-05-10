@@ -105,13 +105,20 @@ def profile():
                 user.password_hash = generate_password_hash(new_password)
                 # Incrementar versión invalida todas las sesiones abiertas en otros dispositivos
                 user.password_version = (user.password_version or 1) + 1
+                # Invalidar TOTP: el secreto queda obsoleto tras cambio de contraseña
+                user.totp_secret = None
                 # Revocar todos los refresh tokens del usuario (invalida "recordarme" en todos los dispositivos)
                 RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
-                db.session.commit()
-                # Actualizar la versión en la sesión activa para no desloguear al propio usuario
-                session['password_version'] = user.password_version
-                flash('Contraseña actualizada correctamente.', 'success')
-                log_action(f"Contraseña actualizada para {user.username}")
+                try:
+                    db.session.commit()
+                    # Actualizar la versión en la sesión activa para no desloguear al propio usuario
+                    session['password_version'] = user.password_version
+                    flash('Contraseña actualizada correctamente.', 'success')
+                    log_action(f"Contraseña actualizada para {user.username}")
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f'Error al actualizar contraseña: {e}')
+                    flash('Ocurrió un error al actualizar la contraseña. Intenta de nuevo.', 'danger')
 
         profile_pic = request.files.get('profile_pic')
         if profile_pic and profile_pic.filename != '':

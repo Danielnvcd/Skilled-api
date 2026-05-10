@@ -119,8 +119,16 @@ class TestApiDeposito:
 class TestCerrarPrenomina:
     """Tests para el cierre de prenómina y el abono correcto de préstamos."""
 
-    def _setup_prenomina_con_prestamo(self, db, trabajador, monto_restante=1000, descuento_semanal=250):
-        """Crea una prenomina ABIERTA + un préstamo ACTIVO para el trabajador."""
+    def _setup_prenomina_con_prestamo(self, db, trabajador, proyecto, monto_restante=1000, descuento_semanal=250):
+        """Crea un ReporteSemanal TERMINADO + prenomina ABIERTA + préstamo ACTIVO."""
+        reporte = ReporteSemanal(
+            proyecto_id=proyecto.id,
+            fecha_inicio_semana=date(2025, 3, 1),
+            fecha_fin_semana=date(2025, 3, 7),
+            estado='TERMINADO'
+        )
+        db.session.add(reporte)
+
         pren = Prenomina(
             trabajador_id=trabajador.id,
             fecha_inicio=date(2025, 3, 1),
@@ -147,9 +155,9 @@ class TestCerrarPrenomina:
         db.session.commit()
         return pren, prestamo
 
-    def test_cierre_abono_normal(self, logged_in_admin, db, trabajador):
+    def test_cierre_abono_normal(self, logged_in_admin, db, trabajador, proyecto):
         """Cierre con saldo > descuento: abona exactamente el descuento."""
-        pren, prestamo = self._setup_prenomina_con_prestamo(db, trabajador,
+        pren, prestamo = self._setup_prenomina_con_prestamo(db, trabajador, proyecto,
             monto_restante=1000, descuento_semanal=250)
 
         resp = logged_in_admin.post('/prenomina/cerrar/2025-03-01',
@@ -165,9 +173,9 @@ class TestCerrarPrenomina:
         assert float(abonos[0].monto) == 250.0
         assert float(prestamo.monto_restante) == 750.0
 
-    def test_cierre_abono_parcial_no_sobrepaga(self, logged_in_admin, db, trabajador):
+    def test_cierre_abono_parcial_no_sobrepaga(self, logged_in_admin, db, trabajador, proyecto):
         """Cierre con saldo < descuento: abona solo lo que resta (no sobrepaga)."""
-        pren, prestamo = self._setup_prenomina_con_prestamo(db, trabajador,
+        pren, prestamo = self._setup_prenomina_con_prestamo(db, trabajador, proyecto,
             monto_restante=100, descuento_semanal=500)
 
         resp = logged_in_admin.post('/prenomina/cerrar/2025-03-01',
@@ -182,9 +190,9 @@ class TestCerrarPrenomina:
         assert float(prestamo.monto_restante) == 0.0
         assert prestamo.estado == 'LIQUIDADO'
 
-    def test_cierre_prestamo_saldo_cero_se_liquida(self, logged_in_admin, db, trabajador):
+    def test_cierre_prestamo_saldo_cero_se_liquida(self, logged_in_admin, db, trabajador, proyecto):
         """Préstamo con saldo 0 pero estado ACTIVO: debe marcarse como LIQUIDADO sin crear abono."""
-        pren, prestamo = self._setup_prenomina_con_prestamo(db, trabajador,
+        pren, prestamo = self._setup_prenomina_con_prestamo(db, trabajador, proyecto,
             monto_restante=0, descuento_semanal=250)
 
         resp = logged_in_admin.post('/prenomina/cerrar/2025-03-01',

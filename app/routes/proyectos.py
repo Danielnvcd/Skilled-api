@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app, session
 from app.extensions import db
 from app.models import Proyecto, Trabajador, User
 from app.utils import login_required, log_action, admin_required
@@ -89,6 +89,9 @@ def agregar():
 @login_required
 def get_proyecto(id):
     p = Proyecto.query.get_or_404(id)
+    role = session.get('role')
+    if role == 'coordinador' and p.coordinador_id != session.get('user_id'):
+        return jsonify({'error': 'Acceso denegado'}), 403
     participantes_ids = [t.id for t in p.participantes]
     
     data = {

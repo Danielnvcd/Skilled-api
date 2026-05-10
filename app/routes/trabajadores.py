@@ -47,11 +47,18 @@ def _parse_date(value):
 def index():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
-    
+    role = session.get('role')
+    user_id = session.get('user_id')
+
     query = Trabajador.query.options(
         selectinload(Trabajador.credenciales),
         selectinload(Trabajador.documentos)
     ).filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
+
+    if role == 'coordinador':
+        mis_proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=user_id).all()
+        ids_trabajadores = {t.id for p in mis_proyectos for t in p.participantes}
+        query = query.filter(Trabajador.id.in_(ids_trabajadores))
 
     if q:
         query = query.filter(or_(
@@ -500,6 +507,9 @@ def get_trabajador(id):
          .filter_by(id=id)
          .first_or_404())
 
+    if not is_authorized_for_worker(t):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
     credenciales = [{'planta': c.planta, 'credencial_id': c.credencial_id, 'fecha_caducidad': c.fecha_caducidad.isoformat() if c.fecha_caducidad else None} for c in t.credenciales]
     documentos = [d.to_dict() for d in t.documentos]
 
@@ -854,6 +864,10 @@ def exportar_excel(id):
          .options(selectinload(Trabajador.credenciales))
          .filter_by(id=id).first_or_404())
 
+    if not is_authorized_for_worker(t):
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('trabajadores.index'))
+
     is_admin = session.get('role') in ('admin', 'super_admin')
 
     def fmt_date(d):
@@ -1002,11 +1016,16 @@ def exportar_todos():
     from openpyxl.utils import get_column_letter
     from datetime import date as date_type
 
-    is_admin = session.get('role') in ('admin', 'super_admin')
-    trabajadores = (Trabajador.query
-                    .filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
-                    .order_by(func.lower(Trabajador.nombre))
-                    .all())
+    role = session.get('role')
+    is_admin = role in ('admin', 'super_admin')
+
+    base_query = Trabajador.query.filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
+    if role == 'coordinador':
+        mis_proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=session.get('user_id')).all()
+        ids_trabajadores = {t.id for p in mis_proyectos for t in p.participantes}
+        base_query = base_query.filter(Trabajador.id.in_(ids_trabajadores))
+
+    trabajadores = base_query.order_by(func.lower(Trabajador.nombre)).all()
 
     def fmt_date(d):
         return d.strftime('%d/%m/%Y') if d else ''
@@ -1128,7 +1147,10 @@ def exportar_todos():
 @limiter.limit("10 per minute")
 def upload_documento(id):
     t = Trabajador.query.get_or_404(id)
-    
+
+    if not is_authorized_for_worker(t):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
     if 'documento' not in request.files:
         return jsonify({'error': 'No file part'}), 400
         

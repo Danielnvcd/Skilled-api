@@ -3,7 +3,7 @@ import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, send_from_directory, jsonify, make_response
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
-from app.models import User
+from app.models import User, RefreshToken
 from app.extensions import db, limiter
 from app.utils import login_required, admin_required, is_strong_password, allowed_image_file
 
@@ -130,9 +130,15 @@ def update_password(user_id):
         return redirect(url_for('users.list_users'))
 
     user.password_hash = generate_password_hash(new_password)
-    
+    user.password_version = (user.password_version or 1) + 1
+    user.totp_secret = None
+    RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
+
     try:
         db.session.commit()
+        # Si el admin cambia su propia contraseña, sincronizar sesión para no desloguear
+        if user.id == session.get('user_id'):
+            session['password_version'] = user.password_version
         flash(f'Contraseña actualizada para {user.username}.', 'success')
     except Exception as e:
         db.session.rollback()
