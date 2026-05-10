@@ -69,6 +69,7 @@
     </td>
     <td>
         <div class="actions-cell">
+            {% if user.username != 'admin' or session.get('user_id') == user.id %}
             <button class="btn-action btn-edit btn-change-password" data-id="{{ user.id }}"
                 data-username="{{ user.username }}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -79,6 +80,7 @@
                 </svg>
                 Contraseña
             </button>
+            {% endif %}
             <button class="btn-action btn-profile btn-edit-profile" data-id="{{ user.id }}"
                 data-username="{{ user.username }}" data-fullname="{{ user.full_name or '' }}"
                 data-area="{{ user.area or '' }}" data-position="{{ user.position or '' }}"
@@ -91,6 +93,7 @@
                 </svg>
                 Perfil
             </button>
+            {% if user.username != 'admin' %}
             <form action="{{ url_for('users.delete_user', user_id=user.id) }}" method="POST" class="form-delete-user"
                 data-username="{{ user.username }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -103,6 +106,7 @@
                     Eliminar
                 </button>
             </form>
+            {% endif %}
         </div>
     </td>
     </tr>

@@ -113,6 +113,12 @@ def update_profile(user_id):
 @admin_required
 def update_password(user_id):
     user = User.query.get_or_404(user_id)
+
+    # Solo el propio usuario admin puede cambiar su contraseña
+    if user.username == 'admin' and session.get('user_id') != user.id:
+        flash('Solo el usuario administrador puede cambiar su propia contraseña.', 'danger')
+        return redirect(url_for('users.list_users'))
+
     new_password = request.form.get('new_password')
 
     if not new_password:
@@ -143,8 +149,13 @@ def delete_user(user_id):
     if user_id == session.get('user_id'):
         flash('No puedes eliminar tu propia cuenta.', 'danger')
         return redirect(url_for('users.list_users'))
-    
+
     user = User.query.get_or_404(user_id)
+
+    # El usuario admin no puede ser eliminado por nadie
+    if user.username == 'admin':
+        flash('El usuario administrador no puede ser eliminado.', 'danger')
+        return redirect(url_for('users.list_users'))
     
     try:
         db.session.delete(user)
