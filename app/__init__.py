@@ -26,12 +26,20 @@ def create_app():
         from app.models import User
 
         current_user = None
+        notif_count = 0
         if 'user_id' in session:
             if not hasattr(g, '_current_user'):
                 g._current_user = User.query.get(session.get('user_id'))
             current_user = g._current_user
 
-        return {'now': datetime.now, 'current_user': current_user}
+            if session.get('role') in ('admin', 'super_admin'):
+                from app.models import Notificacion
+                notif_count = Notificacion.query.filter_by(
+                    usuario_id=session.get('user_id'),
+                    leida=False,
+                ).count()
+
+        return {'now': datetime.now, 'current_user': current_user, 'notif_count': notif_count}
         
     @app.template_filter('fecha_es')
     def fecha_es_filter(dt, format_type='completo'):
