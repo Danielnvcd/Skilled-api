@@ -210,6 +210,13 @@
             grid-column: span 12;
         }
     }
+
+    /* Alertas Sospechosas */
+    @keyframes pulse-danger-idx {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
 </style>
 {% endblock %}
 
@@ -288,12 +295,17 @@
         <h3 class="panel-title"><i class="fa-solid fa-history"></i> Actividad Reciente en el Sistema</h3>
         <div class="list-container" style="max-height: 300px; overflow-y: auto;">
             {% for log in actividad_reciente %}
-            <div class="dash-list-item">
-                <div class="list-icon" style="background:#e0f2fe; color:#0284c7;">
-                    <i class="fa-solid fa-pencil-alt"></i>
+            {% set _a = log.action | lower %}
+            {% set es_sospechoso = ('fallido' in _a) or ('eliminó' in _a) or ('eliminado' in _a) or ('admin cambió contraseña' in _a) or ('bloqueado' in _a) or ('denegado' in _a) %}
+            <div class="dash-list-item" {% if es_sospechoso %}style="background: linear-gradient(to right, #fff1f2, #ffffff); border-left: 4px solid #ef4444; border-radius: 8px; position: relative; margin: 8px 0; padding: 12px 10px; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.05);"{% endif %}>
+                {% if es_sospechoso %}
+                <span style="position: absolute; top: -8px; right: 10px; background: #ef4444; color: white; font-size: 0.6rem; font-weight: bold; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(239,68,68,0.2);">SOSPECHOSO</span>
+                {% endif %}
+                <div class="list-icon" style="background:{% if es_sospechoso %}#fee2e2{% else %}#e0f2fe{% endif %}; color:{% if es_sospechoso %}#ef4444{% else %}#0284c7{% endif %}; {% if es_sospechoso %}animation: pulse-danger-idx 2s infinite;{% endif %}">
+                    <i class="fa-solid fa-{% if es_sospechoso %}shield-halved{% else %}pencil-alt{% endif %}"></i>
                 </div>
                 <div class="list-text" style="flex:1; min-width: 0; padding-right: 10px;">
-                    <h5 style="margin: 0; font-size: 0.95rem; color: #111827; word-break: break-all; overflow-wrap: break-word;">{{ log.action }}</h5>
+                    <h5 style="margin: 0; font-size: 0.95rem; color: {% if es_sospechoso %}#dc2626{% else %}#111827{% endif %}; word-break: break-all; overflow-wrap: break-word;">{{ log.action }}</h5>
                     <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: #6b7280;">{{ log.user or 'Sistema' }}</p>
                 </div>
                 <div style="font-size: 0.75rem; color: #9ca3af; white-space: nowrap; flex-shrink: 0; text-align: right;">

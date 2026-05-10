@@ -114,7 +114,7 @@ def profile():
                     # Actualizar la versión en la sesión activa para no desloguear al propio usuario
                     session['password_version'] = user.password_version
                     flash('Contraseña actualizada correctamente.', 'success')
-                    log_action(f"Contraseña actualizada para {user.username}")
+                    log_action(f"Cambio de contraseña propio")
                 except Exception as e:
                     db.session.rollback()
                     current_app.logger.error(f'Error al actualizar contraseña: {e}')

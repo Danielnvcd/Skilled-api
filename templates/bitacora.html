@@ -3,6 +3,45 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bitacora.css') }}?v=3">
+<style>
+    @keyframes pulse-danger {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+        70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .log-item--alerta {
+        background: linear-gradient(to right, #fff1f2, #ffffff);
+        border-left: 4px solid #ef4444;
+        box-shadow: 0 2px 4px rgba(239, 68, 68, 0.1);
+        position: relative;
+    }
+    .log-item--alerta::before {
+        content: 'ALERTA DE SEGURIDAD';
+        position: absolute;
+        top: -8px;
+        right: 15px;
+        background: #ef4444;
+        color: white;
+        font-size: 0.65rem;
+        font-weight: bold;
+        padding: 3px 8px;
+        border-radius: 4px;
+        letter-spacing: 0.5px;
+        box-shadow: 0 2px 4px rgba(239,68,68,0.2);
+    }
+    .log-item--alerta .log-icon {
+        background-color: #fee2e2 !important;
+        color: #ef4444 !important;
+        animation: pulse-danger 2s infinite;
+    }
+    .log-item--alerta .log-title {
+        color: #b91c1c;
+        font-weight: 600;
+    }
+    .log-item--alerta .log-meta {
+        color: #991b1b;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -45,9 +84,11 @@
     <div style="background: white; border-radius: 12px; border: 1px solid var(--border); padding: 1.5rem;">
         {% if logs %}
         {% for log in logs %}
-        <div class="log-item">
+        {% set _a = log.action | lower %}
+        {% set es_sospechoso = ('fallido' in _a) or ('eliminó' in _a) or ('eliminado' in _a) or ('admin cambió contraseña' in _a) or ('bloqueado' in _a) or ('denegado' in _a) %}
+        <div class="log-item{% if es_sospechoso %} log-item--alerta{% endif %}">
             <div class="log-icon">
-                <i class="fas fa-pen"></i>
+                <i class="fas fa-{% if es_sospechoso %}shield-halved{% else %}pen{% endif %}"></i>
             </div>
             <div class="log-content">
                 <h4 class="log-title">{{ log.action }}</h4>
