@@ -6,7 +6,7 @@ from app.extensions import db, limiter
 from app.models import ReporteSemanal, Prenomina, Trabajador, Prestamo, RegistroDiarioHoras, DescuentoPrenomina, DepositoExtra, AbonoPrestamo
 from app.utils import login_required, admin_required, log_action, to_dec, recalcular_totales_prenomina
 from app.extensions import mail
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 bp = Blueprint('prenomina', __name__, url_prefix='/prenomina')
 
@@ -350,7 +350,9 @@ def enviar_correo_todos(fecha_str):
     if not reportes:
         return jsonify({'success': False, 'message': 'Semana no encontrada.'}), 404
 
-    prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj).all()
+    prenominas = Prenomina.query.options(
+        selectinload(Prenomina.trabajador)
+    ).filter_by(fecha_inicio=fecha_obj).all()
     if not prenominas:
         prenominas = calcular_preview_prenomina(fecha_obj, reportes)
 
@@ -680,8 +682,8 @@ def api_agregar_descuento():
             fecha_incidencia=datetime.strptime(fecha_inc, '%Y-%m-%d').date() if fecha_inc else None
         )
         db.session.add(desc)
-        db.session.commit()
-        
+        db.session.flush()  # da ID a desc dentro de la transacción
+        db.session.expire(prenomina, ['descuentos_detalle'])  # fuerza re-carga incluyendo el nuevo desc
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"descuento_agregado: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} tipo={tipo} monto={monto}")
@@ -707,7 +709,8 @@ def api_eliminar_descuento(id):
             return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
         
         db.session.delete(desc)
-        db.session.commit()
+        db.session.flush()  # elimina desc dentro de la transacción
+        db.session.expire(prenomina, ['descuentos_detalle'])  # fuerza re-carga sin el desc eliminado
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"descuento_eliminado: descuento_id={id} prenomina_id={prenomina.id} trabajador_id={prenomina.trabajador_id}")
@@ -758,7 +761,8 @@ def api_agregar_deposito():
             concepto=concepto
         )
         db.session.add(dep)
-        db.session.commit()
+        db.session.flush()  # da ID a dep dentro de la transacción
+        db.session.expire(prenomina, ['depositos_detalle'])  # fuerza re-carga incluyendo el nuevo dep
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"deposito_agregado: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} monto={monto} concepto={str(concepto)[:50]}")
@@ -784,7 +788,8 @@ def api_eliminar_deposito(id):
             return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
         
         db.session.delete(dep)
-        db.session.commit()
+        db.session.flush()  # elimina dep dentro de la transacción
+        db.session.expire(prenomina, ['depositos_detalle'])  # fuerza re-carga sin el dep eliminado
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"deposito_eliminado: deposito_id={id} prenomina_id={prenomina.id} trabajador_id={prenomina.trabajador_id}")
@@ -828,7 +833,6 @@ def api_actualizar_viaticos():
             return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
 
         prenomina.pago_viaticos = monto_viaticos
-        db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"viaticos_actualizados: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} monto={monto_viaticos}")
@@ -877,7 +881,6 @@ def api_actualizar_festivos():
             return jsonify({'success': False, 'message': 'Solo se pueden editar prenóminas ABIERTAS.'}), 400
 
         prenomina.pago_festivos = monto_festivos
-        db.session.commit()
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"festivos_actualizados: prenomina_id={prenomina_id} trabajador_id={prenomina.trabajador_id} monto={monto_festivos}")

@@ -393,11 +393,11 @@ def to_dec(value):
     return Decimal(str(value))
 
 
-def recalcular_totales_prenomina(prenomina):
+def recalcular_totales_prenomina(prenomina, prestamos_activos=None):
     """Recalcula los totales de una prenómina individual basándose en sus descuentos, depósitos y préstamos activos.
-    
-    Esta función es usada tanto por prenomina.py como por prestamos.py para mantener
-    una sola fuente de verdad para el cálculo financiero.
+
+    Acepta `prestamos_activos` pre-cargado para evitar una query por prenómina cuando se
+    recalculan varias del mismo trabajador en un loop (ver _recalcular_prenominas_abiertas).
     """
     from app.models import Prestamo
 
@@ -406,8 +406,9 @@ def recalcular_totales_prenomina(prenomina):
     # Depósitos extras
     total_dep_extra = sum((to_dec(d.monto) for d in prenomina.depositos_detalle), Decimal('0')) if prenomina.depositos_detalle else Decimal('0')
 
-    # Cuotas de préstamos activos
-    prestamos_activos = Prestamo.query.filter_by(trabajador_id=prenomina.trabajador_id, estado='ACTIVO').all()
+    # Cuotas de préstamos activos — usa el listado pre-cargado si se pasó como argumento
+    if prestamos_activos is None:
+        prestamos_activos = Prestamo.query.filter_by(trabajador_id=prenomina.trabajador_id, estado='ACTIVO').all()
     total_prestamos = sum((to_dec(pr.descuento_semanal) for pr in prestamos_activos), Decimal('0'))
 
     prenomina.descuento_prestamos = total_prestamos

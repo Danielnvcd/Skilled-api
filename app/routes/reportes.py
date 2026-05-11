@@ -11,6 +11,7 @@ from app.models import (
     AbonoPrestamo
 )
 from app.utils import login_required, admin_required, log_action
+from sqlalchemy.orm import selectinload
 
 bp = Blueprint('reportes', __name__, url_prefix='/reportes')
 
@@ -114,7 +115,9 @@ def excel_prenomina(fecha_str):
         output = io.BytesIO()
         writer = pd.ExcelWriter(output, engine='openpyxl')
         
-        prenominas = Prenomina.query.filter_by(fecha_inicio=fecha_obj).all()
+        prenominas = Prenomina.query.options(
+            selectinload(Prenomina.trabajador)
+        ).filter_by(fecha_inicio=fecha_obj).all()
         if not prenominas:
             # Need to get review calculation like the UI does.
             from app.routes.prenomina import calcular_preview_prenomina
