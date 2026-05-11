@@ -2,6 +2,213 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/trabajadores.css') }}">
 
+<style>
+    /* Override brand color (index a azul de proyecto total) */
+    :root {
+        --primary: #0b5fb4;
+        --primary-hover: #1e40af;
+    }
+    .btn-primary {
+        background: linear-gradient(135deg, #0b5fb4 0%, #3b82f6 100%) !important;
+        box-shadow: 0 4px 12px rgba(11, 95, 180, 0.22) !important;
+    }
+    .btn-primary:hover {
+        box-shadow: 0 6px 16px rgba(11, 95, 180, 0.32) !important;
+    }
+    .search-box input:focus,
+    .form-control:focus {
+        border-color: #0b5fb4 !important;
+        box-shadow: 0 0 0 3px rgba(11, 95, 180, 0.12) !important;
+    }
+    .pg-active {
+        background-color: #0b5fb4 !important;
+        border-color: #0b5fb4 !important;
+    }
+
+    .table-empleados th {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #6b7280;
+        padding: 0.85rem 1.25rem;
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .table-empleados td {
+        font-size: 0.875rem;
+        vertical-align: middle;
+        padding: 0.85rem 1.25rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #111827;
+    }
+
+    .table-empleados tbody tr {
+        transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .table-empleados tbody tr:hover {
+        background-color: #f8fafc;
+        box-shadow: inset 3px 0 0 #0b5fb4;
+    }
+
+    .table-empleados tbody tr.no-salary-row:hover {
+        box-shadow: inset 3px 0 0 #ef4444;
+    }
+
+    /* Numero de empleado pill */
+    .emp-no-pill {
+        font-family: 'SF Mono', 'Menlo', monospace;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #0b5fb4;
+        background: #dbeafe;
+        padding: 0.25rem 0.6rem;
+        border-radius: 6px;
+        display: inline-block;
+        white-space: nowrap;
+    }
+
+    /* Employee identity cell */
+    .emp-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .emp-avatar {
+        width: 38px;
+        height: 38px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #4b5563;
+        background: linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%);
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        letter-spacing: 0.02em;
+    }
+
+    .emp-avatar.avatar-purple,
+    .emp-avatar.avatar-teal,
+    .emp-avatar.avatar-amber,
+    .emp-avatar.avatar-rose,
+    .emp-avatar.avatar-emerald {
+        color: #4b5563;
+        background: linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%);
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    .emp-info { display: flex; flex-direction: column; min-width: 0; }
+    .emp-name { font-weight: 600; color: #111827; font-size: 0.9rem; line-height: 1.25; }
+    .emp-sub  { font-size: 0.78rem; color: #6b7280; margin-top: 2px; }
+
+    /* Area + Puesto stack */
+    .area-stack { display: flex; flex-direction: column; gap: 4px; }
+    .area-stack .badge { width: fit-content; }
+    .puesto-text { font-size: 0.78rem; color: #6b7280; }
+
+    /* Nomina pills */
+    .nomina-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+    .nomina-pill.nomina-semanal  { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+    .nomina-pill.nomina-hora     { background: #ecfeff; color: #155e75; border-color: #a5f3fc; }
+    .nomina-pill.nomina-cuadrado { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .nomina-pill.nomina-default  { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
+
+    /* Salario */
+    .salario-cell {
+        font-family: 'SF Mono', 'Menlo', monospace;
+        font-weight: 600;
+        color: #065f46;
+    }
+    .salario-cell.salario-empty {
+        color: #b91c1c;
+        font-weight: 600;
+    }
+    .salario-empty-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+        font-size: 0.7rem;
+        font-weight: 600;
+        font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    /* Ingreso + antigüedad */
+    .ingreso-cell { display: flex; flex-direction: column; }
+    .ingreso-date { font-weight: 500; color: #374151; font-size: 0.85rem; }
+    .ingreso-anti { font-size: 0.72rem; color: #6b7280; margin-top: 2px; }
+
+    /* Action buttons */
+    .actions-cell {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+    }
+
+    .btn-icon-action {
+        background: white;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+        color: #4b5563;
+    }
+    .btn-icon-action:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+    }
+    .btn-icon-action.btn-view   { color: #2563eb; }
+    .btn-icon-action.btn-view:hover   { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .btn-icon-action.btn-edit   { color: #4b5563; }
+    .btn-icon-action.btn-edit:hover   { background: #f3f4f6; border-color: #d1d5db; color: #111827; }
+    .btn-icon-action.btn-delete { color: #dc2626; }
+    .btn-icon-action.btn-delete:hover { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #9ca3af;
+    }
+    .empty-state .empty-icon { font-size: 3rem; color: #d1d5db; margin-bottom: 1rem; }
+    .empty-state .empty-title { font-size: 1rem; font-weight: 600; color: #4b5563; margin-bottom: 0.25rem; }
+    .empty-state .empty-sub { font-size: 0.85rem; color: #9ca3af; }
+
+    @media (max-width: 1100px) {
+        .table-empleados .col-ingreso, .table-empleados .col-ingreso-cell { display: none; }
+    }
+    @media (max-width: 900px) {
+        .table-empleados .col-nomina, .table-empleados .col-nomina-cell { display: none; }
+    }
+</style>
+
 <div class="trabajadores-wrapper">
     <div class="header-card">
         <div class="header-titulos">
@@ -74,61 +281,96 @@
                 <span style="font-size: 0.85rem; color: #6B7280;">Total Registros: {{ pagination.total }}</span>
             </div>
         </div>
-        <table class="modern-table" id="Table">
+        <table class="modern-table table-empleados" id="Table">
             <thead>
                 <tr>
-                    <th>No. Emp</th>
-                    <th>Nombre Completo</th>
+                    <th style="width: 90px;">No. Emp</th>
+                    <th>Empleado</th>
                     <th>Área / Puesto</th>
-                    <th>Nómina</th>
-                    <th>Salario Base</th>
-                    <th>Ingreso</th>
-                    <th>Acciones</th>
+                    <th class="col-nomina" style="width: 130px;">Nómina</th>
+                    <th style="width: 130px;">Salario</th>
+                    <th class="col-ingreso" style="width: 140px;">Ingreso</th>
+                    <th style="width: 130px; text-align: center;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
+                {% set avatar_palette = ['', 'avatar-purple', 'avatar-teal', 'avatar-amber', 'avatar-rose', 'avatar-emerald'] %}
                 {% for t in trabajadores %}
-                <tr class="worker-row {% if not t.salario_real_pactado_x_sem or t.salario_real_pactado_x_sem == 0 %}no-salary-row{% endif %}"
-                    data-id="{{ t.id }}">
-                    <td style="font-weight: 600; color: var(--primary);">{{ t.no_empleado }}</td>
+                {% set has_salary = t.salario_real_pactado_x_sem and t.salario_real_pactado_x_sem|float != 0 %}
+                {% set initials = ((t.nombre or '?')[:1] + (t.nombre_apellidos or ' ')[:1])|upper %}
+                {% set avatar_class = avatar_palette[t.id % 6] %}
+                {% set nomina_lower = (t.tipo_nomina or '')|lower %}
+                {% set nomina_class = 'nomina-semanal' if 'semanal' in nomina_lower else ('nomina-hora' if 'hora' in nomina_lower else ('nomina-cuadrado' if 'cuadrado' in nomina_lower else 'nomina-default')) %}
+                <tr class="worker-row {% if not has_salary %}no-salary-row{% endif %}" data-id="{{ t.id }}">
+                    <td><span class="emp-no-pill">{{ t.no_empleado }}</span></td>
                     <td>
-                        <div style="font-weight: 600; color: #111827;">{{ t.nombre }}</div>
-                        <div style="font-size: 0.8rem; color: #6B7280;">{{ t.nombre_apellidos }}</div>
+                        <div class="emp-cell">
+                            <span class="emp-avatar {{ avatar_class }}">{{ initials }}</span>
+                            <div class="emp-info">
+                                <span class="emp-name">{{ t.nombre }} {{ t.nombre_apellidos }}</span>
+                                {% if t.rfc %}<span class="emp-sub">{{ t.rfc }}</span>{% endif %}
+                            </div>
+                        </div>
                     </td>
                     <td>
-                        <span class="badge area-default">{{ t.area or 'S/A' }}</span>
-                        <div style="font-size: 0.8rem; margin-top: 4px;">{{ t.puesto or '-' }}</div>
+                        <div class="area-stack">
+                            <span class="badge area-default">{{ t.area or 'S/A' }}</span>
+                            {% if t.puesto %}<span class="puesto-text">{{ t.puesto }}</span>{% endif %}
+                        </div>
                     </td>
-                    <td>{{ t.tipo_nomina or '' }}</td>
-                    <td style="font-family: monospace;">
-                        ${{ t.salario_real_pactado_x_sem }}</td>
-                    <td>{{ t.fecha_ingreso.strftime('%d/%m/%Y') if t.fecha_ingreso else '-' }}</td>
+                    <td class="col-nomina-cell">
+                        {% if t.tipo_nomina %}
+                            <span class="nomina-pill {{ nomina_class }}">{{ t.tipo_nomina }}</span>
+                        {% else %}
+                            <span style="color:#9ca3af; font-size: 0.8rem;">—</span>
+                        {% endif %}
+                    </td>
                     <td>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="btn-icon view-btn" data-id="{{ t.id }}" title="Ver"
-                                style="background:none; border:none; cursor:pointer; color: #3B82F6;">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        {% if has_salary %}
+                            <span class="salario-cell">${{ "{:,.2f}".format(t.salario_real_pactado_x_sem|float) }}</span>
+                        {% else %}
+                            <span class="salario-empty-pill"><i class="fas fa-exclamation-circle"></i> Sin asignar</span>
+                        {% endif %}
+                    </td>
+                    <td class="col-ingreso-cell">
+                        {% if t.fecha_ingreso %}
+                            <div class="ingreso-cell">
+                                <span class="ingreso-date">{{ t.fecha_ingreso.strftime('%d/%m/%Y') }}</span>
+                                {% set anti_days = (today - t.fecha_ingreso).days if today and t.fecha_ingreso else 0 %}
+                                {% if anti_days >= 365 %}
+                                    {% set anti_years = (anti_days / 365)|round(1) %}
+                                    <span class="ingreso-anti">{{ anti_years }} años</span>
+                                {% elif anti_days >= 30 %}
+                                    <span class="ingreso-anti">{{ (anti_days / 30)|int }} meses</span>
+                                {% elif anti_days > 0 %}
+                                    <span class="ingreso-anti">{{ anti_days }} días</span>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <span style="color:#9ca3af;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn-icon-action btn-view view-btn" data-id="{{ t.id }}" title="Ver ficha">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                     <circle cx="12" cy="12" r="3"></circle>
                                 </svg>
                             </button>
-                            <button class="btn-icon edit-btn" data-id="{{ t.id }}" title="Editar"
-                                style="background:none; border:none; cursor:pointer; color: #4B5563;">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            <button class="btn-icon-action btn-edit edit-btn" data-id="{{ t.id }}" title="Editar">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                                 </svg>
                             </button>
-                            <button class="btn-icon delete-btn" data-id="{{ t.id }}" title="Eliminar"
-                                style="background:none; border:none; cursor:pointer; color: #EF4444;">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            <button class="btn-icon-action btn-delete delete-btn" data-id="{{ t.id }}" title="Eliminar">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="3 6 5 6 21 6"></polyline>
-                                    <path
-                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                                    </path>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                     <line x1="10" y1="11" x2="10" y2="17"></line>
                                     <line x1="14" y1="11" x2="14" y2="17"></line>
                                 </svg>
@@ -138,8 +380,12 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" style="text-align: center; padding: 3rem; color: #6B7280;">
-                        No hay trabajadores registrados en la base de datos. Completa el formulario para iniciar.
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <div class="empty-icon"><i class="fas fa-users"></i></div>
+                            <div class="empty-title">No hay trabajadores registrados</div>
+                            <div class="empty-sub">{% if q %}Prueba con otra búsqueda o limpia el filtro.{% else %}Pulsa "Nuevo Empleado" para empezar a registrar personal.{% endif %}</div>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

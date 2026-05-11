@@ -276,7 +276,8 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', async function () {
             const id = this.getAttribute('data-id');
             const row = this.closest('tr');
-            const name = row.querySelector('td:nth-child(2) div').innerText;
+            const nameEl = row.querySelector('.emp-name') || row.querySelector('td:nth-child(2) div');
+            const name = nameEl ? nameEl.innerText : '';
             workerNameSpan.textContent = name;
             currentWorkerId = id;
 
