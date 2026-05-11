@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, current_app
 from app.extensions import db, limiter
 from app.models import Prestamo, Trabajador, Prenomina, DescuentoPrenomina, AbonoPrestamo
+from sqlalchemy.orm import selectinload
 from app.utils import login_required, admin_required, log_action, to_dec, recalcular_totales_prenomina
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -234,9 +235,9 @@ def liquidar(id):
 @login_required
 @admin_required
 def get_detalles(id):
-    prestamo = Prestamo.query.get_or_404(id)
+    prestamo = Prestamo.query.options(selectinload(Prestamo.abonos)).filter_by(id=id).first_or_404()
     abonos_list = []
-    
+
     for a in prestamo.abonos:
         abonos_list.append({
             'identificador': a.id,
@@ -260,11 +261,13 @@ def get_detalles(id):
 def _recalcular_prenominas_abiertas(trabajador_id):
     """Recalcula todas las prenóminas ABIERTAS de un trabajador usando la lógica compartida."""
     prenominas_abiertas = Prenomina.query.filter_by(
-        trabajador_id=trabajador_id, 
+        trabajador_id=trabajador_id,
         estado='ABIERTA'
     ).all()
-    
+    if not prenominas_abiertas:
+        return
+    # Cargar préstamos una sola vez para todos (mismo trabajador_id)
+    prestamos_activos = Prestamo.query.filter_by(trabajador_id=trabajador_id, estado='ACTIVO').all()
     for p in prenominas_abiertas:
-        recalcular_totales_prenomina(p)
-    if prenominas_abiertas:
-        db.session.commit()
+        recalcular_totales_prenomina(p, prestamos_activos=prestamos_activos)
+    db.session.commit()

@@ -138,6 +138,61 @@
     border: 1px solid rgba(239, 68, 68, 0.15);
 }
 
+/* Fila de detalle individual dentro de un grupo de descuentos */
+.concept-item--sub {
+    padding-left: 1.5rem;
+    font-size: 0.8rem;
+    color: #64748b;
+    background: rgba(248, 113, 113, 0.04);
+    border-left: 2px solid rgba(248, 113, 113, 0.3);
+    margin-left: 0.5rem;
+    border-radius: 0 5px 5px 0;
+}
+.concept-item--sub:hover {
+    background: rgba(248, 113, 113, 0.08);
+    padding-left: 1.75rem;
+}
+
+/* Fila de subtotal de grupo (préstamos, incidencias) */
+.concept-item--subtotal {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #B91C1C;
+    font-style: italic;
+    padding: 0.35rem 0.75rem;
+    background: rgba(239, 68, 68, 0.05);
+    border-radius: 5px;
+    margin-bottom: 0.25rem;
+}
+
+/* Fila de depósito extra individual (percepciones) */
+.concept-item--add {
+    padding-left: 1.5rem;
+    font-size: 0.8rem;
+    color: #065f46;
+    background: rgba(52, 211, 153, 0.04);
+    border-left: 2px solid rgba(52, 211, 153, 0.35);
+    margin-left: 0.5rem;
+    border-radius: 0 5px 5px 0;
+}
+.concept-item--add:hover {
+    background: rgba(52, 211, 153, 0.09);
+    padding-left: 1.75rem;
+}
+
+/* Subtotal de grupo de depósitos extras */
+.concept-item--subtotal-green {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #047857;
+    font-style: italic;
+    padding: 0.35rem 0.75rem;
+    background: rgba(16, 185, 129, 0.06);
+    border-radius: 5px;
+    margin-bottom: 0.25rem;
+}
+
+
 .seccion-titulo {
     font-size: 0.75rem;
     text-transform: uppercase;
@@ -176,3 +231,7 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
+
+/* Spinner de carga en modales */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin-icon { animation: spin 1s linear infinite; display: inline-block; }

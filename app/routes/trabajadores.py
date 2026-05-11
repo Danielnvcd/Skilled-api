@@ -50,13 +50,12 @@ def index():
     role = session.get('role')
     user_id = session.get('user_id')
 
-    query = Trabajador.query.options(
-        selectinload(Trabajador.credenciales),
-        selectinload(Trabajador.documentos)
-    ).filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
+    query = Trabajador.query.filter(Trabajador.activo == True, Trabajador.fecha_baja == None)
 
     if role == 'coordinador':
-        mis_proyectos = Proyecto.query.filter_by(activo=True, coordinador_id=user_id).all()
+        mis_proyectos = Proyecto.query.options(
+            selectinload(Proyecto.participantes)
+        ).filter_by(activo=True, coordinador_id=user_id).all()
         ids_trabajadores = {t.id for p in mis_proyectos for t in p.participantes}
         query = query.filter(Trabajador.id.in_(ids_trabajadores))
 
@@ -80,10 +79,7 @@ def bajas():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '').strip()
 
-    query = Trabajador.query.options(
-        selectinload(Trabajador.credenciales),
-        selectinload(Trabajador.documentos)
-    ).filter(or_(Trabajador.activo == False, Trabajador.fecha_baja != None))
+    query = Trabajador.query.filter(or_(Trabajador.activo == False, Trabajador.fecha_baja != None))
     
     if q:
         query = query.filter(or_(

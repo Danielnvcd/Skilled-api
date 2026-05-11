@@ -2,7 +2,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}?v=4">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prenomina_generar.css') }}?v=7">
 {% endblock %}
 
 {% block content %}
@@ -160,11 +160,42 @@
                             <span>Días Festivos</span>
                             <span>${{ "%.2f"|format(p.pago_festivos) }}</span>
                         </li>
+
+                        {# ── Depósito de préstamo (campo independiente de depositos_detalle) ── #}
+                        {% if p.depositos_prestamos and p.depositos_prestamos > 0 %}
                         <li class="concept-item">
-                            <span>Otros (Depósitos)</span>
-                            <span>${{ "%.2f"|format(p.depositos_otros + p.depositos_prestamos)
-                                }}</span>
+                            <span>Depósito Préstamo</span>
+                            <span>${{ "%.2f"|format(p.depositos_prestamos) }}</span>
                         </li>
+                        {% endif %}
+
+                        {# ── depositos_otros = suma de depositos_detalle (DepositoExtra)    ── #}
+                        {# Si hay detalle, mostramos cada concepto (reemplaza la línea genérica). #}
+                        {# Si no hay detalle pero el campo tiene valor, mostramos línea genérica. #}
+                        {% if p.depositos_detalle %}
+                            {% for d in p.depositos_detalle %}
+                            <li class="concept-item concept-item--add">
+                                <span>
+                                    <i class="fa-solid fa-circle-plus" style="color:#34d399; font-size:0.7rem; margin-right:4px;"></i>
+                                    <span style="color:var(--text-muted); font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; margin-right:3px;">Depósito</span>
+                                    {{ d.concepto }}
+                                </span>
+                                <span>${{ "%.2f"|format(d.monto) }}</span>
+                            </li>
+                            {% endfor %}
+                            {% if p.depositos_detalle | length > 1 %}
+                            <li class="concept-item concept-item--subtotal-green">
+                                <span>Subtotal Depósitos Extras</span>
+                                <span>${{ "%.2f"|format(p.depositos_otros) }}</span>
+                            </li>
+                            {% endif %}
+                        {% elif p.depositos_otros and p.depositos_otros > 0 %}
+                        <li class="concept-item">
+                            <span>Depósitos Extras</span>
+                            <span>${{ "%.2f"|format(p.depositos_otros) }}</span>
+                        </li>
+                        {% endif %}
+
                         <li class="concept-item total text-success">
                             <span>Total Percepciones</span>
                             <span>${{ "%.2f"|format(p.total_percepciones) }}</span>
@@ -190,15 +221,58 @@
                             <span>Ajuste Inbursa</span>
                             <span>-${{ "%.2f"|format(p.ajuste_inbursa) }}</span>
                         </li>
+
+                        {# ── descuento_incidencias: ajuste manual del admin, siempre fijo ── #}
                         <li class="concept-item">
                             <span>Faltas / Retardos (Incidencias)</span>
                             <span>-${{ "%.2f"|format(p.descuento_incidencias) }}</span>
                         </li>
+
+                        {# ── descuento_prestamos: cuotas de tabla Prestamo (independiente de descuentos_detalle) ── #}
+                        {% if p.descuento_prestamos and p.descuento_prestamos > 0 %}
                         <li class="concept-item">
-                            <span>Descuento Préstamos / Otros</span>
-                            <span>-${{ "%.2f"|format(p.descuento_prestamos + p.descuentos_otros + p.recuperacion_manual)
-                                }}</span>
+                            <span>Abono Préstamos</span>
+                            <span>-${{ "%.2f"|format(p.descuento_prestamos) }}</span>
                         </li>
+                        {% endif %}
+
+                        {# ── descuentos_otros = suma de todos los DescuentoPrenomina ── #}
+                        {# Si hay detalle granular lo mostramos (reemplaza la línea genérica). #}
+                        {# Si no hay detalle pero el campo tiene valor, mostramos línea genérica.#}
+                        {% if p.descuentos_detalle %}
+                            {% for d in p.descuentos_detalle %}
+                            <li class="concept-item concept-item--sub">
+                                <span>
+                                    <i class="fa-solid fa-circle-minus" style="color:#f87171; font-size:0.7rem; margin-right:4px;"></i>
+                                    {{ d.concepto }}
+                                    {% if d.fecha_incidencia %}
+                                    <span style="color:var(--text-muted); font-size:0.75rem;">({{ d.fecha_incidencia.strftime('%d/%m') }})</span>
+                                    {% endif %}
+                                </span>
+                                <span>-${{ "%.2f"|format(d.monto) }}</span>
+                            </li>
+                            {% endfor %}
+                            {% if p.descuentos_detalle | length > 1 %}
+                            <li class="concept-item concept-item--subtotal">
+                                <span>Subtotal Descuentos Varios</span>
+                                <span>-${{ "%.2f"|format(p.descuentos_otros) }}</span>
+                            </li>
+                            {% endif %}
+                        {% elif p.descuentos_otros and p.descuentos_otros > 0 %}
+                        <li class="concept-item">
+                            <span>Descuentos Varios</span>
+                            <span>-${{ "%.2f"|format(p.descuentos_otros) }}</span>
+                        </li>
+                        {% endif %}
+
+                        {# ── Recuperación manual (préstamos directos de dirección) ── #}
+                        {% if p.recuperacion_manual and p.recuperacion_manual > 0 %}
+                        <li class="concept-item">
+                            <span>Recuperación (Préstamo Dirección)</span>
+                            <span>-${{ "%.2f"|format(p.recuperacion_manual) }}</span>
+                        </li>
+                        {% endif %}
+
                         <li class="concept-item total text-danger">
                             <span>Total Deducciones</span>
                             <span>-${{ "%.2f"|format(p.total_deducciones) }}</span>
@@ -231,7 +305,7 @@
         </div>
         <div id="modalCorreosCuerpo" style="padding:1.5rem; overflow-y:auto; flex:1;">
             <div id="modalCorreosCargando" style="text-align:center; padding:2rem;">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" style="animation:spin 1s linear infinite; display:inline-block;">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" class="spin-icon">
                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                 </svg>
                 <p style="margin-top:1rem; color:#6b7280;">Generando y enviando recibos, por favor espera...</p>
@@ -265,7 +339,7 @@
         </div>
         <div style="padding:1.5rem;">
             <div id="modalIndividualCargando" style="text-align:center; padding:1.5rem;">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" style="animation:spin 1s linear infinite; display:inline-block;">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" class="spin-icon">
                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                 </svg>
                 <p style="margin-top:1rem; color:#6b7280;">Enviando recibo, por favor espera...</p>
@@ -283,9 +357,6 @@
         </div>
     </div>
 </div>
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
 
-<script src="{{ url_for('static', filename='js/prenomina_generar.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/prenomina_generar.js') }}?v=7"></script>
 {% endblock %}
