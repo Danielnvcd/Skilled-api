@@ -8,9 +8,9 @@
 
     // ── Tipos de notificación ────────────────────────────────────────────────
     const TIPO_CFG = {
-        REPORTE_CERRADO:   { icon: 'fa-file-alt',     color: '#3b82f6', bg: '#eff6ff' },
+        REPORTE_CERRADO: { icon: 'fa-file-alt', color: '#3b82f6', bg: '#eff6ff' },
         PRENOMINA_CERRADA: { icon: 'fa-check-circle', color: '#10b981', bg: '#ecfdf5' },
-        ACTUALIZACION:     { icon: 'fa-star',          color: '#f59e0b', bg: '#fffbeb' },
+        ACTUALIZACION: { icon: 'fa-star', color: '#f59e0b', bg: '#fffbeb' },
     };
     const TIPO_DEFAULT = { icon: 'fa-bell', color: '#6b7280', bg: '#f9fafb' };
 
@@ -65,10 +65,16 @@
     }
 
     // ── Abrir / cerrar ───────────────────────────────────────────────────────
+    function getSidebarWidth() {
+        var sb = document.getElementById('sidebar');
+        return sb ? sb.offsetWidth : 270;
+    }
+
     function openPanel() {
         if (!panel) panel = buildPanel();
         panelOpen = true;
-        panel.style.left = '288px';
+        // Se posiciona pegado al sidebar sin importar si está expandido o colapsado
+        panel.style.left = getSidebarWidth() + 'px';
         fetchNotifications();
     }
 
@@ -97,7 +103,7 @@
 
         list.innerHTML = items.map(n => {
             const cfg = TIPO_CFG[n.tipo] || TIPO_DEFAULT;
-            const bg  = n.leida ? 'white' : '#f5f9ff';
+            const bg = n.leida ? 'white' : '#f5f9ff';
             return `
               <div class="nitem" data-id="${n.id}" data-url="${n.url}"
                    style="display:flex;gap:12px;padding:13px 18px;cursor:pointer;background:${bg};border-bottom:1px solid #f3f4f6;transition:background 0.15s;"
@@ -142,13 +148,13 @@
         fetch('/notificaciones/api/resumen', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
         })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-            if (!data) return;
-            updateBadge(data.no_leidas);
-            if (panelOpen) renderItems(data.items);
-        })
-        .catch(() => {});
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                updateBadge(data.no_leidas);
+                if (panelOpen) renderItems(data.items);
+            })
+            .catch(() => { });
     }
 
     function markOneRead(id, cb) {
@@ -159,8 +165,8 @@
                 'X-Requested-With': 'XMLHttpRequest',
             },
         })
-        .then(() => { fetchNotifications(); if (cb) cb(); })
-        .catch(() => { if (cb) cb(); });
+            .then(() => { fetchNotifications(); if (cb) cb(); })
+            .catch(() => { if (cb) cb(); });
     }
 
     function markAllRead() {
@@ -171,8 +177,8 @@
                 'X-Requested-With': 'XMLHttpRequest',
             },
         })
-        .then(() => fetchNotifications())
-        .catch(() => {});
+            .then(() => fetchNotifications())
+            .catch(() => { });
     }
 
     // ── Utilidad: escapar HTML ───────────────────────────────────────────────
