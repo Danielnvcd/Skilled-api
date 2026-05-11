@@ -7,68 +7,40 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=6">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
-    <style>
-        body {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 40%, rgba(255, 255, 255, 0.4) 100%),
-            url("{{ url_for('static', filename='imagenes/fondo.png') }}");
-            background-size: cover;
-            background-position: top center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(100, 116, 139, 0.2);
-            border-radius: 4px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(100, 116, 139, 0.4);
-        }
-    </style>
     {% block head %}{% endblock %}
 </head>
 
-<body>
+<body{% if sidebar_collapsed %} class="sidebar-pre-collapsed" {% endif %}>
     {% macro menu_link(endpoint, is_url, icon_filename, text, is_fas=false) %}
     {% set url = endpoint if is_url else url_for(endpoint) %}
     {% set is_active = (request.endpoint == endpoint) if not is_url else false %}
-    <a href="{{ url }}" {% if is_url %}target="_blank" {% endif %}
-        class="group flex items-center px-4 py-3 mb-1.5 rounded-xl text-[0.95rem] font-medium transition-all duration-300 no-underline
-              {{ 'bg-gradient-to-r from-blue-100/70 to-transparent border-l-4 border-blue-500 text-gray-800 shadow-[2px_0_10px_rgba(59,130,246,0.05)]' if is_active else 'text-gray-600 hover:bg-gray-50/80 hover:text-gray-800 border-l-4 border-transparent' }}"
-        {% if is_active %}data-active="true" {% endif %}>
+    <a href="{{ url }}" title="{{ text }}" {% if is_url %}target="_blank" {% endif %}
+        class="sidebar-link{% if is_active %} active{% endif %}" {% if is_active %}data-active="true" {% endif %}>
 
-        <div class="flex items-center justify-center w-6 h-6 mr-3 transition-all duration-300">
+        <span class="sidebar-icon-wrap">
             {% if is_fas %}
-            <i class="{{ icon_filename }} text-lg transition-transform duration-300 group-hover:scale-110 
-                           {{ 'text-gray-800' if is_active else 'text-gray-500 group-hover:text-gray-700' }}"></i>
+            <i class="{{ icon_filename }}{% if is_active %} active-icon{% endif %}"></i>
             {% else %}
-            <img src="{{ url_for('static', filename=icon_filename) }}" class="w-5 h-5 object-contain transition-transform duration-300 group-hover:scale-110 
-                            {{ 'brightness-0 opacity-90' if is_active else 'opacity-60 group-hover:opacity-80' }}"
-                alt="{{ text }}">
+            <img src="{{ url_for('static', filename=icon_filename) }}"
+                class="sidebar-img{% if is_active %} active-img{% endif %}" alt="{{ text }}">
             {% endif %}
-        </div>
-        <span>{{ text }}</span>
+        </span>
+        <span class="sidebar-label">{{ text }}</span>
     </a>
     {% endmacro %}
-    <div
-        class="w-[280px] bg-white/70 backdrop-blur-xl border-r border-white/50 shadow-[4px_0_24px_rgba(0,0,0,0.04)] flex flex-col p-6 shrink-0 z-10 h-full relative overflow-x-hidden">
-        <div class="text-center mb-8 flex justify-center">
-            <img src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled"
-                class="w-[180px] h-[60px] object-contain mix-blend-multiply contrast-125 transition-transform duration-300 hover:scale-105">
+
+    <div id="sidebar" {% if sidebar_collapsed %} class="collapsed" {% endif %}>
+        <div class="sidebar-header">
+            <img id="logo-full" src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="Skilled">
+            <img id="logo-mini" src="{{ url_for('static', filename='imagenes/skilled (1).png') }}" alt="S">
+            <button id="sidebar-toggle" type="button" title="Contraer menú" aria-label="Contraer menú">
+                <i class="fas fa-chevron-left" id="toggle-icon"></i>
+            </button>
         </div>
-        <nav id="sidebar-menu"
-            class="flex-1 overflow-y-auto overflow-x-hidden mb-4 pr-1 space-y-1 custom-scrollbar relative">
+
+        <nav id="sidebar-menu" class="custom-scrollbar">
 
             {% if session.get('role') not in ['inventario', 'solicitante_material'] %}
             {% if session.get('role') != 'coordinador' %}
@@ -119,50 +91,41 @@
             {{ menu_link('https://nube.skilledmx.cloud', true, 'iconos/nube.png', 'Nube') }}
         </nav>
 
-        <div class="mt-auto pt-6 border-t border-gray-200/60 pb-2">
-            <div class="flex items-center space-x-3 mb-4 bg-white/50 p-3 rounded-xl border border-white shadow-sm">
+        <div class="sidebar-footer">
+            <a href="{{ url_for('auth.profile') }}" class="sidebar-user">
                 {% if current_user and current_user.profile_pic and current_user.profile_pic != 'default.png' %}
                 <img src="{{ url_for('users.serve_profile_pic', filename=current_user.profile_pic) }}"
-                    alt="Foto de perfil"
-                    class="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm border border-gray-200">
+                    alt="Foto de perfil" class="sidebar-avatar sidebar-avatar--photo">
                 {% else %}
-                <div
-                    class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20 shrink-0">
+                <div class="sidebar-avatar sidebar-avatar--initials">
                     {{ session.get('user', 'I')[:1] | upper }}
                 </div>
                 {% endif %}
-                <div class="overflow-hidden">
-                    <p class="text-sm font-bold text-gray-800 truncate mb-0"><a href="{{ url_for('auth.profile') }}"
-                            class="hover:text-blue-600 transition-colors no-underline">{{ session.get('user',
-                            'Invitado') }}</a></p>
-                    <p class="text-xs text-gray-500 font-medium capitalize truncate mt-0">{{ session.get('role',
-                        'Ninguno') }}</p>
+                <div id="user-info-text" class="sidebar-user-text">
+                    <p class="sidebar-user-name">{{ session.get('user', 'Invitado') }}</p>
+                    <p class="sidebar-user-role">{{ session.get('role', 'Ninguno') }}</p>
                 </div>
-            </div>
+            </a>
 
             {% if session.get('role') in ['admin', 'super_admin'] %}
-            <div class="relative mb-2">
-                <button id="notif-btn" type="button"
-                    class="group w-full flex items-center justify-between px-4 py-2.5 bg-blue-50 hover:bg-blue-100/80 text-blue-700 hover:text-blue-800 rounded-xl font-bold text-[0.95rem] transition-all duration-300 border-none shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer">
-                    <div class="flex items-center space-x-2">
+            <div class="sidebar-notif-wrap">
+                <button id="notif-btn" type="button" class="sidebar-notif-btn">
+                    <span class="sidebar-icon-wrap">
                         <i class="fas fa-bell"></i>
-                        <span>Notificaciones</span>
-                    </div>
-                    <span id="notif-badge"
-                        style="{% if notif_count == 0 %}display:none;{% endif %} min-width: 20px;"
-                        class="bg-red-500 text-white text-xs font-bold rounded-full h-5 inline-flex items-center justify-center leading-none px-1.5">
-                        {{ notif_count if notif_count <= 99 else '99+' }}
                     </span>
+                    <span class="sidebar-label">Notificaciones</span>
+                    <span id="notif-badge" class="sidebar-badge" {% if notif_count==0 %}style="display:none" {% endif
+                        %}>
+                        {{ notif_count if notif_count <= 99 else '99+' }} </span>
                 </button>
             </div>
             {% endif %}
 
-            <form id="logout-form" method="POST" action="{{ url_for('auth.logout') }}" class="w-full">
+            <form id="logout-form" method="POST" action="{{ url_for('auth.logout') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit"
-                    class="group w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100/80 text-rose-600 hover:text-rose-700 rounded-xl font-bold text-[0.95rem] transition-all duration-300 border-none shadow-sm hover:shadow-md hover:-translate-y-0.5">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Cerrar Sesión</span>
+                <button id="logout-form-btn" type="submit" class="sidebar-logout-btn">
+                    <span class="sidebar-icon-wrap"><i class="fas fa-sign-out-alt"></i></span>
+                    <span class="sidebar-label">Cerrar Sesión</span>
                 </button>
             </form>
         </div>
@@ -182,13 +145,14 @@
         {% block content %}{% endblock %}
     </div>
 
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}?v=3"></script>
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
     <script src="{{ url_for('static', filename='js/session_interceptor.js') }}?v=3"></script>
     <script src="{{ url_for('static', filename='js/logout-confirm.js') }}?v=1"></script>
     {% if session.get('role') in ['admin', 'super_admin'] %}
-    <script src="{{ url_for('static', filename='js/notificaciones.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/notificaciones.js') }}?v=7"></script>
     {% endif %}
     {% block scripts %}{% endblock %}
-</body>
+    </body>
 
 </html>

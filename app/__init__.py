@@ -39,7 +39,16 @@ def create_app():
                     leida=False,
                 ).count()
 
-        return {'now': datetime.now, 'current_user': current_user, 'notif_count': notif_count}
+        # Lee la cookie del sidebar para que Jinja aplique la clase collapsed en el
+        # servidor — evita el parpadeo (expand→collapse) al navegar entre páginas.
+        sidebar_collapsed = request.cookies.get('sidebar_collapsed') == '1'
+
+        return {
+            'now': datetime.now,
+            'current_user': current_user,
+            'notif_count': notif_count,
+            'sidebar_collapsed': sidebar_collapsed,
+        }
         
     @app.template_filter('fecha_es')
     def fecha_es_filter(dt, format_type='completo'):
