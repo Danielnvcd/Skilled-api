@@ -11,7 +11,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime as dt
+from datetime import datetime as dt, date
 import pandas as pd
 
 _CURP_RE = re.compile(r'^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}$')
@@ -70,7 +70,7 @@ def index():
     pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
     trabajadores = pagination.items
 
-    return render_template('trabajadores.html', trabajadores=trabajadores, pagination=pagination, q=q)
+    return render_template('trabajadores.html', trabajadores=trabajadores, pagination=pagination, q=q, today=date.today())
 
 @bp.route('/bajas', methods=['GET'])
 @login_required

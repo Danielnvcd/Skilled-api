@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from app.extensions import db
 from app.models import Proyecto, Trabajador, User
 from app.utils import login_required, log_action, admin_required
+from datetime import date
 import traceback
 import json
 
@@ -19,7 +20,7 @@ def index():
     # Para el modal, necesitamos todos los trabajadores
     trabajadores = Trabajador.query.filter_by(activo=True).order_by(Trabajador.nombre).all()
     coordinadores = User.query.filter(User.role.in_(['coordinador', 'admin'])).order_by(User.username).all()
-    return render_template('proyectos.html', proyectos=proyectos, trabajadores=trabajadores, coordinadores=coordinadores)
+    return render_template('proyectos.html', proyectos=proyectos, trabajadores=trabajadores, coordinadores=coordinadores, today=date.today())
 
 @bp.route('/agregar', methods=['POST'])
 @login_required

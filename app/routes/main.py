@@ -166,7 +166,7 @@ def credenciales():
     # Paginate results
     pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(page=page, per_page=20, error_out=False)
 
-    return render_template('credenciales.html', pagination=pagination, q=q)
+    return render_template('credenciales.html', pagination=pagination, q=q, today=date.today())
 
 
 
