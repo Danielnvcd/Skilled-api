@@ -167,8 +167,10 @@ class TestVerify2FA:
 
     def test_verify_2fa_usuario_eliminado(self, client, db):
         """Si el usuario fue eliminado entre login y 2FA, redirige limpiamente."""
+        from datetime import datetime, timezone
         with client.session_transaction() as sess:
             sess['pre_2fa_user_id'] = 99999
+            sess['pre_2fa_ts'] = datetime.now(timezone.utc).timestamp()
 
         resp = client.post('/verify-2fa', data={'code': '123456'}, follow_redirects=True)
         assert b'login' in resp.data.lower() or b'inv' in resp.data.lower()
@@ -176,6 +178,7 @@ class TestVerify2FA:
     def test_2fa_exitoso_limpia_pre_session_y_establece_user_id(self, client, db):
         """B2: Tras 2FA exitoso, pre_2fa_user_id se elimina y user_id queda en sesión."""
         import pyotp
+        from datetime import datetime, timezone
         secret = pyotp.random_base32()
         user = User(
             username='user_2fa_session_clean',
@@ -188,6 +191,7 @@ class TestVerify2FA:
 
         with client.session_transaction() as sess:
             sess['pre_2fa_user_id'] = user.id
+            sess['pre_2fa_ts'] = datetime.now(timezone.utc).timestamp()
 
         valid_code = pyotp.TOTP(secret).now()
         resp = client.post('/verify-2fa', data={'code': valid_code}, follow_redirects=False)

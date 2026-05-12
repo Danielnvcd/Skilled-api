@@ -10,7 +10,16 @@ from app.models import (
     Proyecto, Prestamo, AjustePeriodo, AjusteTrabajadorPeriodo, AjusteDescuento,
     AbonoPrestamo
 )
-from app.utils import login_required, admin_required, log_action
+from app.utils import login_required, admin_required, log_action, safe_excel_value
+
+
+def _sanitize_rows(rows):
+    """Sanea cada celda de cada fila contra inyección de fórmulas Excel
+    (campos como 'Nombre', 'Motivo' o 'Notas' pueden venir con un '=' al inicio)."""
+    for row in rows:
+        for k, v in row.items():
+            row[k] = safe_excel_value(v)
+    return rows
 from sqlalchemy.orm import selectinload
 
 bp = Blueprint('reportes', __name__, url_prefix='/reportes')
@@ -181,7 +190,7 @@ def excel_prenomina(fecha_str):
             }
             data.append(total_row)
             
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(_sanitize_rows(data))
         df.to_excel(writer, sheet_name='Prenómina', index=False)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -244,7 +253,7 @@ def excel_historico(fecha_str):
             }
             data.append(total_row)
             
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(_sanitize_rows(data))
         df.to_excel(writer, sheet_name='Histórico', index=False)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -336,7 +345,7 @@ def excel_proyecto_total(proyecto_id):
         }
         data.append(total_row)
 
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(_sanitize_rows(data))
         df.to_excel(writer, sheet_name='Proyecto Total', index=False)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -391,7 +400,7 @@ def excel_prestamos(trabajador_id):
             }
             data.append(total_row)
             
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(_sanitize_rows(data))
         df.to_excel(writer, sheet_name='Préstamos', index=False)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -451,7 +460,7 @@ def excel_ajustes(periodo_id):
             }
             data_resumen.append(total_row_res)
             
-        df_resumen = pd.DataFrame(data_resumen)
+        df_resumen = pd.DataFrame(_sanitize_rows(data_resumen))
         if not df_resumen.empty:
             df_resumen.to_excel(writer, sheet_name='Resumen Trabajadores', index=False)
 
@@ -476,7 +485,7 @@ def excel_ajustes(periodo_id):
             }
             data_detalle.append(total_row_det)
             
-        df_detalle = pd.DataFrame(data_detalle)
+        df_detalle = pd.DataFrame(_sanitize_rows(data_detalle))
         if not df_detalle.empty:
             df_detalle.to_excel(writer, sheet_name='Detalle Descuentos', index=False)
         
