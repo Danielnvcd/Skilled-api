@@ -2,49 +2,51 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ajustes.css') }}?v=3">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
 {% endblock %}
 
 {% block content %}
 <div class="horas-wrapper">
-    <div class="header-card"
-        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title"><i class="fas fa-sliders-h" style="color:#ef4444; margin-right:10px;"></i>Ajuste Inbursa</h1>
+            <h1 class="main-title"><i class="fas fa-sliders-h"></i>Ajuste Inbursa</h1>
             <p class="subtitle">Control de recuperación de depósitos adelantados</p>
         </div>
-        {# Global export removed #}
     </div>
 
     <!-- Crear Nuevo Periodo -->
-    <div class="captura-form-bg" style="margin-bottom: 2rem;">
-        <h3 style="margin-top:0; color:var(--text-main); margin-bottom:1rem;">
-            <i class="fa-solid fa-plus" style="color:#4F46E5;"></i> Crear Nuevo Periodo
+    <div class="captura-form-bg captura-crear-periodo">
+        <h3 class="section-title">
+            <span class="title-icon"><i class="fa-solid fa-plus"></i></span>
+            Crear Nuevo Periodo
         </h3>
         <form action="{{ url_for('ajustes.crear_periodo') }}" method="POST" id="formCrearPeriodo">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div style="display:flex; gap:1rem; align-items:end; flex-wrap:wrap; margin-bottom:1.5rem;">
-                <div class="form-group" style="margin-bottom:0; flex:2 1 200px;">
+            <div class="form-row">
+                <div class="form-group grow-2">
                     <label>Nombre del Periodo *</label>
                     <input type="text" name="nombre" class="form-control" placeholder="Ej. Febrero 2026" required>
                 </div>
-                <div class="form-group" style="margin-bottom:0; flex:1 1 150px;">
+                <div class="form-group grow-1">
                     <label>Fecha Inicio *</label>
                     <input type="date" name="fecha_inicio" class="form-control" required>
                 </div>
-                <div class="form-group" style="margin-bottom:0; flex:1 1 150px;">
+                <div class="form-group grow-1">
                     <label>Fecha Fin *</label>
                     <input type="date" name="fecha_fin" class="form-control" required>
                 </div>
             </div>
 
             <!-- Selección de Trabajadores -->
-            <h4 style="margin-bottom:0.75rem; color:var(--text-main);">Trabajadores y Meta de Descuento</h4>
-            <div style="margin-bottom:1rem; display:flex; gap:0.75rem; align-items:end; flex-wrap:wrap;">
-                <div class="form-group" style="margin-bottom:0; flex:3 1 250px;">
+            <h4 class="section-title title-azul">
+                <span class="title-icon"><i class="fa-solid fa-users"></i></span>
+                Trabajadores y Meta de Descuento
+            </h4>
+            <div class="form-row">
+                <div class="form-group grow-3">
                     <label>Agregar Trabajador</label>
-                    <select id="selectorTrabajador" class="form-control" style="width:100%;">
+                    <select id="selectorTrabajador" class="form-control">
                         <option value=""></option>
                         {% for t in trabajadores %}
                         <option value="{{ t.id }}" data-nombre="{{ t.nombre_completo }}"
@@ -54,60 +56,58 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="form-group" style="margin-bottom:0; flex:1 1 130px;">
+                <div class="form-group grow-meta">
                     <label>Meta (Depósito) $</label>
                     <input type="number" step="0.01" min="0.01" id="inputMetaTrabajador" class="form-control"
                         placeholder="$0.00">
                 </div>
-                <button type="button" id="btnAgregarTrabajador" class="btn-primary"
-                    style="height:42px; padding:0 1.5rem;">
-                    + Agregar
+                <button type="button" id="btnAgregarTrabajador" class="btn-primary btn-agregar-trabajador">
+                    <i class="fa-solid fa-plus"></i> Agregar
                 </button>
             </div>
 
             <!-- Tabla de trabajadores seleccionados -->
-            <div id="tablaTrabajadoresWrapper" style="display:none;">
-                <table class="history-table" style="margin-bottom:1rem;">
+            <div id="tablaTrabajadoresWrapper" class="tabla-trabajadores-wrapper hidden">
+                <table class="history-table">
                     <thead>
                         <tr>
                             <th>No. Emp</th>
                             <th>Nombre</th>
-                            <th style="text-align:right;">Meta (Depósito)</th>
-                            <th></th>
+                            <th class="col-meta">Meta (Depósito)</th>
+                            <th class="col-action"></th>
                         </tr>
                     </thead>
                     <tbody id="tablaTrabajadores"></tbody>
                     <tfoot>
-                        <tr style="font-weight:700; background:#F9FAFB;">
+                        <tr>
                             <td colspan="2">TOTAL</td>
-                            <td style="text-align:right; color:#4F46E5;" id="totalMeta">$0.00</td>
+                            <td class="total-meta-cell" id="totalMeta">$0.00</td>
                             <td></td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
 
-            <button type="submit" class="btn-primary" style="padding:0.6rem 2rem;">
-                Crear Periodo
+            <button type="submit" class="btn-primary btn-crear-periodo">
+                <i class="fa-solid fa-check"></i> Crear Periodo
             </button>
         </form>
     </div>
 
     <!-- Lista de Periodos -->
     <div class="captura-form-bg">
-        <div
-            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-            <h3 style="margin:0; color:var(--text-main);">Periodos de Ajuste</h3>
+        <div class="periodos-toolbar">
+            <h3 class="section-title title-rojo">
+                <span class="title-icon"><i class="fa-solid fa-clipboard-list"></i></span>
+                Periodos de Ajuste
+            </h3>
 
-            <form action="{{ url_for('ajustes.index') }}" method="GET" class="search-container"
-                style="position: relative; min-width: 250px;">
-                <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #94a3b8;"
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <form action="{{ url_for('ajustes.index') }}" method="GET" class="search-container">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
-                <input type="text" name="q" value="{{ q }}" placeholder="Buscar periodo..."
-                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none;">
+                <input type="text" name="q" value="{{ q }}" placeholder="Buscar periodo..." class="search-input">
             </form>
         </div>
 
@@ -120,23 +120,29 @@
                     <span class="badge {{ p.estado|lower }}">{{ p.estado }}</span>
                 </div>
                 <div class="periodo-dates">
+                    <i class="fa-regular fa-calendar"></i>
                     {{ p.fecha_inicio.strftime('%d/%m/%Y') }} — {{ p.fecha_fin.strftime('%d/%m/%Y') }}
                 </div>
                 <div class="periodo-meta">
-                    <span>{{ p.num_trabajadores }} trabajador(es)</span>
-                    <span style="color:#4F46E5; font-weight:600;">Meta: ${{ "%.2f"|format(p.total_meta|float) }}</span>
-                    <span style="color:#EF4444; font-weight:600;">Descontado: ${{
-                        "%.2f"|format(p.total_descontado|float) }}</span>
+                    <div class="meta-row">
+                        <span class="meta-label"><i class="fa-solid fa-user-group"></i> Trabajadores</span>
+                        <span class="meta-value">{{ p.num_trabajadores }}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label"><i class="fa-solid fa-bullseye"></i> Meta</span>
+                        <span class="meta-value value-azul">${{ "%.2f"|format(p.total_meta|float) }}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label"><i class="fa-solid fa-arrow-trend-down"></i> Descontado</span>
+                        <span class="meta-value value-rojo">${{ "%.2f"|format(p.total_descontado|float) }}</span>
+                    </div>
                 </div>
 
                 {% if session.get('role') == 'admin' %}
-                <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
-                    <object>
-                        <a href="{{ url_for('reportes.excel_ajustes', periodo_id=p.id) }}" class="btn-primary"
-                            style="background: #10b981; font-size: 0.8rem; padding: 0.4rem 0.8rem; display: inline-flex; align-items: center; gap: 0.5rem; width: 100%; justify-content: center;">
-                            <i class="fa-solid fa-file-excel"></i> Exportar Periodo
-                        </a>
-                    </object>
+                <div class="periodo-card-footer">
+                    <span class="btn-exportar-periodo">
+                        <i class="fa-solid fa-file-excel"></i> Exportar Periodo
+                    </span>
                 </div>
                 {% endif %}
             </a>
@@ -145,30 +151,8 @@
 
         <!-- Paginación -->
         {% if pagination.pages > 1 %}
-        <style>
-            .pg-btn {
-                padding: 0.5rem 0.75rem;
-                border-radius: 4px;
-                text-decoration: none;
-            }
-
-            .pg-disabled {
-                pointer-events: none;
-                opacity: 0.5;
-            }
-
-            .pg-active {
-                background-color: var(--primary);
-                color: white;
-                border-color: var(--primary);
-                font-weight: bold;
-                pointer-events: none;
-                border: 1px solid var(--primary);
-            }
-        </style>
-        <div
-            style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
-            <div style="display: flex; gap: 0.25rem;">
+        <div class="ajustes-pagination">
+            <div class="pg-list">
                 <a href="{{ url_for('ajustes.index', page=1, q=q) }}"
                     class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
                     &laquo; Primera
@@ -202,13 +186,15 @@
         {% endif %}
 
         {% else %}
-        <p style="text-align:center; color:var(--text-muted); padding:2rem;">No hay periodos de ajuste que coincidan con
-            la búsqueda.</p>
+        <div class="periodos-empty">
+            <i class="fa-solid fa-folder-open"></i>
+            <p>No hay periodos de ajuste que coincidan con la búsqueda.</p>
+        </div>
         {% endif %}
     </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
-<script src="{{ url_for('static', filename='js/ajustes.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/ajustes.js') }}?v=3"></script>
 {% endblock %}

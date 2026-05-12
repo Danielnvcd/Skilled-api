@@ -43,15 +43,15 @@ $(document).ready(function () {
         tr.innerHTML =
             '<td>' + esc(noEmp) + '</td>' +
             '<td>' + esc(nombre) + '</td>' +
-            '<td style="text-align:right; font-weight:600; color:#4F46E5;">$' + monto.toFixed(2) + '</td>' +
-            '<td><button type="button" class="delete-btn" data-tid="' + esc(tId) + '" data-monto="' + monto + '">✕</button>' +
+            '<td class="col-meta">$' + monto.toFixed(2) + '</td>' +
+            '<td class="col-action"><button type="button" class="delete-btn" data-tid="' + esc(tId) + '" data-monto="' + monto + '" title="Eliminar"><i class="fa-solid fa-xmark"></i></button>' +
             '<input type="hidden" name="trabajador_ids" value="' + esc(tId) + '">' +
             '<input type="hidden" name="montos_meta" value="' + monto.toFixed(2) + '">' +
             '</td>';
         tbody.appendChild(tr);
 
         document.getElementById('totalMeta').textContent = '$' + totalMeta.toFixed(2);
-        document.getElementById('tablaTrabajadoresWrapper').style.display = 'block';
+        document.getElementById('tablaTrabajadoresWrapper').classList.remove('hidden');
 
         // Limpiar
         $('#selectorTrabajador').val(null).trigger('change');
@@ -69,7 +69,7 @@ $(document).ready(function () {
         document.getElementById('row-' + tid).remove();
         document.getElementById('totalMeta').textContent = '$' + totalMeta.toFixed(2);
         if (Object.keys(trabajadoresAgregados).length === 0) {
-            document.getElementById('tablaTrabajadoresWrapper').style.display = 'none';
+            document.getElementById('tablaTrabajadoresWrapper').classList.add('hidden');
         }
     });
 });

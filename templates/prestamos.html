@@ -2,27 +2,23 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/prestamos.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/prestamos.css') }}?v=5">
 {% endblock %}
 
 {% block content %}
 <div class="horas-wrapper">
-    <div class="header-card"
-        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title"><i class="fas fa-hand-holding-usd" style="color:#10b981; margin-right:10px;"></i>Préstamos</h1>
+            <h1 class="main-title"><i class="fas fa-hand-holding-usd"></i> Préstamos</h1>
             <p class="subtitle">Registra, administra y da seguimiento a los préstamos otorgados a los trabajadores.</p>
         </div>
-        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-            <form action="{{ url_for('prestamos.index') }}" method="GET" class="search-container"
-                style="position: relative; min-width: 250px;">
-                <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #94a3b8;"
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <div class="prestamos-header-actions">
+            <form action="{{ url_for('prestamos.index') }}" method="GET" class="search-container">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
-                <input type="text" name="q" value="{{ q }}" placeholder="Buscar por empleado..."
-                    style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; outline: none;">
+                <input type="text" name="q" value="{{ q }}" placeholder="Buscar por empleado..." class="search-input">
             </form>
             <button class="btn-primary" id="btnNuevoPrestamo">
                 <i class="fa-solid fa-plus"></i> Nuevo Préstamo
@@ -32,135 +28,118 @@
 
     <!-- Stats -->
     <div class="prestamos-stats">
-        <div class="stat-card">
-            <div class="stat-value" id="statActivos">{{ prestamos|selectattr('estado', 'equalto', 'ACTIVO')|list|length
-                }}</div>
-            <div class="stat-label">Préstamos Activos</div>
+        <div class="stat-card stat-activos">
+            <div class="stat-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+            <div class="stat-content">
+                <div class="stat-value" id="statActivos">{{ prestamos|selectattr('estado', 'equalto', 'ACTIVO')|list|length }}</div>
+                <div class="stat-label">Préstamos Activos</div>
+            </div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="statLiquidados">{{ prestamos|selectattr('estado', 'equalto',
-                'LIQUIDADO')|list|length }}</div>
-            <div class="stat-label">Liquidados</div>
+        <div class="stat-card stat-liquidados">
+            <div class="stat-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="stat-content">
+                <div class="stat-value" id="statLiquidados">{{ prestamos|selectattr('estado', 'equalto', 'LIQUIDADO')|list|length }}</div>
+                <div class="stat-label">Liquidados</div>
+            </div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="statMontoTotal">${{ prestamos|selectattr('estado', 'equalto',
-                'ACTIVO')|sum(attribute='monto_restante')|default(0, true) }}</div>
-            <div class="stat-label">Deuda Total Activa</div>
+        <div class="stat-card stat-deuda">
+            <div class="stat-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+            <div class="stat-content">
+                <div class="stat-value" id="statMontoTotal">${{ "%.2f"|format(prestamos|selectattr('estado', 'equalto', 'ACTIVO')|sum(attribute='monto_restante')|default(0, true)) }}</div>
+                <div class="stat-label">Deuda Total Activa</div>
+            </div>
         </div>
     </div>
 
     <!-- List -->
     <div class="prestamos-grid">
         {% for p in prestamos %}
-        <div class="prestamo-card" id="prestamo-{{ p.id }}">
-            <div class="prestamo-info">
-                <div class="info-col" style="min-width: 180px;">
-                    <label>Trabajador</label>
-                    <span>{{ p.trabajador.nombre_completo }}</span>
-                    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 400;">Nº Emp: {{
-                        p.trabajador.no_empleado }}</span>
-                </div>
-                <div class="info-col">
-                    <label>Monto Total</label>
-                    <span class="monto-grande">${{ "%.2f"|format(p.monto_total) }}</span>
-                </div>
-                <div class="info-col">
-                    <label>Restante</label>
-                    <span style="color: {% if p.estado == 'LIQUIDADO' %}#059669{% else %}#DC2626{% endif %};">
-                        ${{ "%.2f"|format(p.monto_restante) }}
-                    </span>
-                    <div class="progress-bar-container">
-                        {% set pagado_pct = ((p.monto_total - p.monto_restante) / p.monto_total * 100) if p.monto_total
-                        > 0 else 0 %}
-                        <div class="progress-bar-fill" style="width: {{ pagado_pct|round(1) }}%;"></div>
+        <div class="prestamo-card {% if p.estado == 'LIQUIDADO' %}prestamo-liquidado{% endif %}" id="prestamo-{{ p.id }}">
+            <div class="prestamo-card-body">
+                <div class="prestamo-info">
+                    <div class="info-col col-trabajador">
+                        <label>Trabajador</label>
+                        <span class="trabajador-name">{{ p.trabajador.nombre_completo }}</span>
+                        <span class="trabajador-num">Nº Emp: {{ p.trabajador.no_empleado }}</span>
+                    </div>
+                    <div class="info-col">
+                        <label>Monto Total</label>
+                        <span class="monto-grande">${{ "%.2f"|format(p.monto_total) }}</span>
+                    </div>
+                    <div class="info-col">
+                        <label>Restante</label>
+                        <span class="restante-valor">${{ "%.2f"|format(p.monto_restante) }}</span>
+                        <div class="progress-wrapper">
+                            {% set pagado_pct = ((p.monto_total - p.monto_restante) / p.monto_total * 100) if p.monto_total > 0 else 0 %}
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" style="width: {{ pagado_pct|round(1) }}%;"></div>
+                            </div>
+                            <span class="progress-percent">{{ pagado_pct|round(0) }}% pagado</span>
+                        </div>
+                    </div>
+                    <div class="info-col">
+                        <label>Descuento / {{ p.frecuencia or 'semanal' }}</label>
+                        <span>${{ "%.2f"|format(p.descuento_semanal) }}</span>
+                    </div>
+                    <div class="info-col">
+                        <label>Plazo</label>
+                        <span>{{ p.plazo_semanas }} semanas</span>
+                    </div>
+                    <div class="info-col">
+                        <label>Motivo</label>
+                        <span class="motivo-text">{{ p.motivo or 'Sin especificar' }}</span>
+                    </div>
+                    <div class="info-col">
+                        <label>Estado</label>
+                        {% if p.estado == 'ACTIVO' %}
+                        <span class="badge-activo">Activo</span>
+                        {% else %}
+                        <span class="badge-liquidado">Liquidado</span>
+                        {% endif %}
                     </div>
                 </div>
-                <div class="info-col">
-                    <label>Descuento / {{ p.frecuencia or 'semanal' }}</label>
-                    <span>${{ "%.2f"|format(p.descuento_semanal) }}</span>
-                </div>
-                <div class="info-col">
-                    <label>Plazo</label>
-                    <span>{{ p.plazo_semanas }} semanas</span>
-                </div>
-                <div class="info-col">
-                    <label>Motivo</label>
-                    <span style="font-weight: 400; font-size: 0.85rem;">{{ p.motivo or 'Sin especificar' }}</span>
-                </div>
-                <div class="info-col">
-                    <label>Estado</label>
+                <div class="prestamo-actions">
+                    <button class="btn-detalles" data-id="{{ p.id }}" title="Ver Detalles e Historial de Pagos">
+                        <i class="fa-solid fa-eye"></i> Detalles
+                    </button>
                     {% if p.estado == 'ACTIVO' %}
-                    <span class="badge-activo">Activo</span>
-                    {% else %}
-                    <span class="badge-liquidado">Liquidado</span>
+                    <button class="btn-abonar" data-id="{{ p.id }}" title="Abono Extraordinario">
+                        <i class="fa-solid fa-coins"></i> Abonar
+                    </button>
+                    <button class="btn-editar-prestamo" data-id="{{ p.id }}" data-monto="{{ p.monto_total }}"
+                        data-plazo="{{ p.plazo_semanas }}" data-descuento="{{ p.descuento_semanal }}"
+                        data-motivo="{{ p.motivo or '' }}" data-frecuencia="{{ p.frecuencia or 'semanal' }}"
+                        data-fecha="{{ p.fecha_inicio.strftime('%Y-%m-%d') if p.fecha_inicio else '' }}" title="Editar">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="btn-liquidar" data-id="{{ p.id }}" title="Liquidar">
+                        <i class="fa-solid fa-check-double"></i> Liquidar
+                    </button>
+                    {% endif %}
+
+                    {% if session.get('role') == 'admin' %}
+                    <a href="{{ url_for('reportes.excel_prestamos', trabajador_id=p.trabajador_id) }}"
+                        class="btn-action-link btn-exportar"
+                        title="Exportar todos los préstamos de este trabajador">
+                        <i class="fa-solid fa-file-excel"></i> Exportar
+                    </a>
                     {% endif %}
                 </div>
-            </div>
-            <div class="prestamo-actions">
-                <button class="btn-detalles" data-id="{{ p.id }}" title="Ver Detalles e Historial de Pagos"
-                    style="background: var(--surface); color: var(--primary); border: 1px solid var(--border);">
-                    <i class="fa-solid fa-eye"></i> Detalles
-                </button>
-                {% if p.estado == 'ACTIVO' %}
-                <button class="btn-abonar" data-id="{{ p.id }}" title="Abono Extraordinario">
-                    <i class="fa-solid fa-coins"></i> Abonar
-                </button>
-                <button class="btn-editar-prestamo" data-id="{{ p.id }}" data-monto="{{ p.monto_total }}"
-                    data-plazo="{{ p.plazo_semanas }}" data-descuento="{{ p.descuento_semanal }}"
-                    data-motivo="{{ p.motivo or '' }}" data-frecuencia="{{ p.frecuencia or 'semanal' }}"
-                    data-fecha="{{ p.fecha_inicio.strftime('%Y-%m-%d') if p.fecha_inicio else '' }}" title="Editar">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
-                <button class="btn-liquidar" data-id="{{ p.id }}" title="Liquidar">
-                    <i class="fa-solid fa-check-double"></i> Liquidar
-                </button>
-                {% endif %}
-
-                {% if session.get('role') == 'admin' %}
-                <a href="{{ url_for('reportes.excel_prestamos', trabajador_id=p.trabajador_id) }}" class="btn-primary"
-                    style="background: #10b981; font-size: 0.85rem; padding: 0.5rem 0.8rem; display: inline-flex; align-items: center; gap: 0.5rem;"
-                    title="Exportar todos los préstamos de este trabajador">
-                    <i class="fa-solid fa-file-excel"></i> Exportar
-                </a>
-                {% endif %}
             </div>
         </div>
         {% else %}
         <div class="prestamos-empty">
-            <i class="fa-solid fa-hand-holding-dollar"
-                style="font-size: 2.5rem; color: #9CA3AF; margin-bottom: 1rem; display: block;"></i>
-            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--text-main);">Sin préstamos registrados</h4>
-            <p style="margin:0;">Aún no se ha registrado ningún préstamo. Presiona "Nuevo Préstamo" para comenzar.</p>
+            <i class="fa-solid fa-hand-holding-dollar empty-icon"></i>
+            <h4>Sin préstamos registrados</h4>
+            <p>Aún no se ha registrado ningún préstamo. Presiona "Nuevo Préstamo" para comenzar.</p>
         </div>
         {% endfor %}
     </div>
 
     <!-- Paginación -->
     {% if pagination.pages > 1 %}
-    <style>
-        .pg-btn {
-            padding: 0.5rem 0.75rem;
-            border-radius: 4px;
-            text-decoration: none;
-        }
-
-        .pg-disabled {
-            pointer-events: none;
-            opacity: 0.5;
-        }
-
-        .pg-active {
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            font-weight: bold;
-            pointer-events: none;
-            border: 1px solid var(--primary);
-        }
-    </style>
-    <div
-        style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
-        <div style="display: flex; gap: 0.25rem;">
+    <div class="prestamos-pagination">
+        <div class="pg-list">
             <a href="{{ url_for('prestamos.index', page=1, q=q) }}"
                 class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
                 &laquo; Primera
@@ -213,7 +192,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="modal-grid-2">
                 <div class="form-group">
                     <label>Monto Total ($)</label>
                     <input type="number" step="0.01" class="form-control" id="prestamoMonto" placeholder="0.00">
@@ -223,7 +202,7 @@
                     <input type="number" class="form-control" id="prestamoPlazo" placeholder="Ej: 12">
                 </div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="modal-grid-2">
                 <div class="form-group">
                     <label>Descuento por Período ($)</label>
                     <input type="number" step="0.01" class="form-control" id="prestamoDescuento" placeholder="0.00">
@@ -237,7 +216,7 @@
                     </select>
                 </div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="modal-grid-2">
                 <div class="form-group">
                     <label>Fecha de Inicio</label>
                     <input type="date" class="form-control" id="prestamoFechaInicio">
@@ -257,7 +236,7 @@
 
 <!-- Modal: Abono -->
 <div class="modal-overlay" id="modalAbono">
-    <div class="modal-content" style="max-width: 400px;">
+    <div class="modal-content modal-sm">
         <div class="modal-header">
             <h3>Abono Extraordinario</h3>
             <button class="close-modal" id="closeModalAbono">&times;</button>
@@ -271,51 +250,39 @@
         </div>
         <div class="modal-footer">
             <button class="btn-secondary" id="cancelModalAbono">Cancelar</button>
-            <button class="btn-primary" id="btnAplicarAbono"
-                style="background: linear-gradient(135deg, #059669, #10B981);">Aplicar Abono</button>
+            <button class="btn-primary btn-aplicar-abono" id="btnAplicarAbono">Aplicar Abono</button>
         </div>
     </div>
 </div>
+
 <!-- Modal: Detalles del Préstamo -->
 <div class="modal-overlay" id="modalDetallesPrestamo">
-    <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-content modal-lg">
         <div class="modal-header">
             <h3>Detalles del Préstamo</h3>
             <button class="close-modal" id="closeModalDetalles">&times;</button>
         </div>
         <div class="modal-body">
-            <div class="detalles-resumen"
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
-                <div>
-                    <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">Monto Total</span>
-                    <strong id="detallesMontoTotal" style="font-size: 1.2rem;">$0.00</strong>
+            <div class="detalles-resumen">
+                <div class="resumen-item">
+                    <span class="resumen-label">Monto Total</span>
+                    <strong class="resumen-value" id="detallesMontoTotal">$0.00</strong>
                 </div>
-                <div>
-                    <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">Saldo
-                        Restante</span>
-                    <strong id="detallesMontoRestante" style="font-size: 1.2rem; color: #DC2626;">$0.00</strong>
+                <div class="resumen-item">
+                    <span class="resumen-label">Saldo Restante</span>
+                    <strong class="resumen-value value-restante" id="detallesMontoRestante">$0.00</strong>
                 </div>
             </div>
 
-            <h4
-                style="margin-bottom: 0.5rem; font-size: 1rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
-                Historial de Pagos</h4>
-            <div style="max-height: 250px; overflow-y: auto;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left;" id="tablaAbonos">
+            <h4 class="detalles-historial-title">Historial de Pagos</h4>
+            <div class="detalles-historial-scroll">
+                <table class="tabla-abonos" id="tablaAbonos">
                     <thead>
                         <tr>
-                            <th
-                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
-                                Fecha</th>
-                            <th
-                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
-                                Tipo</th>
-                            <th
-                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
-                                Monto</th>
-                            <th
-                                style="padding: 0.5rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; color: var(--text-muted);">
-                                Notas</th>
+                            <th>Fecha</th>
+                            <th>Tipo</th>
+                            <th>Monto</th>
+                            <th>Notas</th>
                         </tr>
                     </thead>
                     <tbody id="listaAbonos">
@@ -330,5 +297,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/prestamos.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/prestamos.js') }}?v=4"></script>
 {% endblock %}
