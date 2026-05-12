@@ -1,6 +1,7 @@
 import os
 import logging
-from fastapi import FastAPI, Depends, HTTPException, APIRouter, Response, Request
+import ipaddress
+from fastapi import FastAPI, Depends, HTTPException, APIRouter, Response, Request, Query
 from sqlalchemy.orm import Session, joinedload, selectinload
 from decimal import Decimal
 import datetime
@@ -27,18 +28,32 @@ from app.models import (
 def get_real_ip(request: Request) -> str:
     """
     Devuelve la IP real del cliente detrás de Cloudflare Tunnel.
-    Solo confía en CF-Connecting-IP si la conexión directa proviene de un IP de Cloudflare,
-    evitando spoofing del header por parte de atacantes externos.
-    Fallback: X-Forwarded-For → request.client.host.
+
+    Reglas:
+      1. Si la conexión directa viene de un rango oficial de Cloudflare → confiar en CF-Connecting-IP.
+      2. Si la conexión directa es desde loopback/RFC1918 (proxy interno, dev local) → permitir
+         X-Forwarded-For como fallback.
+      3. En cualquier otro caso (conexión externa directa sin Cloudflare) → ignorar headers spoofables
+         y usar el remote.host real. Esto cierra el vector donde un atacante que bypassea Cloudflare
+         puede envenenar logs poniendo X-Forwarded-For arbitrario.
     """
     from app.extensions import is_cloudflare_ip
     remote = request.client.host if request.client else ""
     cf_ip = request.headers.get("CF-Connecting-IP")
     if cf_ip and is_cloudflare_ip(remote):
         return cf_ip.strip()
-    xff = request.headers.get("X-Forwarded-For")
-    if xff:
-        return xff.split(",")[0].strip()
+
+    # X-Forwarded-For sólo se confía si el peer directo es un proxy local
+    if remote:
+        try:
+            addr = ipaddress.ip_address(remote)
+            if addr.is_loopback or addr.is_private:
+                xff = request.headers.get("X-Forwarded-For")
+                if xff:
+                    return xff.split(",")[0].strip()
+        except ValueError:
+            pass
+
     return remote or "unknown"
 
 # ─── Configuración de la app ───────────────────────────────────────────────────
@@ -165,9 +180,14 @@ def create_solicitud(
     return nueva
 
 @router.get("/solicitudes/", response_model=list[schemas.SolicitudResponse])
-def get_solicitudes(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_solicitudes(
+    skip: int = Query(0, ge=0, le=1_000_000),
+    limit: int = Query(200, ge=0, le=500),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
     query = db.query(SolicitudMaterial)
-    
+
     # Si es solicitante, solo ve las suyas. Si es inventario/admin, ve todas.
     if current_user.role == 'solicitante_material':
         query = query.filter(SolicitudMaterial.solicitante_id == current_user.id)
@@ -181,6 +201,7 @@ def get_solicitudes(db: Session = Depends(get_db), current_user = Depends(get_cu
                 .joinedload(SolicitudMaterialDetalle.producto)
         )\
         .order_by(SolicitudMaterial.fecha_creacion.desc())\
+        .offset(skip).limit(limit)\
         .all()
 
     # Enriquecer con nombres de solicitantes y productos (datos ya en memoria)
@@ -195,6 +216,7 @@ def get_solicitudes(db: Session = Depends(get_db), current_user = Depends(get_cu
 
 @router.patch("/solicitudes/{sol_id}/estado", response_model=schemas.SolicitudResponse)
 def update_solicitud_estado(
+    request: Request,
     sol_id: int,
     up: schemas.SolicitudUpdateEstado,
     db: Session = Depends(get_db),
@@ -203,13 +225,24 @@ def update_solicitud_estado(
     solicitud = db.query(SolicitudMaterial).filter(SolicitudMaterial.id == sol_id).first()
     if not solicitud:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
-    
+
+    # Capturar estado previo para la bitácora: cambios de estatus de solicitudes son sensibles
+    # (revertir ENTREGADA→PENDIENTE oculta entregas reales) y deben quedar trazados.
+    estado_previo = solicitud.estatus
+
     solicitud.estatus = up.estatus
     if up.estatus == 'PENDIENTE':
         solicitud.fecha_cierre = None   # Reabrir: limpiar fecha de cierre
     else:
         solicitud.fecha_cierre = datetime.datetime.now()
-    
+
+    if estado_previo != up.estatus:
+        _audit(
+            db, current_user,
+            f"Solicitud #{sol_id} estatus: {estado_previo} → {up.estatus}",
+            request,
+        )
+
     db.commit()
     db.refresh(solicitud)
     return solicitud
@@ -220,7 +253,12 @@ def health_check():
 
 # ─── Productos ────────────────────────────────────────────────────────────────
 @router.get("/productos/", response_model=list[schemas.ProductoResponse])
-def get_productos(skip: int = 0, limit: int = 200, db: Session = Depends(get_db), current_user = Depends(get_inventario_user)):
+def get_productos(
+    skip: int = Query(0, ge=0, le=1_000_000),
+    limit: int = Query(200, ge=0, le=1000),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_inventario_user),
+):
     return db.query(Producto).filter(Producto.activo == True).offset(skip).limit(limit).all()
 
 @router.post("/productos/", response_model=schemas.ProductoResponse)
@@ -463,9 +501,9 @@ def get_estante_qr_image(estante_id: int, db: Session = Depends(get_db), current
 # ─── Movimientos ──────────────────────────────────────────────────────────────
 @router.get("/movimientos/", response_model=list[schemas.MovimientoResponse])
 def get_movimientos(
-    producto_id: int = None,
-    tipo: str = None,
-    limit: int = 200,
+    producto_id: int | None = None,
+    tipo: str | None = Query(None, max_length=20),
+    limit: int = Query(200, ge=0, le=1000),
     db: Session = Depends(get_db),
     current_user = Depends(get_inventario_user),
 ):
