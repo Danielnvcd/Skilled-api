@@ -2,13 +2,14 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/horas.css') }}?v=2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/reporte_horas.css') }}?v=5">
 {% endblock %}
 
 {% block content %}
 <div class="horas-wrapper">
     <div class="header-card">
         <div class="header-titulos">
-            <h1 class="main-title"><i class="fas fa-clock" style="color:#8b5cf6; margin-right:10px;"></i>Reporte de Horas</h1>
+            <h1 class="main-title"><i class="fas fa-clock"></i>Reporte de Horas</h1>
             <p class="subtitle">Gestiona las semanas activas y reporta incidencias por proyecto.</p>
         </div>
         <button class="btn-primary" id="btnNuevoReporte">
@@ -24,24 +25,20 @@
     </div>
 
     <!-- Buscador -->
-    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
-        <form action="{{ url_for('horas.index') }}" method="GET" class="search-container"
-            style="flex: 1; position: relative; max-width: 400px;">
-            <svg style="position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: #9CA3AF;"
-                fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <div class="horas-search-bar">
+        <form action="{{ url_for('horas.index') }}" method="GET" class="search-container">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
             </svg>
-            <input type="text" name="q" value="{{ q }}" placeholder="Buscar por proyecto o número..."
-                style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none; background: var(--bg-card); color: var(--text-main);">
+            <input type="text" name="q" value="{{ q }}" placeholder="Buscar por proyecto o número..." class="search-input">
         </form>
     </div>
 
     {% if q and not reportes %}
-    <div id="noResultsHoras" style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.95rem;">
-        <i class="fa-solid fa-folder-open"
-            style="font-size: 1.5rem; margin-bottom: 0.5rem; display:block; opacity:0.5;"></i>
-        No se encontraron reportes para la búsqueda ingresada.
+    <div id="noResultsHoras" class="horas-no-results">
+        <i class="fa-solid fa-folder-open"></i>
+        <p>No se encontraron reportes para la búsqueda ingresada.</p>
     </div>
     {% endif %}
 
@@ -51,61 +48,44 @@
             data-fecha-fin="{{ rep.fecha_fin_semana.strftime('%Y-%m-%d') }}">
             <div class="reporte-header">
                 <div>
-                    <h3 style="margin:0; font-size:1.1rem; color:var(--text-main);">
-                        Proyecto: {{ rep.proyecto.numero_proyecto }}
-                    </h3>
-                    <div style="font-size:0.85rem; color:var(--text-muted); margin-top:2px;">{{ rep.proyecto.nombre or
-                        'Sin descripción' }}</div>
+                    <h3 class="reporte-title">{{ rep.proyecto.nombre or 'Sin descripción' }}</h3>
+                    <span class="proyecto-num">
+                        <i class="fa-solid fa-hashtag"></i>{{ rep.proyecto.numero_proyecto }}
+                    </span>
                 </div>
-                <span class="badge {{ rep.estado|lower }}">{{ rep.estado }}</span>
+                <span class="badge {{ rep.estado|lower }}">
+                    {%- if rep.estado == 'PRENOMINA_CERRADA' -%}Prenómina Cerrada
+                    {%- elif rep.estado == 'TERMINADO' -%}Terminado
+                    {%- elif rep.estado == 'BORRADOR' -%}Borrador
+                    {%- else -%}{{ rep.estado }}{%- endif -%}
+                </span>
             </div>
 
             <div class="reporte-dates">
-                Semana del <strong>{{ rep.fecha_inicio_semana.strftime('%d/%m/%Y') }}</strong> al <strong>{{
-                    rep.fecha_fin_semana.strftime('%d/%m/%Y') }}</strong>
+                <i class="fa-regular fa-calendar"></i>
+                Semana del <strong>{{ rep.fecha_inicio_semana.strftime('%d/%m/%Y') }}</strong> al
+                <strong>{{ rep.fecha_fin_semana.strftime('%d/%m/%Y') }}</strong>
             </div>
 
-            <div style="margin-top: auto; display:flex; gap: 0.5rem;">
-                <a href="{{ url_for('horas.capturar', reporte_id=rep.id) }}" class="btn-primary"
-                    style="flex:1; justify-content:center; padding: 0.5rem;">
+            <div class="reporte-actions">
+                <a href="{{ url_for('horas.capturar', reporte_id=rep.id) }}" class="btn-reporte-action">
+                    <i class="fa-solid {% if rep.estado == 'BORRADOR' %}fa-pen-to-square{% else %}fa-eye{% endif %}"></i>
                     {{ 'Capturar' if rep.estado == 'BORRADOR' else 'Ver' }}
                 </a>
             </div>
         </div>
         {% else %}
-        <div
-            style="grid-column: 1 / -1; text-align: center; padding: 3rem; background: var(--bg-card); border-radius: 12px;">
-            <p style="color: var(--text-muted); margin-bottom: 1rem;">No hay reportes de horas creados aún.</p>
+        <div class="horas-empty horas-no-results-grid">
+            <i class="fa-solid fa-calendar-xmark"></i>
+            <p>No hay reportes de horas creados aún.</p>
         </div>
         {% endfor %}
     </div>
 
     <!-- Paginación -->
     {% if pagination.pages > 1 %}
-    <style>
-        .pg-btn {
-            padding: 0.5rem 0.75rem;
-            border-radius: 4px;
-            text-decoration: none;
-        }
-
-        .pg-disabled {
-            pointer-events: none;
-            opacity: 0.5;
-        }
-
-        .pg-active {
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            font-weight: bold;
-            pointer-events: none;
-            border: 1px solid var(--primary);
-        }
-    </style>
-    <div
-        style="padding: 1.5rem; display: flex; justify-content: center; border-top: 1px solid var(--border); margin-top: 1rem;">
-        <div style="display: flex; gap: 0.25rem;">
+    <div class="horas-pagination">
+        <div class="pg-list">
             <a href="{{ url_for('horas.index', page=1, q=q) }}"
                 class="btn-secondary pg-btn {% if pagination.page == 1 %}pg-disabled disabled{% endif %}">
                 &laquo; Primera
@@ -150,7 +130,7 @@
         <form id="reporteForm" action="{{ url_for('horas.crear_reporte') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-body">
-                <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+                <p class="modal-helper-text">
                     Selecciona el proyecto y el rango de la semana a reportar (Por regla: Inicia Martes, termina Lunes).
                 </p>
 
@@ -164,7 +144,7 @@
                     </select>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="modal-grid-2">
                     <div class="form-group">
                         <label>Día de Inicio (Martes) *</label>
                         <input type="date" name="fecha_inicio_semana" class="form-control" required>
@@ -185,5 +165,5 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/horas.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/horas.js') }}?v=2"></script>
 {% endblock %}
