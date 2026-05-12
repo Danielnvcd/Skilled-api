@@ -602,6 +602,9 @@ def qr_check():
         reporte = ReporteSemanal.query.get(int(reporte_id))
         if not reporte or reporte.estado != 'BORRADOR':
             return jsonify({'ok': False, 'error': 'El reporte ya fue cerrado o no existe'}), 404
+        # Bloquear que un coordinador clockee en proyectos que no le pertenecen.
+        if not _verificar_ownership_proyecto(reporte.proyecto):
+            return jsonify({'ok': False, 'error': 'Acceso denegado. No eres coordinador de este proyecto.'}), 403
         if trabajador not in reporte.proyecto.participantes:
             return jsonify({'ok': False, 'error': f'{trabajador.nombre_completo} no está asignado a este proyecto'}), 404
         if not (reporte.fecha_inicio_semana <= hoy <= reporte.fecha_fin_semana):
@@ -616,7 +619,12 @@ def qr_check():
             ReporteSemanal.fecha_inicio_semana <= hoy,
             ReporteSemanal.fecha_fin_semana >= hoy
         ).all()
-        reporte = next((r for r in reportes_activos if trabajador in r.proyecto.participantes), None)
+        # Solo considerar reportes donde el caller tenga ownership (coordinador del proyecto o admin).
+        reporte = next(
+            (r for r in reportes_activos
+             if trabajador in r.proyecto.participantes and _verificar_ownership_proyecto(r.proyecto)),
+            None
+        )
         if reporte is None:
             return jsonify({'ok': False, 'error': 'No hay reporte activo para este trabajador hoy'}), 404
 

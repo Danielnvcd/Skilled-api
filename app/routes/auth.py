@@ -16,6 +16,104 @@ from datetime import datetime, timedelta, timezone
 # ── Constantes del refresh token ─────────────────────────────────────────────
 _RT_COOKIE = 'rt'          # nombre de la cookie HttpOnly del refresh token
 
+# ── Anti enumeración por timing ──────────────────────────────────────────────
+# Hash dummy precomputado al cargar el módulo. En la rama "usuario no existe"
+# se compara la contraseña contra este hash para igualar el costo de un
+# check_password_hash real e impedir distinguir usernames válidos por tiempo.
+_DUMMY_PW_HASH = generate_password_hash('not-a-real-password-timing-dummy')
+
+# ── Expiración del estado pre-2FA ────────────────────────────────────────────
+# Tras introducir credenciales y antes de completar el 2FA, el usuario tiene
+# este tiempo para escribir el código. Evita que una pestaña abierta varias
+# horas siga siendo válida para completar el 2FA.
+_PRE_2FA_LIFETIME_SECONDS = 300  # 5 minutos
+
+# ── Lockout escalado por username ────────────────────────────────────────────
+# A los _LOGIN_FAILS_THRESHOLD fallos consecutivos dentro de _LOGIN_FAILS_WINDOW,
+# bloquea la cuenta por una duración que escala según cuántas veces se haya
+# disparado el lockout en las últimas 24 h. El nivel decae solo: si no hay
+# nuevos lockouts en 24 h, vuelve a empezar desde 10 min.
+# Requiere Redis. Sin Redis el sistema degrada al rate-limit normal sin romper.
+_LOGIN_FAILS_WINDOW = 15 * 60          # ventana para contar fallos
+_LOGIN_FAILS_THRESHOLD = 5             # fallos para disparar lockout
+_LOCKOUT_LEVEL_TTL = 24 * 3600         # ventana de memoria del nivel de escalación
+_LOCKOUT_DURATIONS = [                  # escalado: 10m → 30m → 1h → 3h → 12h → 24h
+    10 * 60,
+    30 * 60,
+    60 * 60,
+    3 * 60 * 60,
+    12 * 60 * 60,
+    24 * 60 * 60,
+]
+
+
+def _norm_user(username: str) -> str:
+    """Normaliza el username para usarlo como key de Redis (case-insensitive)."""
+    return (username or '').lower().strip()
+
+
+def _lockout_key(username):       return f"login_lockout:{_norm_user(username)}"
+def _level_key(username):         return f"login_lockout_level:{_norm_user(username)}"
+def _fails_key(username):         return f"login_fails:{_norm_user(username)}"
+
+
+def _check_lockout(username):
+    """Devuelve los segundos restantes de lockout, o None si la cuenta no está bloqueada."""
+    if not _norm_user(username):
+        return None
+    r = get_redis()
+    if not r:
+        return None
+    ttl = r.ttl(_lockout_key(username))
+    return ttl if (ttl is not None and ttl > 0) else None
+
+
+def _register_login_failure(username):
+    """Incrementa el contador de fallos. Al pasar el umbral, dispara lockout escalado."""
+    if not _norm_user(username):
+        return
+    r = get_redis()
+    if not r:
+        return
+    fkey = _fails_key(username)
+    fails = r.incr(fkey)
+    if fails == 1:
+        r.expire(fkey, _LOGIN_FAILS_WINDOW)
+    if fails >= _LOGIN_FAILS_THRESHOLD:
+        lkey = _level_key(username)
+        try:
+            level = int(r.get(lkey) or 0)
+        except (TypeError, ValueError):
+            level = 0
+        duration = _LOCKOUT_DURATIONS[min(level, len(_LOCKOUT_DURATIONS) - 1)]
+        r.setex(_lockout_key(username), duration, '1')
+        r.setex(lkey, _LOCKOUT_LEVEL_TTL, level + 1)  # decae si pasan 24 h sin nuevos lockouts
+        r.delete(fkey)
+
+
+def _clear_login_failures(username):
+    """Resetea contador, lockout y nivel tras un login exitoso."""
+    if not _norm_user(username):
+        return
+    r = get_redis()
+    if not r:
+        return
+    r.delete(_fails_key(username), _lockout_key(username), _level_key(username))
+
+
+def _format_ttl(seconds: int) -> str:
+    """Convierte segundos a string humano para mostrar al usuario."""
+    if seconds <= 60:
+        return "1 minuto"
+    if seconds < 3600:
+        m = (seconds + 59) // 60
+        return f"{m} minutos"
+    if seconds < 86400:
+        h = (seconds + 3599) // 3600
+        return f"{h} {'hora' if h == 1 else 'horas'}"
+    d = (seconds + 86399) // 86400
+    return f"{d} {'día' if d == 1 else 'días'}"
+
 
 def _is_safe_url(target):
     """Verifica que el URL de redirección sea del mismo dominio (anti open-redirect)."""
@@ -271,6 +369,11 @@ def update_last_seen():
 
 @bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit("4 per minute", methods=['POST'])
+@limiter.limit(
+    "8 per minute",
+    methods=['POST'],
+    key_func=lambda: f"login_user:{(request.form.get('username') or '').lower().strip()}"
+)
 def login():
     # Si ya tiene sesión activa, redirigir según rol
     if 'user_id' in session:
@@ -288,17 +391,44 @@ def login():
         else:
             dest = url_for('main.home')
         return redirect(dest)
-        
+
     if request.method == 'POST':
-        u = User.query.filter_by(username=request.form.get('username')).first()
-        
-        if u and check_password_hash(u.password_hash, request.form.get('password')):
+        attempted_username = request.form.get('username') or ''
+        password = request.form.get('password') or ''
+
+        # Lockout escalado: si la cuenta (real o inexistente) está bloqueada, no procesar.
+        # Se chequea ANTES de hacer el hash para no malgastar CPU ni dar pistas por timing.
+        # El mensaje es el mismo para usernames reales y falsos → no leakea existencia.
+        lockout_ttl = _check_lockout(attempted_username)
+        if lockout_ttl:
+            flash(
+                f'Cuenta bloqueada por demasiados intentos fallidos. '
+                f'Intenta de nuevo en {_format_ttl(lockout_ttl)}.',
+                'danger'
+            )
+            return render_template('login.html')
+
+        u = User.query.filter_by(username=attempted_username).first()
+
+        if u:
+            password_ok = check_password_hash(u.password_hash, password)
+        else:
+            # Igualar tiempos cuando el usuario no existe: ejecuta un check_password_hash
+            # contra un hash dummy precomputado para no exponer la existencia del username
+            # mediante diferencias de tiempo de respuesta.
+            check_password_hash(_DUMMY_PW_HASH, password)
+            password_ok = False
+
+        if password_ok:
+            # Login bueno → resetear contador/lockout/nivel para esta cuenta.
+            _clear_login_failures(attempted_username)
             remember = request.form.get('remember') == 'on'
             session.clear()
 
             if u.totp_secret:
                 session['pre_2fa_user_id'] = u.id
                 session['pre_2fa_pw_version'] = u.password_version or 1
+                session['pre_2fa_ts'] = datetime.now(timezone.utc).timestamp()
                 session['remember'] = remember
                 return redirect(url_for('auth.verify_2fa'))
 
@@ -322,20 +452,57 @@ def login():
                 _set_rt_cookie(response, _issue_refresh_token(u.id))
             return response
         
-        flash('Credenciales incorrectas', 'danger')
-        # Registrar fallo con IP real (Cloudflare Tunnel envía CF-Connecting-IP)
-        _attempted_user = (request.form.get('username') or '')[:80]  # truncar, nunca loguear contraseña
-        _real_ip = request.headers.get('CF-Connecting-IP', request.remote_addr)
+        # Registrar fallo en el contador de lockout escalado (Redis). En el 5to fallo dentro
+        # de _LOGIN_FAILS_WINDOW dispara un bloqueo cuya duración crece por nivel:
+        # 10m → 30m → 1h → 3h → 12h → 24h.
+        _register_login_failure(attempted_username)
+
+        # Si el fallo dejó la cuenta bloqueada, informar el tiempo restante para que el
+        # usuario sepa cuándo volver. Si no, mensaje genérico "Credenciales incorrectas".
+        post_fail_ttl = _check_lockout(attempted_username)
+        if post_fail_ttl:
+            flash(
+                f'Cuenta bloqueada por demasiados intentos fallidos. '
+                f'Intenta de nuevo en {_format_ttl(post_fail_ttl)}.',
+                'danger'
+            )
+        else:
+            flash('Credenciales incorrectas', 'danger')
+
+        # Registrar el fallo en bitácora con la IP real validada: get_real_client_ip_flask
+        # sólo confía en CF-Connecting-IP cuando la conexión directa proviene de un rango
+        # oficial de Cloudflare, evitando que un atacante spoofee el header.
+        from app.extensions import get_real_client_ip_flask
+        _attempted_user = attempted_username[:80]  # truncar, nunca loguear contraseña
+        _real_ip = get_real_client_ip_flask()
         log_action(f"Login fallido para usuario '{_attempted_user}' desde IP {_real_ip}")
         
     return render_template('login.html')
 
 @bp.route('/verify-2fa', methods=['GET', 'POST'])
 @limiter.limit("4 per minute", methods=['POST'])
+@limiter.limit(
+    "8 per minute",
+    methods=['POST'],
+    key_func=lambda: f"v2fa_user:{session.get('pre_2fa_user_id', 'anon')}"
+)
 def verify_2fa():
     if 'pre_2fa_user_id' not in session:
         return redirect(url_for('auth.login'))
-    
+
+    # Expiración del estado pre-2FA: tras _PRE_2FA_LIFETIME_SECONDS se debe re-autenticar.
+    # Cubre el caso de una pestaña olvidada y limita la ventana de aprovechamiento si alguien
+    # obtiene acceso físico al navegador después de que el usuario legítimo ingresó credenciales.
+    pre_ts = session.get('pre_2fa_ts')
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if not pre_ts or (now_ts - pre_ts) > _PRE_2FA_LIFETIME_SECONDS:
+        session.pop('pre_2fa_user_id', None)
+        session.pop('pre_2fa_pw_version', None)
+        session.pop('pre_2fa_ts', None)
+        session.pop('remember', None)
+        flash('La verificación 2FA expiró. Inicia sesión de nuevo.', 'warning')
+        return redirect(url_for('auth.login'))
+
     if request.method == 'POST':
         user = User.query.get(session['pre_2fa_user_id'])
         code = request.form.get('code')
@@ -382,19 +549,31 @@ def verify_2fa():
 def setup_2fa():
     user = g._current_user  # ya cargado por login_required, sin query adicional
     
+    # Vida útil del secreto pre-confirmación de 2FA. Si caduca, se regenera otro:
+    # evita que un atacante con la sesión secuestrada complete un setup 2FA abandonado
+    # por la víctima y obtenga control persistente del segundo factor.
+    _SETUP_TTL = 600  # 10 minutos
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    setup_ts = session.get('totp_secret_setup_ts')
+    setup_expired = (not setup_ts) or (now_ts - setup_ts > _SETUP_TTL)
+
     if request.method == 'POST':
         secret = session.get('totp_secret_setup')
         code = request.form.get('code')
-        
-        if not secret:
-            flash('Error en la sesión. Intenta de nuevo.', 'danger')
+
+        if not secret or setup_expired:
+            session.pop('totp_secret_setup', None)
+            session.pop('totp_secret_setup_ts', None)
+            flash('La configuración de 2FA expiró. Escanea el nuevo código QR.', 'warning')
             return redirect(url_for('auth.setup_2fa'))
-            
+
         totp = pyotp.TOTP(secret)
         if totp.verify(code, valid_window=1):
             user.totp_secret = secret
             db.session.commit()
             session.pop('totp_secret_setup', None)
+            session.pop('totp_secret_setup_ts', None)
             flash('Doble factor de autenticación activado correctamente.', 'success')
             log_action(f"2FA activado para {user.username}")
             return redirect(url_for('main.home'))
@@ -402,9 +581,10 @@ def setup_2fa():
             log_action(f"2FA setup: código incorrecto para {user.username}")
             flash('Código incorrecto.', 'danger')
 
-    if 'totp_secret_setup' not in session:
+    if 'totp_secret_setup' not in session or setup_expired:
         session['totp_secret_setup'] = pyotp.random_base32()
-    
+        session['totp_secret_setup_ts'] = now_ts
+
     secret = session['totp_secret_setup']
     
     totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(

@@ -4,7 +4,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import selectinload
 from app.extensions import db, limiter
 from app.models import Trabajador, CredencialPlanta, DocumentoTrabajador, Proyecto
-from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file, validate_lengths
+from app.utils import login_required, log_action, admin_required, allowed_file, allowed_image_file, validate_lengths, safe_excel_value
 from werkzeug.utils import secure_filename
 import traceback
 import json
@@ -946,7 +946,7 @@ def exportar_excel(id):
         t.observaciones,
     ]
     for col_idx, val in enumerate(values, start=1):
-        c = ws.cell(row=3, column=col_idx, value=val if val is not None else '')
+        c = ws.cell(row=3, column=col_idx, value=safe_excel_value(val) if val is not None else '')
         c.fill = BLANCO
         c.font = Font(name="Calibri", color="374151", size=10)
         c.alignment = LEFT
@@ -1108,7 +1108,7 @@ def exportar_todos():
         ]
 
         for col_idx, val in enumerate(values, start=1):
-            c = ws.cell(row=row_idx, column=col_idx, value=val if val is not None else '')
+            c = ws.cell(row=row_idx, column=col_idx, value=safe_excel_value(val) if val is not None else '')
             c.fill = fill
             c.font = Font(name="Calibri", color="374151", size=10)
             c.alignment = LEFT

@@ -99,9 +99,21 @@ def solicitudes():
 @login_required
 def solicitud_pdf(solicitud_id):
     from xhtml2pdf import pisa
+    from markupsafe import escape
     import os
 
     s = SolicitudMaterial.query.get_or_404(solicitud_id)
+
+    # Control de acceso: un solicitante solo puede ver SU PROPIA solicitud.
+    # Inventario/admin pueden ver todas. Esto cierra el IDOR donde un solicitante_material
+    # podía bajar el PDF de cualquier otra solicitud iterando sobre el id.
+    role = session.get('role')
+    if role == 'solicitante_material':
+        if s.solicitante_id != session.get('user_id'):
+            return jsonify({'error': 'Acceso denegado'}), 403
+    elif role not in ('inventario', 'admin', 'super_admin'):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
     fecha = s.fecha_creacion.strftime('%d/%m/%Y %H:%M') if s.fecha_creacion else '—'
     estatus = s.estatus or 'PENDIENTE'
 
@@ -116,17 +128,21 @@ def solicitud_pdf(solicitud_id):
     }
     sc, sb, sbg = STATUS_COLORS.get(estatus, ('#374151', '#6B7280', '#F9FAFB'))
 
+    # Cada celda HTML se escapa con markupsafe.escape: las descripciones/códigos de productos
+    # y nombres de usuario son texto libre que un atacante con permisos de catálogo podría usar
+    # para inyectar HTML (e incluso intentar inclusiones tipo <img src="file:///..."> en xhtml2pdf).
     filas_html = ''.join(f"""
         <tr>
             <td class="td {'td-alt' if i%2==0 else ''}" align="center">{i+1}</td>
-            <td class="td {'td-alt' if i%2==0 else ''}" style="font-weight:bold;">{d.producto.descripcion if d.producto else '—'}</td>
-            <td class="td {'td-alt' if i%2==0 else ''}" style="font-size:10px;color:#6B7280;font-weight:bold;text-transform:uppercase;">{d.producto.codigo if d.producto else '—'}</td>
+            <td class="td {'td-alt' if i%2==0 else ''}" style="font-weight:bold;">{escape(d.producto.descripcion) if d.producto and d.producto.descripcion else '—'}</td>
+            <td class="td {'td-alt' if i%2==0 else ''}" style="font-size:10px;color:#6B7280;font-weight:bold;text-transform:uppercase;">{escape(d.producto.codigo) if d.producto and d.producto.codigo else '—'}</td>
             <td class="td {'td-alt' if i%2==0 else ''}" align="center" style="font-weight:bold;font-size:13px;color:#4F46E5;">{int(d.cantidad_solicitada)}</td>
-            <td class="td {'td-alt' if i%2==0 else ''}" style="color:#9CA3AF;">{d.producto.unidad if d.producto else 'pza'}</td>
+            <td class="td {'td-alt' if i%2==0 else ''}" style="color:#9CA3AF;">{escape(d.producto.unidad) if d.producto and d.producto.unidad else 'pza'}</td>
         </tr>""" for i, d in enumerate(s.detalles))
 
-    solicitante_nombre = s.solicitante.username if s.solicitante else '—'
-    proyecto = s.proyecto or 'General'
+    solicitante_nombre = escape(s.solicitante.username) if s.solicitante and s.solicitante.username else '—'
+    proyecto = escape(s.proyecto) if s.proyecto else 'General'
+    estatus = escape(estatus)
 
     logo_uri = logo_path.replace('\\', '/')
 

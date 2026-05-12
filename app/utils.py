@@ -86,7 +86,10 @@ pillow_heif.register_heif_opener()
 
 def log_action(action):
     try:
-        ip = request.headers.get("CF-Connecting-IP", request.remote_addr)
+        # Usar el helper que valida que CF-Connecting-IP venga realmente de un rango Cloudflare.
+        # Sin esta validación un atacante puede spoofear el header y envenenar el log de auditoría.
+        from app.extensions import get_real_client_ip_flask
+        ip = get_real_client_ip_flask()
         log = AuditLog(
             user=session.get('user', 'anon'),
             action=str(action)[:200],  # Limitar a 200 chars para coincidir con la columna del modelo
@@ -151,6 +154,28 @@ def allowed_file(file_storage):
                 return False
 
     return True
+
+# ──────────────────────────────────────────────
+# Anti-inyección de fórmulas en exports Excel
+# ──────────────────────────────────────────────
+# Excel/LibreOffice ejecutan como fórmula cualquier celda que empiece con uno de estos
+# caracteres. Un usuario que controla campos como "nombre", "motivo" o "notas" podría
+# inyectar p. ej. `=cmd|'/C calc'!A1` y al abrir el .xlsx el admin dispararía el cálculo.
+# Mitigación recomendada por OWASP: anteponer una comilla simple ('), que Excel trata
+# como prefijo de texto literal (no se muestra en la celda pero desactiva la fórmula).
+_EXCEL_DANGEROUS_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+def safe_excel_value(value):
+    """Sanitiza un valor antes de escribirlo en una celda Excel.
+
+    - Strings que empiezan con =, +, -, @, TAB o CR se prefijan con comilla simple
+      para evitar que Excel los interprete como fórmulas.
+    - Otros tipos (int, float, datetime, None, etc.) se devuelven sin cambios.
+    """
+    if isinstance(value, str) and value and value[0] in _EXCEL_DANGEROUS_PREFIXES:
+        return "'" + value
+    return value
+
 
 # ──────────────────────────────────────────────
 # Validación estricta para fotos de perfil (solo imágenes reales)
