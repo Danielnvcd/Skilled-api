@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function cargarProductos() {
         if (!productsList) return;
         try {
-            const res = await fetch('/api/v1/productos/?limit=9999');
+            const res = await fetch('/api/v1/productos/?limit=1000');
             todosProductos = await res.json();
             renderizarProductos(todosProductos);
             const countLabel = document.getElementById('tab-count-catalogo');
