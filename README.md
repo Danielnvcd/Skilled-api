@@ -93,7 +93,7 @@ FLASK_ENV=development
 SECRET_KEY=una_clave_secreta_super_segura12345
 
 # Reemplaza con tus credenciales reales de PostgreSQL
-DATABASE_URL=postgresql+psycopg2://tu_usuario:tu_contrasena@localhost:5432/nombre_base_de_datos
+DATABASE_URL=postgresql+psycopg://tu_usuario:tu_contrasena@localhost:5432/nombre_base_de_datos
 
 REDIS_URL=redis://localhost:6379/0
 
