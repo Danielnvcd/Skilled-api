@@ -1,5 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
 
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
     // ─── State ───────────────────────────────────────────────────
     let html5Qrcode = null;
     let selectedTipo = 'ENTRADA';
@@ -168,7 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const res = await fetch('/api/v1/movimientos/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
                 body: JSON.stringify(payload)
             });
             if (res.ok) {

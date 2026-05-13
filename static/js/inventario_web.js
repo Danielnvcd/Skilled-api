@@ -1,5 +1,6 @@
 /* ─── inventario_web.js v32 ─── */
 document.addEventListener('DOMContentLoaded', async () => {
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
     const CATEGORIA_ACTUAL = document.getElementById('page-data')?.dataset?.categoria || null;
 
     // ─── CATEGORÍAS (base + custom en localStorage) ──────────────
@@ -525,7 +526,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const url    = id ? `/api/v1/productos/${id}` : '/api/v1/productos/';
                 const method = id ? 'PUT' : 'POST';
-                const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                const res = await fetch(url, { method, headers:{'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN}, body: JSON.stringify(payload) });
                 if (res.ok) {
                     closeModal(modalProducto);
                     e.target.reset();
@@ -541,7 +542,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('btnConfirmDeleteProducto')?.addEventListener('click', async () => {
         const id  = document.getElementById('deleteProductoId').value;
-        const res = await fetch(`/api/v1/productos/${id}`, { method:'DELETE' });
+        const res = await fetch(`/api/v1/productos/${id}`, { method:'DELETE', headers:{'X-CSRF-Token': CSRF_TOKEN} });
         closeModal(modalDeleteProducto);
         if (res.ok) { await cargarProductos(); showToast('Producto eliminado ✓'); }
         else showToast('No se pudo eliminar', 'error');
@@ -721,7 +722,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const id  = document.getElementById('almId').value;
             const payload = { nombre: document.getElementById('almNombre').value.trim(), ubicacion: document.getElementById('almUbicacion').value.trim() || null, activo: true };
             try {
-                const res = await fetch(id ? `/api/v1/almacenes/${id}` : '/api/v1/almacenes/', { method: id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                const res = await fetch(id ? `/api/v1/almacenes/${id}` : '/api/v1/almacenes/', { method: id?'PUT':'POST', headers:{'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN}, body: JSON.stringify(payload) });
                 if (res.ok) { closeModal(modalAlmacen); e.target.reset(); await cargarAlmacenes(); showToast(id ? 'Bodega actualizada ✓' : 'Bodega registrada ✓'); }
                 else { const err = await res.json(); showToast('Error: ' + (err.detail||'No se pudo guardar'), 'error'); }
             } finally { btn.disabled = false; }
@@ -737,7 +738,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const id  = document.getElementById('estanteId').value;
             const payload = { nombre: document.getElementById('estanteNombre').value.trim(), descripcion: document.getElementById('estanteDesc').value.trim() || null, almacen_id: parseInt(document.getElementById('estanteAlmacenId').value) };
             try {
-                const res = await fetch(id ? `/api/v1/estantes/${id}` : '/api/v1/estantes/', { method: id?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                const res = await fetch(id ? `/api/v1/estantes/${id}` : '/api/v1/estantes/', { method: id?'PUT':'POST', headers:{'Content-Type':'application/json', 'X-CSRF-Token': CSRF_TOKEN}, body: JSON.stringify(payload) });
                 if (res.ok) {
                     const estante = await res.json();
                     closeModal(modalEstante); e.target.reset(); await cargarAlmacenes();
@@ -752,7 +753,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const id   = document.getElementById('deleteEstanteId').value;
         const tipo = document.getElementById('deleteEstanteTipo').value;
         const url  = tipo === 'bodega' ? `/api/v1/almacenes/${id}` : `/api/v1/estantes/${id}`;
-        const res  = await fetch(url, { method:'DELETE' });
+        const res  = await fetch(url, { method:'DELETE', headers:{'X-CSRF-Token': CSRF_TOKEN} });
         closeModal(modalDeleteEstante);
         if (res.ok) { await cargarAlmacenes(); showToast(`${tipo==='bodega'?'Bodega':'Estante'} eliminado ✓`); }
         else showToast('No se pudo eliminar', 'error');

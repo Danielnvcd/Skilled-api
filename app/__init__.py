@@ -182,9 +182,24 @@ def create_app():
         # Bloquea que esta app sea embebida en iframes de otros dominios (anti-clickjacking)
         'frame-ancestors': '\'none\'',
     }
-    Talisman(app, content_security_policy=csp, force_https=False)
+    # HSTS: anuncia HTTPS-only por 1 año. force_https=False porque Cloudflare Tunnel
+    # termina TLS; la app interna sigue HTTP localmente. Talisman manda STS igual.
+    # Preload OFF por defecto: agregar el dominio a la lista de preload de los browsers
+    # es semi-irreversible (sacarlo lleva semanas/meses). Activar solo cuando estés
+    # 100% seguro de tu setup HTTPS y dispuesto a sostenerlo. Para activarlo: setear
+    # HSTS_PRELOAD=true en .env.
+    _hsts_preload = os.environ.get('HSTS_PRELOAD', 'false').lower() == 'true'
+    Talisman(
+        app,
+        content_security_policy=csp,
+        force_https=False,
+        strict_transport_security=is_prod,        # solo emitir STS en producción
+        strict_transport_security_max_age=31536000,  # 1 año
+        strict_transport_security_include_subdomains=True,
+        strict_transport_security_preload=_hsts_preload,
+    )
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui, notificaciones, manual_uso
+    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui, inventario_api, notificaciones, manual_uso
     app.register_blueprint(auth.bp)
 
 
@@ -205,6 +220,7 @@ def create_app():
     app.register_blueprint(ausencias.bp)
     app.register_blueprint(metricas.bp)
     app.register_blueprint(inventario_ui.bp)
+    app.register_blueprint(inventario_api.bp)
     app.register_blueprint(notificaciones.bp)
     app.register_blueprint(manual_uso.bp)
 
@@ -309,6 +325,17 @@ def create_app():
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
         response.headers.setdefault('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)')
+        # X-Frame-Options: redundante con frame-ancestors: 'none' del CSP, pero algunos
+        # browsers (IE11, viejos Android WebView) no respetan CSP frame-ancestors.
+        # Mantener belt + suspenders mientras existan clientes legacy.
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        # COOP: aísla el browsing context del documento de cross-origin popups.
+        # Previene ataques tipo Spectre via window.opener y XS-Leaks por timing.
+        response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+        # CORP: declara que estos recursos solo deben ser cargados por mismo origen.
+        # Bloquea hot-linking y previene que otros sites embedeen nuestras respuestas
+        # como recursos (img, script) para inferir información por side-channels.
+        response.headers.setdefault('Cross-Origin-Resource-Policy', 'same-origin')
         return response
 
     @app.after_request
