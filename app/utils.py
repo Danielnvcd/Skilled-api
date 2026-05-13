@@ -250,12 +250,12 @@ ROLE_PERMISSIONS = {
         'deny_message': 'Acceso denegado. Tu rol solo permite acceder a Horas, Ficha Técnica y Credenciales.',
     },
     'inventario': {
-        'allowed': ['inventario_ui.', 'auth.', 'main.', 'users.serve_profile_pic'],
+        'allowed': ['inventario_ui.', 'inventario_api.', 'auth.', 'main.', 'users.serve_profile_pic'],
         'default_redirect': 'inventario_ui.web',
         'deny_message': 'Acceso denegado. Solo puedes acceder al módulo de Inventario.',
     },
     'solicitante_material': {
-        'allowed': ['inventario_ui.', 'auth.', 'main.', 'users.serve_profile_pic'],
+        'allowed': ['inventario_ui.', 'inventario_api.', 'auth.', 'main.', 'users.serve_profile_pic'],
         'default_redirect': 'inventario_ui.web',
         'deny_message': 'Acceso denegado. Solo puedes acceder al catálogo de Inventario.',
     },
@@ -303,6 +303,10 @@ def login_required(f):
         # '*' = acceso total, no requiere más validación
         if allowed != '*' and request.endpoint:
             if not any(request.endpoint.startswith(p) for p in allowed):
+                # Auditar intentos de acceso fuera del rol: útil para detectar
+                # usuarios probando endpoints que no les corresponden (intento
+                # de escalación de privilegios) o links viejos compartidos.
+                log_action(f"Acceso denegado a '{request.endpoint}' (rol: {role})")
                 flash(perms.get('deny_message', 'Acceso denegado.'), 'warning')
                 return redirect(url_for(perms['default_redirect']))
 
@@ -328,6 +332,8 @@ def admin_required(f):
             return redirect(url_for('auth.login'))
 
         if session.get('role') not in ['admin', 'super_admin']:
+            # Endpoint requiere admin: registrar intento para auditar uso indebido.
+            log_action(f"Acceso admin denegado a '{request.endpoint}' (rol: {session.get('role')})")
             flash('Acceso denegado.', 'danger')
             return redirect(url_for('main.home'))
         return f(*args, **kwargs)

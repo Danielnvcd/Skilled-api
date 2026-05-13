@@ -13,3 +13,5 @@ app.db
 # Tailwind CSS compilado (regenerar con: python build_tailwind.py)
 static/css/tailwind.css
 run_venv.py
+Gunicorn .config
+nginx.config
