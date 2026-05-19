@@ -3,62 +3,23 @@
 {% block title %}Bodegas y Estantes — Skilled{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=35">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=42">
 {% endblock %}
 
 {% block content %}
 <div class="inventory-management-wrapper">
 
     <!-- Header Section -->
-    <div class="header-section">
-        <div class="header-titles">
-            <h1 class="main-title">Control de Instalaciones</h1>
-            <p class="subtitle">Gestión de bodegas, almacenes y organización por estantes</p>
+    <div style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h1 style="font-size: 1.5rem; font-weight: 800; color: #111827; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-building text-gray-400"></i> Control de Instalaciones
+            </h1>
+            <p style="color: #6b7280; font-size: 0.95rem; margin: 0.25rem 0 0;">Gestión corporativa de bodegas, almacenes y estantes.</p>
         </div>
-        <!-- Ilustración decorativa -->
-        <div class="header-illustration">
-            <svg width="170" height="90" viewBox="0 0 170 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Estructura de rack/estantería -->
-                <!-- Columnas verticales -->
-                <rect x="10" y="10" width="5" height="72" rx="2" fill="#D1FAE5"/>
-                <rect x="75" y="10" width="5" height="72" rx="2" fill="#D1FAE5"/>
-                <rect x="140" y="10" width="5" height="72" rx="2" fill="#D1FAE5"/>
-                <!-- Bandeja 1 (arriba) -->
-                <rect x="10" y="14" width="135" height="6" rx="2" fill="#A7F3D0"/>
-                <!-- Bandeja 2 (medio) -->
-                <rect x="10" y="42" width="135" height="6" rx="2" fill="#A7F3D0"/>
-                <!-- Bandeja 3 (abajo) -->
-                <rect x="10" y="70" width="135" height="6" rx="2" fill="#A7F3D0"/>
-                <!-- Productos en estante 1 -->
-                <rect x="16" y="20" width="18" height="22" rx="3" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1"/>
-                <rect x="38" y="23" width="14" height="19" rx="3" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
-                <rect x="56" y="20" width="16" height="22" rx="3" fill="#FFF7ED" stroke="#FED7AA" stroke-width="1"/>
-                <rect x="83" y="22" width="18" height="20" rx="3" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
-                <rect x="105" y="20" width="14" height="22" rx="3" fill="#ECFEFF" stroke="#A5F3FC" stroke-width="1"/>
-                <rect x="123" y="23" width="12" height="19" rx="3" fill="#FEF2F2" stroke="#FECACA" stroke-width="1"/>
-                <!-- Productos en estante 2 -->
-                <rect x="16" y="48" width="20" height="22" rx="3" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1"/>
-                <rect x="40" y="50" width="15" height="20" rx="3" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1"/>
-                <rect x="83" y="48" width="16" height="22" rx="3" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1"/>
-                <rect x="103" y="50" width="18" height="20" rx="3" fill="#F5F3FF" stroke="#DDD6FE" stroke-width="1"/>
-                <rect x="125" y="48" width="10" height="22" rx="3" fill="#FFF7ED" stroke="#FED7AA" stroke-width="1"/>
-                <!-- Base del suelo -->
-                <line x1="6" y1="86" x2="164" y2="86" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
-                <!-- Patas del rack -->
-                <rect x="13" y="76" width="3" height="10" rx="1" fill="#9CA3AF"/>
-                <rect x="72" y="76" width="3" height="10" rx="1" fill="#9CA3AF"/>
-                <rect x="141" y="76" width="3" height="10" rx="1" fill="#9CA3AF"/>
-                <!-- Detalles decorativos -->
-                <circle cx="162" cy="18" r="2" fill="#6EE7B7"/>
-                <circle cx="5" cy="36" r="1.5" fill="#A5B4FC"/>
-            </svg>
-        </div>
-        <div class="flex gap-3">
-            <button id="btnOpenModalAlmacen" class="btn-glow btn-glow-blue">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
+        <div>
+            <button id="btnOpenModalAlmacen" class="corp-btn">
+                <i class="fas fa-plus" style="color: #0b5fb4;"></i>
                 Nueva Bodega
             </button>
         </div>
@@ -207,5 +168,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=37"></script>
+<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=41"></script>
 {% endblock %}

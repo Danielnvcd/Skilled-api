@@ -2,321 +2,245 @@
 {% block title %}Movimientos de Inventario — Skilled{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=35">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=36">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-/* ── Tabs ── */
-.mv-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-.mv-tab {
-    padding: 8px 18px; border-radius: 8px; font-size: 0.88rem; font-weight: 600;
-    cursor: pointer; border: 1px solid var(--border);
-    background: var(--bg-card); color: var(--text-muted);
-    transition: background 0.15s, color 0.15s;
-    display: inline-flex; align-items: center; gap: 6px;
-}
-.mv-tab:hover { background: #eff6ff; color: #0b5fb4; border-color: #bfdbfe; }
-.mv-tab.active { background: #0b5fb4; color: white; border-color: #0b5fb4; }
-.mv-tab .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: currentColor; opacity: 0.7;
-}
-.mv-panel { display: none; }
-.mv-panel.active { display: block; }
+    /* Variables Base Empleados */
+    :root {
+        --primary: #0b5fb4;
+        --primary-hover: #1e40af;
+    }
+    .btn-primary {
+        background: linear-gradient(135deg, #0b5fb4 0%, #3b82f6 100%) !important;
+        box-shadow: 0 4px 12px rgba(11, 95, 180, 0.22) !important;
+        color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; transition: all 0.2s;
+    }
+    .btn-primary:hover { box-shadow: 0 6px 16px rgba(11, 95, 180, 0.32) !important; transform: translateY(-2px); }
+    
+    .trabajadores-wrapper { max-width: 1400px; margin: 0 auto; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
 
-/* ── KPI strip ── */
-.mv-kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
-@media(max-width:700px){ .mv-kpis { grid-template-columns: repeat(2,1fr); } }
-.mv-kpi {
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 1rem 1.25rem;
-    display: flex; align-items: center; gap: 0.75rem;
-}
-.mv-kpi-icon {
-    width: 38px; height: 38px; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1rem; flex-shrink: 0;
-}
-.mv-kpi.blue  .mv-kpi-icon { background: #dbeafe; color: #0b5fb4; }
-.mv-kpi.green .mv-kpi-icon { background: #dcfce7; color: #16a34a; }
-.mv-kpi.red   .mv-kpi-icon { background: #fee2e2; color: #dc2626; }
-.mv-kpi.amber .mv-kpi-icon { background: #fef3c7; color: #d97706; }
-.mv-kpi-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
-.mv-kpi-value { font-size: 1.2rem; font-weight: 700; color: var(--text-main); margin-top: 2px; font-variant-numeric: tabular-nums; }
+    /* Header */
+    .header-card {
+        background: white; border-radius: 16px; padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border: 1px solid #e5e7eb; margin-bottom: 2rem;
+    }
+    .header-titulos .main-title { font-size: 1.75rem; font-weight: 800; margin: 0; color: #111827; letter-spacing: -0.02em; display: flex; align-items: center; }
+    .header-titulos .subtitle { color: #6b7280; margin: 0.5rem 0 0 0; font-size: 0.95rem; }
 
-/* ── Form card ── */
-.mv-form-panel {
-    max-width: 680px;
-}
-.mv-form-header {
-    display: flex; align-items: center; gap: 1rem;
-    padding: 1.25rem 1.5rem 1rem;
-    border-bottom: 1px solid var(--border);
-    margin: -1.5rem -1.5rem 1.5rem;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-}
-.mv-form-header.entrada { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
-.mv-form-header.ajuste  { background: linear-gradient(135deg, #fffbeb, #fef3c7); }
-.mv-form-icon {
-    width: 44px; height: 44px; border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.1rem; flex-shrink: 0;
-}
-.mv-form-icon.green { background: #16a34a; color: white; box-shadow: 0 4px 12px rgba(22,163,74,0.3); }
-.mv-form-icon.amber { background: #d97706; color: white; box-shadow: 0 4px 12px rgba(217,119,6,0.3); }
-.mv-form-header-text h3 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main); }
-.mv-form-header-text p  { margin: 2px 0 0; font-size: 0.78rem; color: var(--text-muted); }
+    /* Stats Container */
+    .stats-container { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+    .stat-card { background: white; border-radius: 12px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 180px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e5e7eb; border-left: 4px solid transparent; }
+    .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+    .stat-val { font-size: 1.6rem; font-weight: 800; line-height: 1; color: #111827; }
+    .stat-lbl { font-size: 0.75rem; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.03em; }
 
-.mv-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 6px; display: block; }
-.mv-input {
-    width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
-    border-radius: 9px; font-size: 0.9rem; color: var(--text-main);
-    background: var(--bg-card); outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
-    box-sizing: border-box;
-}
-.mv-input:focus { border-color: #0b5fb4; box-shadow: 0 0 0 3px rgba(11,95,180,0.1); }
-.mv-input.amber:focus { border-color: #d97706; box-shadow: 0 0 0 3px rgba(217,119,6,0.12); }
+    /* Se eliminan estilos conflictivos de .tabs y .tab-btn para usar los globales de inventario_web.css */
 
-.mv-field-group { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.25rem; }
-.mv-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-@media(max-width:520px){ .mv-grid2 { grid-template-columns: 1fr; } }
+    .mv-panel { display: none; }
+    .mv-panel.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-.mv-divider { height: 1px; background: var(--border); margin: 1.25rem 0; }
+    /* Table Container */
+    .table-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); border: 1px solid #e5e7eb; overflow: hidden; margin-bottom: 2rem; }
+    .table-header-ops { padding: 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; background: #f9fafb; }
+    
+    .modern-table { width: 100%; border-collapse: collapse; }
+    .modern-table th { background-color: #f9fafb; color: #6b7280; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.85rem 1.25rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    .modern-table td { padding: 0.85rem 1.25rem; border-bottom: 1px solid #f1f5f9; color: #111827; font-size: 0.875rem; vertical-align: middle; }
+    .modern-table tbody tr { transition: background-color 0.15s ease, box-shadow 0.15s ease; cursor: default; }
+    .modern-table tbody tr:hover { background-color: #f8fafc; }
 
-.mv-result-box {
-    padding: 10px 14px; border: 1.5px solid var(--border);
-    border-radius: 9px; font-size: 0.9rem; font-variant-numeric: tabular-nums;
-    color: var(--text-muted); background: #f8fafc;
-    font-weight: 600; min-height: 42px; display: flex; align-items: center;
-}
-.mv-form-footer {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-top: 1.25rem; border-top: 1px solid var(--border);
-    margin-top: 1.25rem;
-    flex-wrap: wrap; gap: 0.75rem;
-}
-.mv-form-tip {
-    font-size: 0.78rem; color: var(--text-muted);
-    display: flex; align-items: center; gap: 5px;
-}
-.btn-mv-submit {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    background: linear-gradient(135deg, #0b5fb4, #094d8f);
-    color: white; border: none; padding: 10px 24px;
-    border-radius: 10px; font-size: 0.9rem; font-weight: 700;
-    cursor: pointer; transition: filter 0.2s, box-shadow 0.2s;
-    box-shadow: 0 3px 10px rgba(11,95,180,0.3);
-    letter-spacing: 0.2px;
-}
-.btn-mv-submit:hover { filter: brightness(1.08); box-shadow: 0 5px 16px rgba(11,95,180,0.4); }
-.btn-mv-submit:active { filter: brightness(0.95); }
-.btn-mv-submit.amber { background: linear-gradient(135deg, #d97706, #b45309); box-shadow: 0 3px 10px rgba(217,119,6,0.3); }
-.btn-mv-submit.amber:hover { box-shadow: 0 5px 16px rgba(217,119,6,0.4); }
+    /* Pill Badges */
+    .tipo-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; border: 1px solid; white-space: nowrap; }
+    .tipo-ENTRADA { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+    .tipo-SALIDA { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+    .tipo-AJUSTE { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .tipo-TRASPASO { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
 
-/* ── History table ── */
-.mv-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
-.mv-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; min-width: 700px; }
-.mv-table thead th {
-    background: #f8fafc; padding: 9px 12px; text-align: left;
-    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.4px; color: var(--text-muted);
-    border-bottom: 2px solid var(--border); white-space: nowrap;
-}
-.mv-table tbody td {
-    padding: 9px 12px; border-bottom: 1px solid #f1f5f9;
-    color: var(--text-main); white-space: nowrap;
-}
-.mv-table tbody tr:hover td { background: #f8fafc; }
-.mv-table tbody tr:last-child td { border-bottom: none; }
+    /* Inputs y Formularios */
+    .form-group { display: flex; flex-direction: column; margin-bottom: 1.25rem; }
+    .form-group label { font-size: 0.85rem; font-weight: 600; color: #111827; margin-bottom: 0.4rem; }
+    .form-control { width: 100%; padding: 0.75rem 1rem; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 0.95rem; transition: all 0.2s; background: #f9fafb; color: #111827; }
+    .form-control:focus { background: #fff; border-color: #0b5fb4; outline: none; box-shadow: 0 0 0 3px rgba(11, 95, 180, 0.1); }
+    .form-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    
+    .form-header-banner { padding: 1.25rem 1.5rem; margin: -1.5rem -1.5rem 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 1rem; }
+    .form-header-banner.entrada { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
+    .form-header-banner.ajuste { background: linear-gradient(135deg, #fffbeb, #fef3c7); }
+    
+    .btn-submit { background: linear-gradient(135deg, #0b5fb4, #1e3a8a); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 12px rgba(11, 95, 180, 0.2); transition: all 0.2s; }
+    .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(11, 95, 180, 0.3); }
+    .btn-submit.amber { background: linear-gradient(135deg, #d97706, #92400e); box-shadow: 0 4px 12px rgba(217, 119, 6, 0.2); }
+    .btn-submit.amber:hover { box-shadow: 0 6px 16px rgba(217, 119, 6, 0.3); }
 
-/* ── Tipo badges ── */
-.tipo-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 0.72rem; font-weight: 700; padding: 2px 9px;
-    border-radius: 20px;
-}
-.tipo-ENTRADA  { background: #dcfce7; color: #15803d; }
-.tipo-SALIDA   { background: #fee2e2; color: #b91c1c; }
-.tipo-AJUSTE   { background: #fef3c7; color: #92400e; }
-.tipo-TRASPASO { background: #dbeafe; color: #0b5fb4; }
-
-/* ── Filter bar ── */
-.mv-filters { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
-.mv-select {
-    padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
-    font-size: 0.85rem; background: var(--bg-card); color: var(--text-main); outline: none;
-}
-
-/* ── Stock bajo ── */
-.stock-bajo-card {
-    background: var(--bg-card); border: 1px solid #fecdd3;
-    border-left: 4px solid #dc2626;
-    border-radius: 10px; padding: 0.85rem 1rem;
-    display: flex; align-items: center; gap: 1rem;
-    margin-bottom: 0.5rem;
-}
-.stock-bar-bg { flex: 1; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
-.stock-bar-fill { height: 100%; background: #dc2626; border-radius: 3px; transition: width 0.3s; }
-.stock-bar-fill.warn { background: #f59e0b; }
+    /* Stock Bajo */
+    .stock-bajo-card { background: white; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 12px; padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .stock-bar-bg { flex: 1; height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .stock-bar-fill { height: 100%; background: #dc2626; border-radius: 4px; transition: width 0.3s; }
+    .stock-bar-fill.warn { background: #f59e0b; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="inventory-management-wrapper">
+<div class="trabajadores-wrapper">
 
     <!-- Header -->
-    <div class="header-section">
-        <div class="header-titles">
-            <h1 class="main-title">Movimientos de Inventario</h1>
+    <div class="header-card">
+        <div class="header-titulos">
+            <h1 class="main-title"><i class="fas fa-exchange-alt" style="color:#0b5fb4; margin-right:12px;"></i> Movimientos de Inventario</h1>
             <p class="subtitle">Entradas, ajustes, historial de stock y alertas de nivel mínimo</p>
         </div>
-        <div class="flex gap-3">
-            <a href="{{ url_for('inventario_ui.catalogo') }}" class="btn-glow btn-glow-blue" style="text-decoration:none;">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M19 12H5M12 5l-7 7 7 7"/>
-                </svg>
-                Catálogo
+        <div class="header-actions">
+            <a href="{{ url_for('inventario_ui.catalogo') }}" class="btn-primary" style="text-decoration:none;">
+                <i class="fas fa-book"></i> Catálogo
             </a>
         </div>
     </div>
 
-    <!-- KPIs (populated by JS) -->
-    <div class="mv-kpis">
-        <div class="mv-kpi blue">
-            <div class="mv-kpi-icon"><i class="fas fa-boxes"></i></div>
+    <!-- KPIs -->
+    <div class="stats-container">
+        <div class="stat-card" style="border-left-color: #64748b;">
+            <div class="stat-icon" style="background:#f1f5f9; color:#475569;"><i class="fas fa-boxes"></i></div>
             <div>
-                <div class="mv-kpi-label">Total Productos</div>
-                <div class="mv-kpi-value" id="kpiTotal">—</div>
+                <div class="stat-val" id="kpiTotal">—</div>
+                <div class="stat-lbl">Total Productos</div>
             </div>
         </div>
-        <div class="mv-kpi green">
-            <div class="mv-kpi-icon"><i class="fas fa-arrow-up"></i></div>
+        <div class="stat-card" style="border-left-color: #10b981;">
+            <div class="stat-icon" style="background:#dcfce7; color:#15803d;"><i class="fas fa-arrow-up"></i></div>
             <div>
-                <div class="mv-kpi-label">Entradas Hoy</div>
-                <div class="mv-kpi-value" id="kpiEntradas">—</div>
+                <div class="stat-val" id="kpiEntradas">—</div>
+                <div class="stat-lbl">Entradas Hoy</div>
             </div>
         </div>
-        <div class="mv-kpi red">
-            <div class="mv-kpi-icon"><i class="fas fa-arrow-down"></i></div>
+        <div class="stat-card" style="border-left-color: #ef4444;">
+            <div class="stat-icon" style="background:#fee2e2; color:#b91c1c;"><i class="fas fa-arrow-down"></i></div>
             <div>
-                <div class="mv-kpi-label">Salidas Hoy</div>
-                <div class="mv-kpi-value" id="kpiSalidas">—</div>
+                <div class="stat-val" id="kpiSalidas">—</div>
+                <div class="stat-lbl">Salidas Hoy</div>
             </div>
         </div>
-        <div class="mv-kpi amber">
-            <div class="mv-kpi-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="stat-card" style="border-left-color: #f59e0b;">
+            <div class="stat-icon" style="background:#fef3c7; color:#d97706;"><i class="fas fa-exclamation-triangle"></i></div>
             <div>
-                <div class="mv-kpi-label">Bajo Mínimo</div>
-                <div class="mv-kpi-value" id="kpiBajoMinimo">—</div>
+                <div class="stat-val" id="kpiBajoMinimo">—</div>
+                <div class="stat-lbl">Bajo Mínimo</div>
             </div>
         </div>
     </div>
 
     <!-- Tabs -->
-    <div class="mv-tabs">
-        <button class="mv-tab active" data-tab="historial">
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="historial">
             <i class="fas fa-history"></i> Historial
         </button>
-        <button class="mv-tab" data-tab="entrada">
+        <button class="tab-btn" data-tab="entrada">
             <i class="fas fa-arrow-up"></i> Entrada de Stock
         </button>
-        <button class="mv-tab" data-tab="ajuste">
+        <button class="tab-btn" data-tab="ajuste">
             <i class="fas fa-sliders-h"></i> Ajuste
         </button>
-        <button class="mv-tab" data-tab="bajo-minimo">
+        <button class="tab-btn" data-tab="bajo-minimo">
             <i class="fas fa-exclamation-triangle"></i> Stock Bajo
-            <span id="badgeBajoMinimo" style="display:none; background:#dc2626; color:white; font-size:0.68rem; padding:1px 6px; border-radius:10px; margin-left:2px;"></span>
+            <span id="badgeBajoMinimo" style="display:none; background:#dc2626; color:white; font-size:0.7rem; padding:2px 6px; border-radius:10px; margin-left:4px; font-weight:800;"></span>
         </button>
     </div>
 
     <!-- Panel: Historial -->
     <div class="mv-panel active" id="panel-historial">
-        <div class="glass-card">
-            <div class="mv-filters">
-                <select id="filtroTipo" class="mv-select">
-                    <option value="">Todos los tipos</option>
-                    <option value="ENTRADA">Entradas</option>
-                    <option value="SALIDA">Salidas</option>
-                    <option value="AJUSTE">Ajustes</option>
-                    <option value="TRASPASO">Traspasos</option>
-                </select>
-                <select id="filtroProducto" class="mv-select" style="min-width:220px;">
-                    <option value="">Todos los productos</option>
-                    {% for p in productos %}
-                    <option value="{{ p.id }}">{{ p.descripcion }}</option>
-                    {% endfor %}
-                </select>
-                <button id="btnRefreshHistorial" class="mv-select" style="cursor:pointer; background:#eff6ff; color:#0b5fb4; border-color:#bfdbfe;">
-                    <i class="fas fa-sync-alt" style="margin-right:4px;"></i> Actualizar
+        <div class="table-card">
+            <div class="table-header-ops">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <select id="filtroTipo" class="form-control" style="width:200px;">
+                        <option value="">Todos los tipos</option>
+                        <option value="ENTRADA">Entradas</option>
+                        <option value="SALIDA">Salidas</option>
+                        <option value="AJUSTE">Ajustes</option>
+                        <option value="TRASPASO">Traspasos</option>
+                    </select>
+                    <select id="filtroProducto" class="form-control" style="width:250px;">
+                        <option value="">Todos los productos</option>
+                        {% for p in productos %}
+                        <option value="{{ p.id }}">{{ p.descripcion }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button id="btnRefreshHistorial" class="form-control" style="width:auto; cursor:pointer; background:white; font-weight:600; color:#4b5563;">
+                    <i class="fas fa-sync-alt"></i> Actualizar
                 </button>
             </div>
-            <div class="mv-table-wrap">
-                <table class="mv-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Fecha</th>
-                            <th>Tipo</th>
-                            <th>Producto</th>
-                            <th>Cantidad</th>
-                            <th>Motivo</th>
-                            <th>Usuario</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbodyHistorial">
-                        <tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">Cargando...</td></tr>
-                    </tbody>
-                </table>
-            </div>
+            
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Producto</th>
+                        <th style="text-align:right;">Cantidad</th>
+                        <th>Motivo</th>
+                        <th>Usuario</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyHistorial">
+                    <tr><td colspan="7" style="text-align:center; padding:3rem; color:#9ca3af;"><i class="fas fa-spinner fa-spin"></i> Cargando historial...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
     <!-- Panel: Entrada -->
     <div class="mv-panel" id="panel-entrada">
-        <div class="glass-card mv-form-panel">
-            <div class="mv-form-header entrada">
-                <div class="mv-form-icon green"><i class="fas fa-arrow-up"></i></div>
-                <div class="mv-form-header-text">
-                    <h3>Registrar Entrada de Stock</h3>
-                    <p>Agrega unidades al inventario por compra, recepción o devolución</p>
+        <div class="table-card">
+            
+            <div style="background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-bottom: 1px solid #e5e7eb; padding: 1.5rem 2rem; display: flex; align-items: center; gap: 1rem;">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: #16a34a; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 4px 12px rgba(22,163,74,0.3); flex-shrink: 0;">
+                    <i class="fas fa-arrow-up"></i>
+                </div>
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 800; color: #111827; margin: 0;">Registrar Entrada de Stock</h3>
+                    <p style="color: #4b5563; font-size: 0.9rem; margin: 0.2rem 0 0;">Agrega unidades al inventario por compra, recepción o devolución.</p>
                 </div>
             </div>
-            <form id="formEntrada">
-                <div class="mv-field-group">
+            
+            <form id="formEntrada" style="padding: 2rem;">
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Producto <span style="color:#ef4444">*</span></label>
+                    <select id="entradaProducto" class="premium-input w-full" style="width: 100%; cursor: pointer;" required>
+                        <option value="">— Selecciona un producto —</option>
+                        {% for p in productos %}
+                        <option value="{{ p.id }}" data-stock="{{ p.stock_actual }}" data-unidad="{{ p.unidad }}">
+                            {{ p.descripcion }} ({{ p.codigo }}) · Stock actual: {{ p.stock_actual }} {{ p.unidad }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
                     <div>
-                        <label class="mv-label">Producto *</label>
-                        <select id="entradaProducto" class="mv-input" required>
-                            <option value="">— Selecciona un producto —</option>
-                            {% for p in productos %}
-                            <option value="{{ p.id }}" data-stock="{{ p.stock_actual }}" data-unidad="{{ p.unidad }}">
-                                {{ p.descripcion }} ({{ p.codigo }}) · {{ p.stock_actual }} {{ p.unidad }}
-                            </option>
+                        <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Cantidad a ingresar <span style="color:#ef4444">*</span></label>
+                        <input type="number" id="entradaCantidad" class="premium-input w-full" style="width: 100%; font-weight: 700; color: #0b5fb4;" min="0.01" step="0.01" placeholder="Ej. 10" required>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Bodega destino</label>
+                        <select id="entradaAlmacen" class="premium-input w-full" style="width: 100%;">
+                            <option value="">Sin especificar (General)</option>
+                            {% for a in almacenes %}
+                            <option value="{{ a.id }}">{{ a.nombre }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mv-grid2">
-                        <div>
-                            <label class="mv-label">Cantidad a ingresar *</label>
-                            <input type="number" id="entradaCantidad" class="mv-input" min="0.01" step="0.01" placeholder="0" required>
-                        </div>
-                        <div>
-                            <label class="mv-label">Bodega destino</label>
-                            <select id="entradaAlmacen" class="mv-input">
-                                <option value="">Sin especificar</option>
-                                {% for a in almacenes %}
-                                <option value="{{ a.id }}">{{ a.nombre }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="mv-label">Motivo / Referencia</label>
-                        <input type="text" id="entradaMotivo" class="mv-input" placeholder="Ej. Compra, Remisión #123, Devolución...">
-                    </div>
                 </div>
-                <div id="entradaStockPreview" style="display:none; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:9px; padding:0.8rem 1rem; margin-bottom:1rem; font-size:0.85rem; color:#15803d; font-weight:500;"></div>
-                <div class="mv-form-footer">
-                    <span class="mv-form-tip"><i class="fas fa-info-circle" style="color:#0b5fb4;"></i> El stock se actualizará al confirmar.</span>
-                    <button type="submit" class="btn-mv-submit">
+                
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Motivo / Referencia</label>
+                    <input type="text" id="entradaMotivo" class="premium-input w-full" style="width: 100%;" placeholder="Ej. Compra Factura #1234, Devolución...">
+                </div>
+                
+                <div id="entradaStockPreview" style="display:none; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 1.25rem; margin-bottom: 2rem; color: #065f46; font-size: 0.95rem; align-items: center; gap: 10px;"></div>
+                
+                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e5e7eb; padding-top:1.5rem;">
+                    <span style="font-size:0.85rem; color:#6b7280; font-weight: 500;"><i class="fas fa-info-circle text-blue-500" style="margin-right:4px;"></i> El stock se actualizará al confirmar.</span>
+                    <button type="submit" class="btn-glow btn-glow-emerald" style="padding: 0.75rem 1.5rem; border-radius:8px;">
                         <i class="fas fa-plus"></i> Registrar Entrada
                     </button>
                 </div>
@@ -326,69 +250,87 @@
 
     <!-- Panel: Ajuste -->
     <div class="mv-panel" id="panel-ajuste">
-        <div class="glass-card mv-form-panel">
-            <div class="mv-form-header ajuste">
-                <div class="mv-form-icon amber"><i class="fas fa-sliders-h"></i></div>
-                <div class="mv-form-header-text">
-                    <h3>Ajuste de Inventario</h3>
-                    <p>Corrección de stock tras conteo físico, merma o daño</p>
+        <div class="table-card">
+            
+            <div style="background: linear-gradient(135deg, #fffbeb, #fef3c7); border-bottom: 1px solid #e5e7eb; padding: 1.5rem 2rem; display: flex; align-items: center; gap: 1rem;">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: #d97706; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 4px 12px rgba(217,119,6,0.3); flex-shrink: 0;">
+                    <i class="fas fa-sliders-h"></i>
+                </div>
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 800; color: #111827; margin: 0;">Ajuste de Inventario</h3>
+                    <p style="color: #4b5563; font-size: 0.9rem; margin: 0.2rem 0 0;">Corrección manual de stock tras conteo físico, merma o daño.</p>
                 </div>
             </div>
+            
+            <div style="padding: 2rem;">
+                <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 2rem; color: #92400e; font-size: 0.9rem; display: flex; gap: 12px; align-items: center;">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 1.1rem; color: #d97706;"></i>
+                    <span>Ingresa un valor <strong>positivo</strong> para sumar stock o <strong>negativo</strong> para restarlo (ej. -5).</span>
+                </div>
 
-            <div style="display:flex; gap:0.75rem; background:#fffbeb; border:1px solid #fde68a; border-radius:9px; padding:0.75rem 1rem; margin-bottom:1.25rem; font-size:0.82rem; color:#92400e;">
-                <i class="fas fa-info-circle" style="margin-top:1px; flex-shrink:0;"></i>
-                <span>Ingresa valores <strong>positivos</strong> para aumentar stock o <strong>negativos</strong> para reducirlo.</span>
-            </div>
-
-            <form id="formAjuste">
-                <div class="mv-field-group">
-                    <div>
-                        <label class="mv-label">Producto *</label>
-                        <select id="ajusteProducto" class="mv-input amber" required>
+                <form id="formAjuste">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Producto a ajustar <span style="color:#ef4444">*</span></label>
+                        <select id="ajusteProducto" class="premium-input w-full" style="width: 100%; cursor: pointer;" required>
                             <option value="">— Selecciona un producto —</option>
                             {% for p in productos %}
                             <option value="{{ p.id }}" data-stock="{{ p.stock_actual }}" data-unidad="{{ p.unidad }}">
-                                {{ p.descripcion }} ({{ p.codigo }}) · {{ p.stock_actual }} {{ p.unidad }}
+                                {{ p.descripcion }} ({{ p.codigo }}) · Stock actual: {{ p.stock_actual }} {{ p.unidad }}
                             </option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mv-grid2">
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
                         <div>
-                            <label class="mv-label">Ajuste de cantidad *</label>
-                            <input type="number" id="ajusteCantidad" class="mv-input amber" step="0.01" placeholder="Ej. −5 o +10" required>
+                            <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Ajuste de cantidad <span style="color:#ef4444">*</span></label>
+                            <input type="number" id="ajusteCantidad" class="premium-input w-full" style="width: 100%; font-weight: 700; color: #d97706;" step="0.01" placeholder="Ej. -5 o +10" required>
                         </div>
-                        <div style="display:flex; flex-direction:column; justify-content:flex-end;">
-                            <label class="mv-label">Stock resultante</label>
-                            <div id="ajusteResultado" class="mv-result-box">—</div>
+                        <div>
+                            <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Stock Resultante Estimado</label>
+                            <div id="ajusteResultado" style="padding: 0.75rem 1rem; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; font-weight: 800; color: #6b7280; display: flex; align-items: center; height: 46px;">—</div>
                         </div>
                     </div>
-                    <div>
-                        <label class="mv-label">Justificación *</label>
-                        <input type="text" id="ajusteMotivo" class="mv-input amber" placeholder="Ej. Conteo físico, Merma, Daño en almacén..." required>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display:block; font-size: 0.85rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem;">Justificación <span style="color:#ef4444">*</span></label>
+                        <input type="text" id="ajusteMotivo" class="premium-input w-full" style="width: 100%;" placeholder="Ej. Conteo físico, Merma, Daño en anaquel..." required>
                     </div>
-                </div>
-                <div class="mv-form-footer">
-                    <span class="mv-form-tip"><i class="fas fa-lock" style="color:#d97706;"></i> Requiere justificación para auditoría.</span>
-                    <button type="submit" class="btn-mv-submit amber">
-                        <i class="fas fa-check"></i> Aplicar Ajuste
-                    </button>
-                </div>
-            </form>
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e5e7eb; padding-top:1.5rem;">
+                        <span style="font-size:0.85rem; color:#6b7280; font-weight:500;"><i class="fas fa-lock text-amber-500" style="margin-right:4px;"></i> Quedará registrado en la bitácora obligatoriamente.</span>
+                        <button type="submit" class="btn-glow" style="background: linear-gradient(135deg, #d97706, #b45309); box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35); padding: 0.75rem 1.5rem; border-radius: 8px;">
+                            <i class="fas fa-check"></i> Aplicar Ajuste
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Panel: Bajo Mínimo -->
     <div class="mv-panel" id="panel-bajo-minimo">
-        <div id="bajominimoList">
-            <div style="text-align:center; padding:2rem; color:var(--text-muted);">
-                <i class="fas fa-spinner fa-spin" style="font-size:1.5rem; display:block; margin-bottom:0.5rem;"></i>
-                Cargando...
+        <div class="table-card">
+            <div style="background: linear-gradient(135deg, #fef2f2, #fee2e2); border-bottom: 1px solid #e5e7eb; padding: 1.5rem 2rem; display: flex; align-items: center; gap: 1rem;">
+                <div style="width: 48px; height: 48px; border-radius: 12px; background: #ef4444; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 4px 12px rgba(239,68,68,0.3); flex-shrink: 0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                    <h3 style="font-size: 1.25rem; font-weight: 800; color: #111827; margin: 0;">Productos con Stock Bajo</h3>
+                    <p style="color: #4b5563; font-size: 0.9rem; margin: 0.2rem 0 0;">Artículos que requieren reabastecimiento pronto.</p>
+                </div>
+            </div>
+            
+            <div id="bajominimoList" style="padding: 2rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="text-align:center; padding:3rem; color:#9ca3af;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:2rem; margin-bottom:1rem; display:block;"></i>
+                    Cargando productos con stock bajo...
+                </div>
             </div>
         </div>
     </div>
 
 </div>
 
-<script src="{{ url_for('static', filename='js/inventario_movimientos.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/inventario_movimientos.js') }}?v=10"></script>
 {% endblock %}

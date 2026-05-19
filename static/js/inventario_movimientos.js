@@ -19,9 +19,9 @@ function loadProductos() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────────────────
-document.querySelectorAll('.mv-tab').forEach(btn => {
+document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.mv-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.mv-panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         const panel = document.getElementById('panel-' + btn.dataset.tab);
@@ -58,10 +58,14 @@ async function apiFetch(url) {
 }
 
 async function apiPost(url, body) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     const r = await fetch(url, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
         body: JSON.stringify(body)
     });
     if (!r.ok) {
@@ -136,29 +140,34 @@ async function loadHistorial() {
         await loadProductos();
         const data = await apiFetch(url);
         if (!data.length) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">Sin movimientos para los filtros seleccionados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:3rem;color:#9ca3af;"><i class="fas fa-inbox" style="font-size:1.5rem; margin-bottom:0.5rem;"></i><br>Sin movimientos para los filtros seleccionados.</td></tr>`;
             return;
         }
         tbody.innerHTML = data.map((m, i) => {
             const prod = PRODUCTOS_MAP[m.producto_id] || {};
             const cant = parseFloat(m.cantidad);
             const cantStr = (cant > 0 ? '+' : '') + fmtNum(cant) + ' ' + (prod.unidad || '');
-            const cantColor = cant >= 0 ? '#15803d' : '#b91c1c';
+            const cantColor = cant > 0 ? '#15803d' : cant < 0 ? '#b91c1c' : '#d97706';
             return `<tr>
-                <td style="color:var(--text-muted)">${i + 1}</td>
-                <td>${fmtFecha(m.fecha)}</td>
+                <td style="color:#6b7280; font-weight:600;">${i + 1}</td>
+                <td>
+                    <div style="font-weight:600; color:#374151;">${fmtFecha(m.fecha).split(' ')[0]}</div>
+                    <div style="font-size:0.75rem; color:#9ca3af;">${fmtFecha(m.fecha).split(' ')[1]}</div>
+                </td>
                 <td>${tipoBadge(m.tipo)}</td>
                 <td>
-                    <div style="font-weight:600;">${prod.descripcion || '—'}</div>
-                    <div style="font-size:0.72rem;color:var(--text-muted);">${prod.codigo || ''}</div>
+                    <div style="font-weight:700; color:#111827;">${prod.descripcion || '—'}</div>
+                    <div style="font-size:0.75rem; color:#6b7280; background:#f3f4f6; display:inline-block; padding:1px 6px; border-radius:4px; margin-top:2px;">${prod.codigo || ''}</div>
                 </td>
-                <td style="font-weight:700;color:${cantColor};font-variant-numeric:tabular-nums;">${cantStr}</td>
-                <td style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;">${m.motivo || '—'}</td>
-                <td style="color:var(--text-muted);">Usr #${m.usuario_id}</td>
+                <td style="text-align:right; font-weight:800; color:${cantColor}; font-size:1.05rem;">${cantStr}</td>
+                <td style="color:#4b5563; max-width:200px; white-space:normal;">${m.motivo || '—'}</td>
+                <td>
+                    <span style="font-size:0.8rem; font-weight:600; color:#6b7280; background:#f1f5f9; padding:4px 8px; border-radius:6px;"><i class="fas fa-user-circle"></i> Usr #${m.usuario_id}</span>
+                </td>
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#dc2626;">Error al cargar historial.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:#dc2626;"><i class="fas fa-exclamation-triangle" style="font-size:1.5rem; margin-bottom:0.5rem;"></i> Error al cargar historial.</td></tr>`;
     }
 }
 
@@ -281,35 +290,46 @@ async function loadBajoMinimo() {
     try {
         const data = await apiFetch(`${API}/productos/bajo-minimo/`);
         if (!data.length) {
-            container.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--text-muted);">
-                <i class="fas fa-check-circle" style="font-size:2rem;display:block;margin-bottom:0.75rem;color:#16a34a;"></i>
-                <strong>Todo en orden</strong><br>Ningún producto está por debajo del stock mínimo.
+            container.innerHTML = `<div style="text-align:center;padding:4rem 2rem;color:#9ca3af;background:transparent;">
+                <i class="fas fa-check-circle" style="font-size:3rem;display:block;margin-bottom:1rem;color:#10b981;"></i>
+                <div style="font-size:1.1rem; font-weight:700; color:#111827; margin-bottom:0.25rem;">Inventario Saludable</div>
+                Ningún producto está por debajo del stock mínimo.
             </div>`;
             return;
         }
         container.innerHTML = data.map(p => {
             const pct = p.stock_minimo > 0 ? Math.min(100, Math.round((p.stock_actual / p.stock_minimo) * 100)) : 0;
             const warn = pct > 50;
-            return `<div class="stock-bajo-card">
-                <div style="min-width:0; flex:1;">
-                    <div style="font-weight:700;font-size:0.92rem;">${p.descripcion}</div>
-                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:1px;">${p.codigo} · ${p.unidad}</div>
-                    <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
-                        <div class="stock-bar-bg" style="flex:1;">
-                            <div class="stock-bar-fill${warn ? ' warn' : ''}" style="width:${pct}%;"></div>
+            return `<div style="display:flex; align-items:center; gap:1.25rem; background:white; border-radius:16px; padding:1.25rem 1.5rem; border:1px solid #fee2e2; border-left:4px solid #ef4444; margin-bottom:1rem; box-shadow:0 4px 15px rgba(0,0,0,0.03); transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.06)';" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 15px rgba(0,0,0,0.03)';">
+                
+                <div style="width: 52px; height: 52px; background: #fef2f2; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #ef4444; font-size: 1.5rem; flex-shrink:0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                
+                <div style="flex:1; min-width:0;">
+                    <div style="font-weight:800; font-size:1.05rem; color:#111827; margin-bottom:0.25rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.descripcion}</div>
+                    <div style="font-size:0.75rem; color:#6b7280; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">
+                        ${p.codigo} &nbsp;&bull;&nbsp; <span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; color:#4b5563;">${p.unidad}</span>
+                    </div>
+                    
+                    <div style="margin-top:12px; display:flex; align-items:center; gap:12px;">
+                        <div style="flex:1; height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden;">
+                            <div style="height:100%; background:${warn ? '#f59e0b' : '#ef4444'}; border-radius:4px; width:${pct}%;"></div>
                         </div>
-                        <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${pct}%</span>
+                        <span style="font-size:0.75rem; color:#6b7280; font-weight:700;">${pct}% de la meta</span>
                     </div>
                 </div>
-                <div style="text-align:right;flex-shrink:0;">
-                    <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Stock</div>
-                    <div style="font-size:1.1rem;font-weight:800;color:#dc2626;">${fmtNum(p.stock_actual)}</div>
-                    <div style="font-size:0.72rem;color:var(--text-muted);">mín: ${fmtNum(p.stock_minimo)}</div>
+                
+                <div style="text-align:right; flex-shrink:0; padding-left:1.5rem; border-left:1px solid #f3f4f6;">
+                    <div style="font-size:0.75rem; color:#6b7280; text-transform:uppercase; font-weight:700; letter-spacing:0.05em; margin-bottom:4px;">Stock Actual</div>
+                    <div style="font-size:1.8rem; font-weight:800; color:#ef4444; line-height:1; letter-spacing:-0.03em;">${fmtNum(p.stock_actual)}</div>
+                    <div style="font-size:0.75rem; color:#9ca3af; font-weight:600; margin-top:6px;">Mínimo requerido: ${fmtNum(p.stock_minimo)}</div>
                 </div>
+                
             </div>`;
         }).join('');
     } catch (e) {
-        container.innerHTML = `<div style="color:#dc2626;padding:1rem;">Error al cargar stock bajo.</div>`;
+        container.innerHTML = `<div style="color:#dc2626;padding:2rem;text-align:center;background:transparent;"><i class="fas fa-times-circle" style="font-size:1.5rem; margin-bottom:0.5rem;"></i><br>Error al cargar stock bajo.</div>`;
     }
 }
 
