@@ -24,35 +24,81 @@
     /** Guarda el estado en cookie (para el servidor) y localStorage (respaldo). */
     function saveState(collapsed) {
         var val = collapsed ? '1' : '0';
-        // Cookie de 1 año, path raíz, SameSite=Strict
-        var expires = new Date(Date.now() + 365 * 24 * 3600 * 1000).toUTCString();
+        var oneYear = 365 * 24 * 3600;
+        var expires = new Date(Date.now() + oneYear * 1000).toUTCString();
+        // SameSite=Lax: más compatible que Strict — algunos navegadores y proxies
+        // no persisten cookies Strict de forma fiable entre sesiones.
+        // max-age + expires: doble cinto, max-age para navegadores modernos, expires
+        // como fallback para los viejos.
         document.cookie = 'sidebar_collapsed=' + val
             + '; expires=' + expires
-            + '; path=/; SameSite=Strict';
+            + '; max-age=' + oneYear
+            + '; path=/; SameSite=Lax';
         try { localStorage.setItem('sidebar-collapsed', String(collapsed)); } catch (_) {}
     }
+
+    // Restore desde localStorage si la cookie se perdió pero el estado local persiste.
+    // Esto cubre casos donde el navegador limpia cookies pero respeta localStorage.
+    try {
+        var lsState = localStorage.getItem('sidebar-collapsed');
+        if (lsState === 'true' || lsState === 'false') {
+            var wantCollapsed = (lsState === 'true');
+            var isCollapsedNow = sidebar.classList.contains('collapsed');
+            if (wantCollapsed !== isCollapsedNow) {
+                // Render del servidor no coincide con la preferencia local → sincronizar
+                // y reescribir la cookie para los siguientes requests.
+                sidebar.classList.toggle('collapsed', wantCollapsed);
+                saveState(wantCollapsed);
+            }
+        }
+    } catch (_) {}
 
     toggleBtn.addEventListener('click', function () {
         var isCollapsed = sidebar.classList.toggle('collapsed');
         saveState(isCollapsed);
     });
 
-    // Scroll automático al ítem activo
-    var activeItem = document.querySelector('#sidebar-menu [data-active="true"]');
+    // ── Persistencia del scroll del menú ──────────────────────────
+    // Evita el "brinco" al cambiar de página: la posición del scroll del
+    // menú se guarda en sessionStorage y se restaura en cada navegación.
+    // Solo si no hay posición guardada (primera visita en la sesión),
+    // centramos el ítem activo.
     var menu       = document.getElementById('sidebar-menu');
-    if (activeItem && menu) {
-        var attempts = 0;
-        var id = setInterval(function () {
-            attempts++;
-            if (menu.scrollHeight > menu.clientHeight || attempts > 30) {
-                clearInterval(id);
-                var top = activeItem.offsetTop;
-                var h   = menu.clientHeight;
-                var ih  = activeItem.clientHeight;
-                if (top > h / 2) {
-                    menu.scrollTop = top - h / 2 + ih / 2;
+    var activeItem = document.querySelector('#sidebar-menu [data-active="true"]');
+    var SCROLL_KEY = 'sidebar-menu-scroll';
+
+    if (menu) {
+        // Restaurar inmediatamente y de forma síncrona (antes del primer paint
+        // útil) para que el usuario no vea el menú en posición 0 y luego saltar.
+        var savedScroll = null;
+        try { savedScroll = sessionStorage.getItem(SCROLL_KEY); } catch (_) {}
+
+        if (savedScroll !== null) {
+            menu.scrollTop = parseInt(savedScroll, 10) || 0;
+        } else if (activeItem) {
+            // Primera visita: solo scrollear si el activo está fuera del viewport visible.
+            // Usamos scrollIntoView con block:'nearest' que no mueve si ya está visible.
+            // Lo hacemos en el próximo frame para que el navegador haya pintado layout.
+            requestAnimationFrame(function () {
+                var aTop    = activeItem.offsetTop;
+                var aBottom = aTop + activeItem.clientHeight;
+                var vTop    = menu.scrollTop;
+                var vBottom = vTop + menu.clientHeight;
+                if (aTop < vTop || aBottom > vBottom) {
+                    activeItem.scrollIntoView({ block: 'center', behavior: 'auto' });
                 }
-            }
-        }, 20);
+            });
+        }
+
+        // Persistir scroll: cada vez que el usuario rueda el menú,
+        // guardamos la posición (con throttle para no saturar).
+        var scrollTimer = null;
+        menu.addEventListener('scroll', function () {
+            if (scrollTimer) return;
+            scrollTimer = setTimeout(function () {
+                try { sessionStorage.setItem(SCROLL_KEY, String(menu.scrollTop)); } catch (_) {}
+                scrollTimer = null;
+            }, 80);
+        });
     }
 })();
