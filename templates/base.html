@@ -7,7 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='icono.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=7">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
     {% block head %}{% endblock %}
 </head>
@@ -145,7 +145,7 @@
         {% block content %}{% endblock %}
     </div>
 
-    <script src="{{ url_for('static', filename='js/sidebar.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}?v=5"></script>
     <script src="{{ url_for('static', filename='js/no_dblclick.js') }}"></script>
     <script src="{{ url_for('static', filename='js/session_interceptor.js') }}?v=3"></script>
     <script src="{{ url_for('static', filename='js/logout-confirm.js') }}?v=1"></script>

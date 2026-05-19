@@ -196,6 +196,10 @@ body.sidebar-pre-collapsed #sidebar {
     white-space: nowrap;
     overflow: hidden;
     letter-spacing: 0.01em;
+    /* Mantiene el tamaño natural del item aunque no quepa en pantalla.
+       El #sidebar-menu ya scrollea (overflow-y: auto), así que es mejor
+       scrollear que aplastar los iconos. */
+    flex-shrink: 0;
 }
 
 .sidebar-link:hover {
