@@ -11,9 +11,21 @@ bp = Blueprint('main', __name__)
 @bp.route('/')
 @login_required
 def home():
-    if session.get('role') == 'solicitante_material':
-        return redirect(url_for('inventario_ui.solicitar'))
-        
+    role = session.get('role')
+
+    # Redirigir según rol a su pantalla principal (móvil o web según user-agent).
+    # Replica la misma lógica de auth.login para que al volver con refresh token
+    # el usuario aterrice en su pantalla correcta y no en el dashboard de admin.
+    if role in ('inventario', 'solicitante_material', 'coordinador'):
+        ua = request.user_agent
+        is_mobile = ua.platform in ['android', 'iphone', 'ipad'] or 'mobi' in (ua.string or '').lower()
+        if role == 'inventario':
+            return redirect(url_for('inventario_ui.movil') if is_mobile else url_for('inventario_ui.web'))
+        if role == 'solicitante_material':
+            return redirect(url_for('inventario_ui.solicitar'))
+        if role == 'coordinador':
+            return redirect(url_for('horas.movil') if is_mobile else url_for('horas.index'))
+
     current_month = datetime.now().month
     current_year = datetime.now().year
 

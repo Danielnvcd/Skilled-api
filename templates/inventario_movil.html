@@ -4,7 +4,7 @@
 
 {% block head %}
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_movil.css') }}?v=3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_movil.css') }}?v=4">
 <meta name="theme-color" content="#eff6ff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -100,6 +100,134 @@
                     <span>Cancelar escaneo</span>
                 </button>
             </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ VIEW: MENU POST-SCAN ═══ -->
+<section id="view-menu" class="view">
+    <header class="app-header">
+        <button id="btn-menu-back" class="btn-icon" title="Volver">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+            </svg>
+        </button>
+        <h2 class="header-title">Estante</h2>
+        <div style="width:44px"></div>
+    </header>
+
+    <div class="form-content">
+        <div class="movement-card">
+            <div>
+                <div class="warehouse-badge" id="menu-almacen-badge">Almacén</div>
+                <h2 class="warehouse-name" id="menu-estante-nombre" style="margin-top: 8px;">---</h2>
+                <p class="menu-estante-desc" id="menu-estante-desc"></p>
+            </div>
+
+            <div class="menu-grid">
+                <button type="button" class="menu-card menu-card-blue" data-action="ver-productos">
+                    <div class="menu-card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                            <line x1="12" y1="22.08" x2="12" y2="12"/>
+                        </svg>
+                    </div>
+                    <span class="menu-card-label">Ver productos</span>
+                    <span class="menu-card-sub" id="menu-count-productos">—</span>
+                </button>
+
+                <button type="button" class="menu-card menu-card-green" data-action="ENTRADA">
+                    <div class="menu-card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14"/>
+                            <path d="m19 12-7 7-7-7"/>
+                        </svg>
+                    </div>
+                    <span class="menu-card-label">Entrada</span>
+                    <span class="menu-card-sub">Sumar stock</span>
+                </button>
+
+                <button type="button" class="menu-card menu-card-red" data-action="SALIDA">
+                    <div class="menu-card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 19V5"/>
+                            <path d="m5 12 7-7 7 7"/>
+                        </svg>
+                    </div>
+                    <span class="menu-card-label">Salida</span>
+                    <span class="menu-card-sub">Restar stock</span>
+                </button>
+
+                <button type="button" class="menu-card menu-card-yellow" data-action="AJUSTE">
+                    <div class="menu-card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="4" y1="21" x2="4" y2="14"/>
+                            <line x1="4" y1="10" x2="4" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12" y2="3"/>
+                            <line x1="20" y1="21" x2="20" y2="16"/>
+                            <line x1="20" y1="12" x2="20" y2="3"/>
+                            <line x1="1" y1="14" x2="7" y2="14"/>
+                            <line x1="9" y1="8" x2="15" y2="8"/>
+                            <line x1="17" y1="16" x2="23" y2="16"/>
+                        </svg>
+                    </div>
+                    <span class="menu-card-label">Ajuste</span>
+                    <span class="menu-card-sub">Corregir stock</span>
+                </button>
+            </div>
+
+            <button id="btn-menu-scan-other" class="btn btn-ghost btn-full">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                </svg>
+                <span>Escanear otro estante</span>
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ VIEW: PRODUCTS LIST ═══ -->
+<section id="view-products" class="view">
+    <header class="app-header">
+        <button id="btn-products-back" class="btn-icon" title="Volver">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+            </svg>
+        </button>
+        <h2 class="header-title" id="products-header-title">Productos</h2>
+        <div style="width:44px"></div>
+    </header>
+
+    <div class="products-content">
+        <div class="products-search-wrap">
+            <svg class="products-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="products-search" class="products-search-input" placeholder="Buscar por código o descripción…">
+        </div>
+
+        <div id="products-list" class="products-list">
+            <!-- Render dinámico -->
+        </div>
+
+        <div id="products-empty" class="products-empty hidden">
+            <p>Sin productos para mostrar.</p>
         </div>
     </div>
 </section>
@@ -208,5 +336,5 @@
 
 {% block scripts %}
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+" crossorigin="anonymous"></script>
-<script src="{{ url_for('static', filename='js/inventario_movil.js') }}?v=14"></script>
+<script src="{{ url_for('static', filename='js/inventario_movil.js') }}?v=15"></script>
 {% endblock %}

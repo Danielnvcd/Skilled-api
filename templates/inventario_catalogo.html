@@ -3,59 +3,31 @@
 {% block title %}Catálogo de Materiales — Skilled{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=35">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/inventario_web.css') }}?v=42">
 {% endblock %}
 
 {% block content %}
 <div class="inventory-management-wrapper">
 
     <!-- Header Section -->
-    <div class="header-section">
-        <div class="header-titles">
-            <h1 class="main-title">Catálogo de Materiales</h1>
-            <p class="subtitle">Gestión centralizada de stock y familias de productos</p>
-        </div>
-        <!-- Ilustración decorativa -->
-        <div class="header-illustration">
-            <svg width="160" height="90" viewBox="0 0 160 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="8" y="30" width="44" height="44" rx="6" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
-                <path d="M8 44 L30 52 L52 44" stroke="#A5B4FC" stroke-width="1.5" fill="none"/>
-                <line x1="30" y1="30" x2="30" y2="52" stroke="#A5B4FC" stroke-width="1.5"/>
-                <text x="30" y="66" text-anchor="middle" font-size="8" fill="#6366F1" font-family="system-ui" font-weight="700">SKU</text>
-                <rect x="60" y="42" width="36" height="36" rx="5" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.5"/>
-                <path d="M60 54 L78 61 L96 54" stroke="#6EE7B7" stroke-width="1.5" fill="none"/>
-                <line x1="78" y1="42" x2="78" y2="61" stroke="#6EE7B7" stroke-width="1.5"/>
-                <text x="78" y="72" text-anchor="middle" font-size="7" fill="#059669" font-family="system-ui" font-weight="700">MAT</text>
-                <rect x="104" y="52" width="28" height="28" rx="4" fill="#FFF7ED" stroke="#FED7AA" stroke-width="1.5"/>
-                <path d="M104 61 L118 67 L132 61" stroke="#FBB97A" stroke-width="1.5" fill="none"/>
-                <line x1="118" y1="52" x2="118" y2="67" stroke="#FBB97A" stroke-width="1.5"/>
-                <line x1="4" y1="80" x2="152" y2="80" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="22" cy="83" r="3" fill="#D1D5DB"/>
-                <circle cx="40" cy="83" r="3" fill="#D1D5DB"/>
-                <circle cx="148" cy="20" r="2" fill="#A5B4FC"/>
-                <circle cx="6" cy="18" r="1.5" fill="#6EE7B7"/>
-                <circle cx="138" cy="36" r="1.5" fill="#FBB97A"/>
-            </svg>
+    <div style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h1 style="font-size: 1.5rem; font-weight: 800; color: #111827; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-boxes text-gray-400"></i> Catálogo de Materiales
+            </h1>
+            <p style="color: #6b7280; font-size: 0.95rem; margin: 0.25rem 0 0;">Gestión centralizada de stock y familias de productos.</p>
         </div>
         <div class="flex gap-3">
-            <a href="{{ url_for('inventario_ui.importar_materiales') }}" class="btn-glow" style="background:linear-gradient(135deg,#059669 0%,#047857 100%);box-shadow:0 4px 14px rgba(5,150,105,.3);text-decoration:none;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
+            <a href="{{ url_for('inventario_ui.importar_materiales') }}" class="corp-btn" style="text-decoration: none;">
+                <i class="fas fa-file-import" style="color: #10b981;"></i>
                 Importar Excel
             </a>
-            <button id="btnOpenModalCategoria" class="btn-glow" style="background:linear-gradient(135deg,#0b5fb4 0%,#094d8f 100%);box-shadow:0 4px 14px rgba(11,95,180,.35);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M4 20h4l10.5-10.5a1.5 1.5 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>
-                </svg>
+            <button id="btnOpenModalCategoria" class="corp-btn">
+                <i class="fas fa-folder-plus" style="color: #0b5fb4;"></i>
                 Nueva Categoría
             </button>
-            <button id="btnOpenModalProducto" class="btn-glow btn-glow-blue">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
+            <button id="btnOpenModalProducto" class="corp-btn">
+                <i class="fas fa-box-open" style="color: #0b5fb4;"></i>
                 Nuevo Producto
             </button>
         </div>
@@ -217,5 +189,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=37"></script>
+<script src="{{ url_for('static', filename='js/inventario_web.js') }}?v=41"></script>
 {% endblock %}

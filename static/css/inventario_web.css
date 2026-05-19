@@ -1045,3 +1045,163 @@
     transform: scale(1.1);
 }
 
+
+/* === CORPORATE DESIGN SYSTEM === */
+.corp-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    border: 1px solid #e5e7eb;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.corp-cat-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+.corp-cat-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transform: translateY(-2px);
+}
+.corp-shelf-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.2s;
+}
+.corp-shelf-card:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.corp-btn {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+}
+.corp-btn:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+.corp-action-btn {
+    background: white;
+    border: 1px solid #e5e7eb;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.corp-action-btn:hover {
+    color: #0b5fb4;
+    border-color: #0b5fb4;
+}
+.corp-action-btn-danger:hover {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+.corp-btn-primary {
+    background: #0b5fb4;
+    color: white;
+    border: none;
+    padding: 0 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 36px;
+}
+.corp-btn-primary:hover {
+    background: #084282;
+}
+.corp-add-cat-btn {
+    background: #f9fafb;
+    border: 2px dashed #d1d5db;
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 120px;
+    color: #6b7280;
+}
+.corp-add-cat-btn:hover {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+.corp-qr-btn {
+    background: #f3f4f6;
+    color: #4b5563;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+}
+.corp-qr-btn:hover {
+    background: #e5e7eb;
+}
+.corp-mini-action-btn {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 0.4rem;
+    transition: color 0.2s;
+}
+.corp-mini-action-btn:hover {
+    color: #0b5fb4;
+}
+.corp-mini-action-btn-danger:hover {
+    color: #ef4444;
+}
+.corp-prod-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+    transition: all 0.2s;
+}
+.corp-prod-card:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}

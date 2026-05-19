@@ -285,24 +285,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             : `<div class="product-card-icon" style="background:${cfg.bg};color:${cfg.color};">${cfg.svg}</div>`;
 
         return `
-        <div class="product-card">
-            ${thumb}
-            <div class="product-card-body">
-                <p class="product-card-name">${p.descripcion}</p>
-                <div class="product-card-meta">
-                    <span class="sku-tag">${p.codigo}</span>
-                    ${catLabel}
+        <div class="corp-prod-card">
+            <div style="width: 80px; flex-shrink: 0; background: ${p.imagen_url ? '#f9fafb' : cfg.bg}; color: ${cfg.color}; display: flex; align-items: center; justify-content: center; border-right: 1px solid #e5e7eb;">
+                ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.descripcion}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.outerHTML='<div style=\\'padding: 1.5rem;\\'>${cfg.svg}</div>'">` : `<div style="padding: 1.5rem;">${cfg.svg}</div>`}
+            </div>
+            <div style="flex: 1; min-width: 0; padding: 1rem; display: flex; flex-direction: column; justify-content: center;">
+                <p style="font-size: 0.95rem; font-weight: 700; color: #111827; margin: 0 0 0.25rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${p.descripcion}">${p.descripcion}</p>
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <span style="font-family: monospace; font-size: 0.75rem; font-weight: 600; color: #6b7280; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${p.codigo}</span>
+                    <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 12px; color: ${cfg.color}; background: ${cfg.bg};">${showCat ? p.categoria : p.unidad}</span>
                 </div>
             </div>
-            <div class="product-card-side">
-                <span class="stock-pill ${pillCls}">${bajo ? '⚠' : '✔'} ${stock.toFixed(0)} ${p.unidad}</span>
-                <div class="product-item-actions">
-                    <button class="action-btn action-btn-edit" data-id="${p.id}" data-action="edit-prod" title="Editar">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="action-btn action-btn-delete" data-id="${p.id}" data-nombre="${p.descripcion}" data-action="delete-prod" title="Eliminar">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                    </button>
+            <div style="flex-shrink: 0; padding: 1rem; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; border-left: 1px solid #f3f4f6; background: #fafafa;">
+                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; background: ${bajo ? '#fef2f2' : '#ecfdf5'}; color: ${bajo ? '#ef4444' : '#10b981'}; border: 1px solid ${bajo ? '#fca5a5' : '#a7f3d0'}; margin-bottom: 0.5rem;">
+                    <i class="fas ${bajo ? 'fa-exclamation-triangle' : 'fa-check'}"></i> ${stock.toFixed(0)} ${p.unidad}
+                </span>
+                <div style="display: flex; gap: 0.25rem;">
+                    <button class="corp-mini-action-btn action-btn-edit" data-id="${p.id}" data-action="edit-prod" title="Editar"><i class="fas fa-pen" style="font-size: 0.75rem;"></i></button>
+                    <button class="corp-mini-action-btn corp-mini-action-btn-danger action-btn-delete" data-id="${p.id}" data-nombre="${p.descripcion}" data-action="delete-prod" title="Eliminar"><i class="fas fa-trash" style="font-size: 0.75rem;"></i></button>
                 </div>
             </div>
         </div>`;
@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const itemsHTML = prods.map(p => prodCardHtml(p, false)).join('');
-            productsList.innerHTML = `<div class="seccion-productos-grid">${itemsHTML}</div>`;
+            productsList.innerHTML = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem;">${itemsHTML}</div>`;
             bindAcciones(productsList);
             bindImgFallback(productsList);
             return;
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             const itemsHTML = productos.map(p => prodCardHtml(p, true)).join('');
-            productsList.innerHTML = `<div class="seccion-productos-grid">${itemsHTML}</div>`;
+            productsList.innerHTML = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem;">${itemsHTML}</div>`;
             bindAcciones(productsList);
             bindImgFallback(productsList);
             return;
@@ -358,7 +358,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ];
 
         const linkBase = '/inventario/catalogo/';
-        let dashHtml = `<div class="dashboard-cats-grid">`;
+        let dashHtml = ``;
 
         catOrdenadas.forEach(cat => {
             const prods  = grupos[cat] || [];
@@ -368,17 +368,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const esVacia = prods.length === 0;
             dashHtml += `
-            <a href="${linkBase}${encodeURIComponent(cat)}" class="dash-cat-card ${esVacia ? 'dash-cat-card-empty' : ''}" style="--base-color:${cfg.color};">
-                <div class="dash-cat-bg-icon">${cfg.svg}</div>
-                <div class="dash-cat-content">
-                    <h3>${cat}</h3>
-                    <div class="dash-cat-metrics">${prods.length} <span class="text-sm font-normal opacity-80">Items</span></div>
+            <a href="${linkBase}${encodeURIComponent(cat)}" class="corp-cat-card">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                    <div style="width: 48px; height: 48px; border-radius: 10px; background: ${cfg.bg}; color: ${cfg.color}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        ${cfg.svg}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <h3 style="font-size: 1.1rem; font-weight: 800; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${cat}</h3>
+                        <div style="font-size: 0.85rem; font-weight: 600; color: #6b7280;">${prods.length} <span style="font-weight: 400;">Items</span></div>
+                    </div>
                 </div>
-                <div class="dash-cat-footer">
+                <div style="border-top: 1px solid #f3f4f6; padding-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: auto;">
                     ${esVacia
-                        ? `<span class="stat-badge" style="background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.2);">+ Agregar productos</span>`
-                        : `${ok > 0  ? `<span class="stat-badge ok">✔ ${ok} estables</span>` : ''}
-                           ${bajos>0 ? `<span class="stat-badge danger">⚠ ${bajos} reponer</span>` : ''}`
+                        ? `<span style="font-size: 0.7rem; font-weight: 600; color: #9ca3af; background: #f9fafb; padding: 2px 8px; border-radius: 12px; border: 1px dashed #d1d5db;">Vacío</span>`
+                        : `${ok > 0  ? `<span style="font-size: 0.7rem; font-weight: 700; color: #10b981; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 12px;"><i class="fas fa-check"></i> ${ok}</span>` : ''}
+                           ${bajos>0 ? `<span style="font-size: 0.7rem; font-weight: 700; color: #ef4444; background: #fef2f2; border: 1px solid #fca5a5; padding: 2px 8px; border-radius: 12px;"><i class="fas fa-exclamation-triangle"></i> ${bajos} bajos</span>` : ''}`
                     }
                 </div>
             </a>`;
@@ -387,18 +391,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Botón "Nueva Categoría" al final del grid (si estamos en el catálogo)
         if (document.getElementById('btnOpenModalCategoria')) {
             dashHtml += `
-            <button id="dashAddCat" class="dash-cat-card dash-add-cat-card" type="button">
-                <div class="dash-add-cat-inner">
-                    <div class="dash-add-cat-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    </div>
-                    <p class="dash-add-cat-label">Nueva Categoría</p>
-                </div>
+            <button id="dashAddCat" type="button" class="corp-add-cat-btn">
+                <i class="fas fa-plus" style="font-size: 1.5rem; color: currentColor;"></i>
+                <span style="font-size: 0.95rem; font-weight: 700; color: currentColor;">Nueva Categoría</span>
             </button>`;
         }
 
-        dashHtml += `</div>`;
-        productsList.innerHTML = dashHtml;
+        productsList.innerHTML = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">${dashHtml}</div>`;
 
         document.getElementById('dashAddCat')?.addEventListener('click', () => {
             document.getElementById('btnOpenModalCategoria')?.click();
@@ -594,26 +593,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ? estantes.map(est => {
                     const catCfg = getCatCfg(est.descripcion);
                     return `
-                    <div class="shelf-item-enhanced">
-                        <div class="shelf-item-icon" style="background:${catCfg.bg};color:${catCfg.color};">${catCfg.svg}</div>
-                        <div class="min-w-0 flex-1 pr-3">
-                            <p class="text-[13px] font-bold text-gray-800 leading-tight">${est.nombre}</p>
-                            ${est.descripcion ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style="color:${catCfg.color};background:${catCfg.bg};">${est.descripcion}</span>` : ''}
+                    <div class="corp-shelf-card">
+                        <div style="width: 38px; height: 38px; border-radius: 8px; background: ${catCfg.bg}; color: ${catCfg.color}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${catCfg.svg}</div>
+                        <div style="flex: 1; min-width: 0;">
+                            <p style="font-size: 0.95rem; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${est.nombre}</p>
+                            ${est.descripcion ? `<span style="display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; margin-top: 4px; color: ${catCfg.color}; background: ${catCfg.bg};">${est.descripcion}</span>` : ''}
                         </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <a href="/inventario/qr/estante/${est.id}" target="_blank"
-                                class="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all">
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
-                                QR
+                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                            <a href="/inventario/qr/estante/${est.id}" target="_blank" class="corp-qr-btn">
+                                <i class="fas fa-qrcode"></i> QR
                             </a>
-                            <div class="shelf-item-actions">
-                                <button class="action-btn action-btn-edit" data-id="${est.id}" data-nombre="${est.nombre}" data-desc="${est.descripcion||''}" data-almacen="${alm.id}" data-action="edit-estante" title="Editar">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                </button>
-                                <button class="action-btn action-btn-delete" data-id="${est.id}" data-nombre="${est.nombre}" data-tipo="estante" data-action="delete-shelf" title="Eliminar">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                                </button>
-                            </div>
+                            <button data-id="${est.id}" data-nombre="${est.nombre}" data-desc="${est.descripcion||''}" data-almacen="${alm.id}" data-action="edit-estante" title="Editar" class="corp-mini-action-btn">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button data-id="${est.id}" data-nombre="${est.nombre}" data-tipo="estante" data-action="delete-shelf" title="Eliminar" class="corp-mini-action-btn corp-mini-action-btn-danger">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </div>
                     </div>`;
                 }).join('')
@@ -622,37 +617,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </div>`;
 
             return `
-            <div class="bodega-card">
-                <div class="bodega-card-header bg-gradient-to-r ${pal.gradient}">
-                    <div class="bodega-card-header-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                            <polyline points="9 22 9 12 15 12 15 22"/>
-                        </svg>
+            <div class="corp-card">
+                <div style="background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 42px; height: 42px; background: white; border-radius: 8px; border: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: center; color: #6b7280;">
+                            <i class="fas fa-building text-lg"></i>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 1.15rem; font-weight: 800; color: #111827; margin: 0;">${alm.nombre}</h3>
+                            ${alm.ubicacion ? `<p style="font-size: 0.85rem; color: #6b7280; margin: 0.2rem 0 0; display: flex; align-items: center; gap: 6px;"><i class="fas fa-map-marker-alt"></i> ${alm.ubicacion}</p>` : ''}
+                        </div>
                     </div>
-                    <div class="bodega-card-header-info">
-                        <h3 class="bodega-card-title">${alm.nombre}</h3>
-                        ${alm.ubicacion ? `<p class="bodega-card-location"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>${alm.ubicacion}</p>` : ''}
-                    </div>
-                    <div class="almacen-header-actions">
-                        <button class="action-btn action-btn-edit bodega-edit-btn" data-id="${alm.id}" data-nombre="${alm.nombre}" data-ubicacion="${alm.ubicacion||''}" data-action="edit-almacen" title="Editar bodega">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button data-id="${alm.id}" data-nombre="${alm.nombre}" data-ubicacion="${alm.ubicacion||''}" data-action="edit-almacen" title="Editar bodega" class="corp-action-btn bodega-edit-btn">
+                            <i class="fas fa-pen"></i>
                         </button>
-                        <button class="action-btn action-btn-delete bodega-del-btn" data-id="${alm.id}" data-nombre="${alm.nombre}" data-tipo="bodega" data-action="delete-shelf" title="Eliminar bodega">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                        <button data-id="${alm.id}" data-nombre="${alm.nombre}" data-tipo="bodega" data-action="delete-shelf" title="Eliminar bodega" class="corp-action-btn corp-action-btn-danger bodega-del-btn">
+                            <i class="fas fa-trash"></i>
                         </button>
-                        <button class="btn-add-estante" data-almacen-id="${alm.id}" data-almacen-nombre="${alm.nombre}">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            NUEVO ESTANTE
+                        <button class="corp-btn-primary btn-add-estante" data-almacen-id="${alm.id}" data-almacen-nombre="${alm.nombre}">
+                            <i class="fas fa-plus"></i> Estante
                         </button>
                     </div>
                 </div>
-                <div class="bodega-card-shelves">
-                    <div class="bodega-shelves-count">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>
-                        ${estantes.length} ${estantes.length === 1 ? 'estante' : 'estantes'}
+                <div style="padding: 1.5rem;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-list-ul"></i>
+                        ${estantes.length} ${estantes.length === 1 ? 'estante registrado' : 'estantes registrados'}
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-3">${estantesHTML}</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">${estantesHTML}</div>
                 </div>
             </div>`;
         }).join('');
