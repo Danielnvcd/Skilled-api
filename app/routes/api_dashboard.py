@@ -75,13 +75,23 @@ def dashboard():
         extract('month', Trabajador.fecha_nacimiento) == current_month,
     ).all()
 
-    # Excluye acciones de usuarios con rol 'inventario' (no aportan a la auditoría
-    # del admin de RH). LEFT JOIN sobre User.username — entradas sin usuario
-    # asociado (anon, usuarios borrados) tienen role NULL y NO se excluyen.
+    # Oculta acciones operativas del rol 'inventario' (movimientos, ajustes, etc.)
+    # PERO mantiene visibles login / logout / 2FA — esos sí interesan al admin.
+    # LEFT JOIN: entradas sin usuario asociado (anon, usuarios borrados) tienen
+    # role NULL y se mantienen visibles.
+    from sqlalchemy import or_
     actividad_reciente = (
         AuditLog.query
         .outerjoin(User, User.username == AuditLog.user)
-        .filter((User.role == None) | (User.role != 'inventario'))  # noqa: E711
+        .filter(
+            or_(
+                User.role.is_(None),
+                User.role != 'inventario',
+                AuditLog.action.like('API login%'),
+                AuditLog.action.like('API logout%'),
+                AuditLog.action.like('API 2FA%'),
+            )
+        )
         .order_by(AuditLog.created_at.desc())
         .limit(5)
         .all()
