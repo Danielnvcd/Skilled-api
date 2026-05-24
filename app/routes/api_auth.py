@@ -305,6 +305,8 @@ def api_login():
                 'error': f'Cuenta bloqueada por demasiados intentos. Intenta en {_format_ttl(post_fail_ttl)}.',
             }), 423
         from app.extensions import get_real_client_ip_flask
+        if u:
+            g._jwt_user = u
         log_action(f"API login fallido para '{username[:80]}' desde IP {get_real_client_ip_flask()}")
         return jsonify({'error': 'Credenciales incorrectas'}), 401
 
@@ -319,6 +321,7 @@ def api_login():
     token = _encode_access_token(u)
     u.last_seen = datetime.now()
     db.session.commit()
+    g._jwt_user = u
     log_action("API login exitoso")
 
     resp = jsonify({'token': token, 'user': _user_to_dict(u)})
@@ -344,6 +347,8 @@ def api_verify_2fa():
 
     if (user.password_version or 1) != payload.get('pv', 1):
         return jsonify({'error': 'Tu contraseña cambió. Inicia sesión de nuevo.'}), 401
+
+    g._jwt_user = user
 
     if not pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
         log_action(f"API 2FA fallido para {user.username}")
@@ -444,7 +449,12 @@ def api_logout():
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        if tok:
+            user = User.query.get(tok.user_id)
+            if user:
+                g._jwt_user = user
 
+    log_action("API logout")
     resp = jsonify({'ok': True})
     _clear_rt_cookie(resp)
     return resp
