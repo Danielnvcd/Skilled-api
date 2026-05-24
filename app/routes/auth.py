@@ -203,8 +203,10 @@ def profile():
                 user.password_hash = generate_password_hash(new_password)
                 # Incrementar versión invalida todas las sesiones abiertas en otros dispositivos
                 user.password_version = (user.password_version or 1) + 1
-                # Invalidar TOTP: el secreto queda obsoleto tras cambio de contraseña
-                user.totp_secret = None
+                # SEGURIDAD: NO borrar `totp_secret` al rotar contraseña. El segundo factor
+                # sobrevive: el usuario sigue protegido por TOTP aunque alguien (un admin
+                # malicioso, por ejemplo) le resetee la contraseña. El TOTP solo se quita
+                # cuando el dueño lo desactiva explícitamente.
                 # Revocar todos los refresh tokens del usuario (invalida "recordarme" en todos los dispositivos)
                 RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
                 try:

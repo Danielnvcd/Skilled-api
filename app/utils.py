@@ -84,21 +84,46 @@ def validate_lengths(data, lengths_dict=TRABAJADOR_LENGTHS):
 # Register HEIF opener
 pillow_heif.register_heif_opener()
 
+# MED-03: sanitizador anti log-forging. Si una acción incluye \n / \r (porque
+# vino de un campo controlado por usuario), un atacante podría escribir líneas
+# falsas en el log que parezcan acciones de otros usuarios. Convertimos los
+# saltos a literales y rechazamos chars de control no imprimibles.
+def _safe_log_value(value, max_len: int = 200) -> str:
+    s = str(value)
+    s = s.replace('\r', '\\r').replace('\n', '\\n').replace('\t', '\\t')
+    # Filtra otros control chars (excepto los visibles ya manejados)
+    s = ''.join(ch if (ch >= ' ' or ch in ('\\',)) else '?' for ch in s)
+    return s[:max_len]
+
+
 def log_action(action):
     try:
         # Usar el helper que valida que CF-Connecting-IP venga realmente de un rango Cloudflare.
         # Sin esta validación un atacante puede spoofear el header y envenenar el log de auditoría.
         from app.extensions import get_real_client_ip_flask
+        from flask import g
         ip = get_real_client_ip_flask()
+
+        # El usuario puede venir de la sesión Flask (templates clásicos) o del
+        # JWT que pone g._jwt_user (SPA React). El SPA no toca la sesión, por
+        # eso sin este fallback se registraba como 'anon'.
+        username = session.get('user')
+        if not username:
+            jwt_user = getattr(g, '_jwt_user', None)
+            if jwt_user is not None:
+                username = jwt_user.username
+        if not username:
+            username = 'anon'
+
         log = AuditLog(
-            user=session.get('user', 'anon'),
-            action=str(action)[:200],  # Limitar a 200 chars para coincidir con la columna del modelo
-            ip=ip
+            user=_safe_log_value(username, 80),
+            action=_safe_log_value(action, 200),  # MED-03: anti CRLF / log forging
+            ip=ip,
         )
         db.session.add(log)
         db.session.commit()
     except Exception as e:
-        logger.warning(f"Error guardando log de auditoría (acción: {str(action)[:100]}): {e}")
+        logger.warning(f"Error guardando log de auditoría (acción: {_safe_log_value(action, 100)}): {e}")
 
 # Strict MIME Type Whitelist
 STRICT_MIMETYPES = {
@@ -119,13 +144,20 @@ STRICT_MIMETYPES = {
     'wav': ['audio/wav', 'audio/x-wav']
 }
 
-def allowed_file(file_storage):
+def allowed_file(file_storage, allowed_exts=None):
+    """Valida extensión + magic bytes de un archivo subido.
+
+    `allowed_exts` permite restringir el set por contexto (p.ej. para
+    documentos de trabajador solo aceptamos PDF/JPG/PNG/HEIC, no audio/video).
+    Si es None usa `current_app.config['ALLOWED_EXTENSIONS']`.
+    """
     filename = file_storage.filename
     if '.' not in filename:
         return False
-    
+
     ext = filename.rsplit('.', 1)[1].lower()
-    if ext not in current_app.config['ALLOWED_EXTENSIONS']:
+    allowed = allowed_exts if allowed_exts is not None else current_app.config['ALLOWED_EXTENSIONS']
+    if ext not in allowed:
         return False
     
     # Read first 2048 bytes for magic number check

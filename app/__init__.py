@@ -9,6 +9,7 @@ from app.extensions import db, limiter, csrf, migrate, mail
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
 from flask_compress import Compress
+from flask_cors import CORS
 
 def create_app():
     load_dotenv()
@@ -109,7 +110,9 @@ def create_app():
     app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
     # Access token corto: 20 minutos. El refresh token (cookie 'rt') extiende la sesión hasta 7 días.
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=20)
-    is_prod = os.environ.get('FLASK_ENV') == 'production'
+    # HIGH-06: case-insensitive — antes "Production" o " production " no
+    # activaban HSTS / cookies seguras.
+    is_prod = os.environ.get('FLASK_ENV', '').strip().lower() == 'production'
     app.config['SESSION_COOKIE_SECURE'] = True  # Set True in prod only
 
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
@@ -152,6 +155,24 @@ def create_app():
     mail.init_app(app)
     Compress(app)
 
+    # CORS para el SPA React (dev server de Vite). En producción agregar el origen real.
+    # supports_credentials=True habilita el envío de la cookie httpOnly del refresh token.
+    #
+    # Endurecimiento: especificar methods/allowed_headers explícitos en vez del
+    # default '*'. Flask-CORS con default permite cualquier method/header, lo
+    # que abre vías de smuggling y deja el preflight cache (Access-Control-Max-Age)
+    # con valores diferentes según el browser.
+    cors_origins = [o.strip() for o in os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',') if o.strip()]
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": cors_origins}},
+        supports_credentials=True,
+        methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+        expose_headers=['Content-Disposition'],
+        max_age=600,  # cachea el preflight 10 min (evita preflight en cada request)
+    )
+
     csp = {
         'default-src': '\'self\'',
         'script-src': [
@@ -175,8 +196,9 @@ def create_app():
         'img-src': ['\'self\'', 'data:', 'blob:', 'https:'],
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
         # blob: necesario para getUserMedia (cámara) y WebWorkers del QR scanner
-        'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net'],
-        'media-src': ['\'self\'', 'blob:'],           # stream de cámara
+        # stream.mux.com: HLS de fondo en Login/Inicio del SPA React
+        'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net', 'https://stream.mux.com', 'https://*.mux.com'],
+        'media-src': ['\'self\'', 'blob:', 'https://stream.mux.com', 'https://*.mux.com'],  # stream de cámara + HLS de fondo
         'worker-src': ['\'self\'', 'blob:'],           # WebWorker del scanner QR
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
         # Bloquea que esta app sea embebida en iframes de otros dominios (anti-clickjacking)
@@ -193,36 +215,83 @@ def create_app():
         app,
         content_security_policy=csp,
         force_https=False,
+        # frame_options='DENY' supera al default SAMEORIGIN. Combinado con
+        # frame-ancestors 'none' del CSP, bloquea cualquier intento de iframe
+        # incluso desde el propio dominio (anti-clickjacking).
+        frame_options='DENY',
         strict_transport_security=is_prod,        # solo emitir STS en producción
         strict_transport_security_max_age=31536000,  # 1 año
         strict_transport_security_include_subdomains=True,
         strict_transport_security_preload=_hsts_preload,
     )
 
-    from app.routes import auth, main, users, trabajadores, horas, prenomina, proyectos, historico_nominas, prestamos, ficha, proyecto_total, bitacora, info, ajustes, reportes, ausencias, metricas, inventario_ui, inventario_api, notificaciones, manual_uso
-    app.register_blueprint(auth.bp)
+    # IMPORTANTE: los módulos de UI legacy (horas, prenomina, prestamos,
+    # ajustes, reportes, ficha, …) se importan SIEMPRE porque los blueprints
+    # de la API reusan helpers internos (calcular_preview_prenomina,
+    # _aplicar_estilos_y_retornar, _recalcular_prenominas_abiertas, etc.).
+    # Lo que se controla con LEGACY_UI_ENABLED es solo el REGISTRO de los
+    # blueprints — los endpoints HTML quedan inaccesibles cuando la UI vive
+    # en Vercel y este servidor solo expone la API JSON.
+    from app.routes import (
+        auth, main, users, trabajadores, horas, prenomina, proyectos,
+        historico_nominas, prestamos, ficha, proyecto_total, bitacora, info,
+        ajustes, reportes, ausencias, metricas, inventario_ui, inventario_api,
+        notificaciones, manual_uso,
+        api_auth, api_trabajadores, api_proyectos, api_notificaciones, api_horas,
+        api_prenomina, api_prestamos, api_ajustes, api_proyecto_total,
+        api_historico, api_users, api_dashboard, api_bitacora, api_metricas,
+    )
 
+    # ── API JWT (siempre activa — es lo que consume el SPA React en Vercel) ──
+    # Exenta de CSRF: la protección se logra con JWT en Authorization header (no
+    # es enviado automáticamente cross-site) y SameSite=Lax/None en la cookie
+    # del refresh token.
+    csrf.exempt(api_auth.bp);          app.register_blueprint(api_auth.bp)
+    csrf.exempt(api_trabajadores.bp);  app.register_blueprint(api_trabajadores.bp)
+    csrf.exempt(api_proyectos.bp);     app.register_blueprint(api_proyectos.bp)
+    csrf.exempt(api_notificaciones.bp);app.register_blueprint(api_notificaciones.bp)
+    csrf.exempt(api_horas.bp);         app.register_blueprint(api_horas.bp)
+    csrf.exempt(api_prenomina.bp);     app.register_blueprint(api_prenomina.bp)
+    csrf.exempt(api_prestamos.bp);     app.register_blueprint(api_prestamos.bp)
+    csrf.exempt(api_ajustes.bp);       app.register_blueprint(api_ajustes.bp)
+    csrf.exempt(api_proyecto_total.bp);app.register_blueprint(api_proyecto_total.bp)
+    csrf.exempt(api_historico.bp);     app.register_blueprint(api_historico.bp)
+    csrf.exempt(api_users.bp);         app.register_blueprint(api_users.bp)
+    csrf.exempt(api_dashboard.bp);     app.register_blueprint(api_dashboard.bp)
+    csrf.exempt(api_bitacora.bp);     app.register_blueprint(api_bitacora.bp)
+    csrf.exempt(api_metricas.bp);      app.register_blueprint(api_metricas.bp)
+    csrf.exempt(inventario_api.bp);    app.register_blueprint(inventario_api.bp)
 
-    app.register_blueprint(main.bp)
-    app.register_blueprint(users.bp)
-    app.register_blueprint(trabajadores.bp)
-    app.register_blueprint(horas.bp)
-    app.register_blueprint(prenomina.bp)
-    app.register_blueprint(proyectos.bp)
-    app.register_blueprint(historico_nominas.bp)
-    app.register_blueprint(prestamos.bp)
-    app.register_blueprint(ficha.bp)
-    app.register_blueprint(proyecto_total.bp)
-    app.register_blueprint(bitacora.bp)
-    app.register_blueprint(info.bp)
-    app.register_blueprint(ajustes.bp)
-    app.register_blueprint(reportes.bp)
-    app.register_blueprint(ausencias.bp)
-    app.register_blueprint(metricas.bp)
-    app.register_blueprint(inventario_ui.bp)
-    app.register_blueprint(inventario_api.bp)
-    app.register_blueprint(notificaciones.bp)
-    app.register_blueprint(manual_uso.bp)
+    # ── UI legacy Flask + Jinja ──
+    # Apagada por defecto en producción (frontend vive en Vercel).
+    # Para reactivarla en una rama o entorno de transición: LEGACY_UI_ENABLED=true
+    legacy_ui_enabled = os.environ.get('LEGACY_UI_ENABLED', 'false').lower() in ('1', 'true', 'yes')
+    app.config['LEGACY_UI_ENABLED'] = legacy_ui_enabled
+
+    if legacy_ui_enabled:
+        app.register_blueprint(auth.bp)
+        app.register_blueprint(main.bp)
+        app.register_blueprint(users.bp)
+        app.register_blueprint(trabajadores.bp)
+        app.register_blueprint(horas.bp)
+        app.register_blueprint(prenomina.bp)
+        app.register_blueprint(proyectos.bp)
+        app.register_blueprint(historico_nominas.bp)
+        app.register_blueprint(prestamos.bp)
+        app.register_blueprint(ficha.bp)
+        app.register_blueprint(proyecto_total.bp)
+        app.register_blueprint(bitacora.bp)
+        app.register_blueprint(info.bp)
+        app.register_blueprint(ajustes.bp)
+        app.register_blueprint(reportes.bp)
+        app.register_blueprint(ausencias.bp)
+        app.register_blueprint(metricas.bp)
+        app.register_blueprint(inventario_ui.bp)
+        app.register_blueprint(notificaciones.bp)
+        app.register_blueprint(manual_uso.bp)
+        logging.info("LEGACY_UI_ENABLED=true — blueprints UI Flask registrados")
+    else:
+        logging.info("LEGACY_UI_ENABLED=false — solo se expone /api/* (modo SPA)")
 
     # ── Handler global de CSRF ─────────────────────────────────────────
     # Se ejecuta en TODA la app cuando un token CSRF es inválido o expiró.
@@ -234,30 +303,30 @@ def create_app():
     # ─────────────────────────────────────────────────────────────────────
     @app.errorhandler(CSRFError)
     def handle_csrf(e):
-        # ── AJAX / fetch: JSON con status 419 ──
-        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({
-                'error': 'Tu formulario expiró, inténtalo de nuevo.',
-                'redirect': url_for('auth.login')
-            }), 419
+        # ── AJAX / fetch / API: JSON 419 ──
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/api/'):
+            payload = {'error': 'Tu formulario expiró, inténtalo de nuevo.'}
+            if legacy_ui_enabled:
+                payload['redirect'] = url_for('auth.login')
+            return jsonify(payload), 419
 
-        # ── Formulario HTML ──
-        if session.get('user_id'):
-            # El usuario sigue logueado; solo el token CSRF expiró.
-            # No destruir la sesión — solo redirigir de vuelta al formulario.
-            flash('Tu formulario expiró, inténtalo de nuevo.', 'warning')
-            return redirect(request.referrer or url_for('main.home'))
+        # ── Formulario HTML — solo aplica si la UI legacy está activa ──
+        if legacy_ui_enabled:
+            if session.get('user_id'):
+                flash('Tu formulario expiró, inténtalo de nuevo.', 'warning')
+                return redirect(request.referrer or url_for('main.home'))
+            session.clear()
+            flash('Se expiró tu sesión, inicia sesión de nuevo.', 'warning')
+            return redirect(url_for('auth.login'))
 
-        # Usuario no logueado: limpiar sesión y mandar a login.
-        session.clear()
-        flash('Se expiró tu sesión, inicia sesión de nuevo.', 'warning')
-        return redirect(url_for('auth.login'))
+        # Fallback API-only: si llega un request HTML con CSRF inválido sin tener UI.
+        return jsonify({'error': 'Token CSRF inválido o expirado'}), 419
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/api/') or not legacy_ui_enabled:
              return jsonify({'error': "Has excedido el número de intentos permitidos."}), 429
-        
+
         flash("Has excedido el número de intentos permitidos. Por favor espera unos minutos.", "danger")
         return redirect(url_for('main.home'))
 
@@ -280,9 +349,9 @@ def create_app():
                     "Internal Server Error: %s\n%s", str(e), traceback.format_exc()
                 )
             
-            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/api/') or not legacy_ui_enabled:
                  return jsonify({'error': "Ocurrió un error interno en el servidor."}), 500
-            
+
             flash("Ocurrió un error inesperado al procesar tu solicitud.", "danger")
             fallback_url = request.referrer if request.referrer else url_for('main.home')
             return redirect(fallback_url)
@@ -303,6 +372,9 @@ def create_app():
 
     @app.before_request
     def _redirect_coordinador_movil():
+        # En modo API-only no hay endpoints UI a los que redirigir.
+        if not legacy_ui_enabled:
+            return
         if request.method != 'GET':
             return
         if request.args.get('desktop'):
@@ -315,6 +387,23 @@ def create_app():
         ua = request.user_agent.string.lower()
         if request.user_agent.platform in ('android', 'iphone', 'ipad') or 'mobi' in ua:
             return redirect(url_for(dest, **(request.view_args or {})))
+
+    # Cuando la UI legacy está apagada, agregamos un endpoint raíz mínimo para
+    # que `/` no devuelva 404 (útil para health checks de Cloudflare Tunnel,
+    # Render, etc.) y para que el operador entienda dónde vive el frontend.
+    if not legacy_ui_enabled:
+        @app.route('/')
+        def _root_info():
+            return jsonify({
+                'service': 'Skilled ERP API',
+                'mode': 'api-only',
+                'frontend': 'Hosted on Vercel (separate origin)',
+                'health': 'ok',
+            })
+
+        @app.route('/health')
+        def _health():
+            return jsonify({'status': 'ok'})
 
     @app.before_request
     def _start_timer():

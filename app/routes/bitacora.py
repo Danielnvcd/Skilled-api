@@ -3,12 +3,27 @@ from app.utils import login_required, admin_required
 from app.models import AuditLog
 from app.extensions import db
 from datetime import datetime
+from collections import OrderedDict
 import ipaddress
 
 bp = Blueprint('bitacora', __name__, url_prefix='/bitacora')
 
-# Cache en memoria para evitar llamadas repetitivas a la API externa
-IP_GEO_CACHE = {}
+# MED-07/HIGH-07: cache LRU acotada (antes era un dict global sin límite que
+# crecía indefinidamente). 5000 IPs ≈ 1-2 MB de RAM, suficiente para horizontes
+# de retención de meses sin presión de memoria.
+_GEO_CACHE_MAX = 5000
+
+
+class _LRUDict(OrderedDict):
+    def __setitem__(self, key, value):
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > _GEO_CACHE_MAX:
+            self.popitem(last=False)
+
+
+IP_GEO_CACHE = _LRUDict()
 
 @bp.route('/', methods=['GET'])
 @login_required
@@ -69,7 +84,12 @@ def get_log_detail(log_id):
                     # Llamar a ip-api gratuita usando built-in urllib
                     import urllib.request
                     import json
-                    req = urllib.request.Request(f"http://ip-api.com/json/{ip}")
+                    # HIGH-07: defensa en profundidad — re-validar que `ip` es
+                    # una IP literal antes de meterla en la URL, aunque ya pasó
+                    # ipaddress.ip_address() arriba. Evita cualquier riesgo de
+                    # URL injection si alguien manipula el modelo en BD.
+                    ip_for_url = str(ip_obj)  # forma canónica
+                    req = urllib.request.Request(f"https://ip-api.com/json/{ip_for_url}")
                     with urllib.request.urlopen(req, timeout=3) as response:
                         if response.status == 200:
                             data = json.loads(response.read().decode())

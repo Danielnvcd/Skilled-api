@@ -131,7 +131,9 @@ def update_password(user_id):
 
     user.password_hash = generate_password_hash(new_password)
     user.password_version = (user.password_version or 1) + 1
-    user.totp_secret = None
+    # SEGURIDAD: NO borrar `totp_secret` aquí (ver comentario en api_users.py).
+    # El segundo factor sobrevive a un reset de contraseña — solo el dueño
+    # puede deshabilitarlo desde su propio flujo de setup.
     RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
 
     try:
