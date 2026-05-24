@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Blueprint, g, jsonify, request
 
 from app.extensions import db
-from app.models import AuditLog
+from app.models import AuditLog, User
 from app.routes.api_auth import jwt_required
 from app.routes.bitacora import IP_GEO_CACHE
 
@@ -52,7 +52,14 @@ def listar():
     per_page = min(request.args.get('per_page', 50, type=int), 200)
     fecha_filtro = (request.args.get('fecha_filtro') or '').strip()
 
-    query = AuditLog.query
+    # Excluye acciones del rol 'inventario' del listado (no aportan a la
+    # auditoría que ve el admin de RH). LEFT JOIN — entradas sin usuario
+    # asociado (anon, usuarios borrados) tienen role NULL y NO se excluyen.
+    query = (
+        AuditLog.query
+        .outerjoin(User, User.username == AuditLog.user)
+        .filter((User.role == None) | (User.role != 'inventario'))  # noqa: E711
+    )
     if fecha_filtro:
         try:
             filter_date = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
