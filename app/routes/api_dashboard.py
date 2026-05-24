@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models import (
-    AuditLog, CredencialPlanta, DocumentoTrabajador, Proyecto, Trabajador,
+    AuditLog, CredencialPlanta, DocumentoTrabajador, Proyecto, Trabajador, User,
 )
 from app.routes.api_auth import jwt_required
 
@@ -75,7 +75,17 @@ def dashboard():
         extract('month', Trabajador.fecha_nacimiento) == current_month,
     ).all()
 
-    actividad_reciente = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(5).all()
+    # Excluye acciones de usuarios con rol 'inventario' (no aportan a la auditoría
+    # del admin de RH). LEFT JOIN sobre User.username — entradas sin usuario
+    # asociado (anon, usuarios borrados) tienen role NULL y NO se excluyen.
+    actividad_reciente = (
+        AuditLog.query
+        .outerjoin(User, User.username == AuditLog.user)
+        .filter((User.role == None) | (User.role != 'inventario'))  # noqa: E711
+        .order_by(AuditLog.created_at.desc())
+        .limit(5)
+        .all()
+    )
 
     hoy = date.today()
     limite = hoy + timedelta(days=30)
