@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy import or_
 
 from app.extensions import db
 from app.models import AuditLog, User
@@ -52,13 +53,22 @@ def listar():
     per_page = min(request.args.get('per_page', 50, type=int), 200)
     fecha_filtro = (request.args.get('fecha_filtro') or '').strip()
 
-    # Excluye acciones del rol 'inventario' del listado (no aportan a la
-    # auditoría que ve el admin de RH). LEFT JOIN — entradas sin usuario
-    # asociado (anon, usuarios borrados) tienen role NULL y NO se excluyen.
+    # Oculta acciones operativas del rol 'inventario' (movimientos, ajustes, etc.)
+    # PERO mantiene visibles login / logout / 2FA — esos sí interesan al admin.
+    # LEFT JOIN: entradas sin usuario asociado (anon, usuarios borrados) tienen
+    # role NULL y se mantienen visibles.
     query = (
         AuditLog.query
         .outerjoin(User, User.username == AuditLog.user)
-        .filter((User.role == None) | (User.role != 'inventario'))  # noqa: E711
+        .filter(
+            or_(
+                User.role.is_(None),
+                User.role != 'inventario',
+                AuditLog.action.like('API login%'),
+                AuditLog.action.like('API logout%'),
+                AuditLog.action.like('API 2FA%'),
+            )
+        )
     )
     if fecha_filtro:
         try:
