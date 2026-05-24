@@ -494,6 +494,23 @@ class SolicitudMaterialDetalle(db.Model):
     producto = db.relationship('Producto')
 
 
+class CategoriaConfig(db.Model):
+    """Metadatos visuales para categorías de productos (imagen, etc.).
+    El campo `nombre` se considera la PK lógica: coincide con `Producto.categoria`
+    y se mantiene en sync con el catálogo. Una categoría sin productos puede
+    existir aquí (registrada por el admin antes de capturar productos).
+    """
+    __tablename__ = "categorias_config"
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    imagen_url = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=_now_utc)
+    updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+
 class Notificacion(db.Model):
     __tablename__ = "notificaciones"
     id = db.Column(db.Integer, primary_key=True)
