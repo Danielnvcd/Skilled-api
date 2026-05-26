@@ -11,7 +11,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.security import generate_password_hash
 
 from app.extensions import db, limiter
-from app.models import RefreshToken, User
+from app.models import RefreshToken, Trabajador, User
 from app.routes.api_auth import jwt_required
 from app.utils import is_strong_password, log_action
 
@@ -28,10 +28,9 @@ _ROLE_ORDER = {
 
 _VALID_NEW_ROLES = {'admin', 'coordinador', 'inventario', 'solicitante_material'}
 
-# Roles que SOLO super_admin puede crear/asignar. Antes cualquier admin podía
-# crear otro admin, lo cual combinado con el reset de password (CRIT-02)
-# permitía takeover lateral entre admins. Ahora solo super_admin escala.
-_SUPER_ADMIN_ONLY_ROLES = {'admin'}
+# super_admin nunca se puede crear/asignar desde este endpoint (no está en
+# _VALID_NEW_ROLES); esa cuenta solo se crea por seeding/manual.
+# Los admins pueden crear y eliminar otros admins por decisión operativa.
 
 
 def _u():
@@ -53,6 +52,7 @@ def _admin_only():
 
 
 def _user_to_dict(u: User) -> dict:
+    t = u.trabajador  # FK opcional; relationship lazy='select'
     return {
         'id': u.id,
         'username': u.username,
@@ -65,6 +65,11 @@ def _user_to_dict(u: User) -> dict:
         'profile_pic': u.profile_pic,
         'totp_enabled': bool(u.totp_secret),
         'last_seen': u.last_seen.isoformat() if u.last_seen else None,
+        # Liga opcional a Trabajador (RRHH) — habilita asignaciones de
+        # herramienta y filtros "lo mío" basados en empleado.
+        'trabajador_id': u.trabajador_id,
+        'trabajador_no_empleado': t.no_empleado if t else None,
+        'trabajador_nombre': (t.nombre_apellidos or t.nombre) if t else None,
     }
 
 
@@ -97,10 +102,6 @@ def crear():
 
     if role not in _VALID_NEW_ROLES:
         return jsonify({'error': 'Rol no válido'}), 400
-
-    # Solo super_admin puede crear otros admins (anti escalación lateral).
-    if role in _SUPER_ADMIN_ONLY_ROLES and not _is_super_admin():
-        return jsonify({'error': 'Solo super_admin puede crear cuentas con rol admin'}), 403
 
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'El nombre de usuario ya existe'}), 409
@@ -153,6 +154,39 @@ def actualizar(user_id):
         if field in data:
             value = data.get(field)
             setattr(user, field, (value or '').strip() or None)
+
+    # trabajador_id: liga opcional con RRHH. Convenciones del payload:
+    #   ausente            → no se toca el valor actual.
+    #   null o 0 o ''      → desvincula (queda en None).
+    #   int existente      → liga, validando que el trabajador exista.
+    # Anti-pisada: cuando ligamos a un trabajador, validamos que NO esté ya
+    # ligado a otro usuario (la relación es 1:1 a nivel de negocio: cada
+    # empleado tiene un único acceso).
+    if 'trabajador_id' in data:
+        raw = data.get('trabajador_id')
+        if raw in (None, 0, '', '0'):
+            user.trabajador_id = None
+        else:
+            try:
+                tid = int(raw)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'trabajador_id debe ser un número entero'}), 400
+            trabajador = Trabajador.query.get(tid)
+            if not trabajador:
+                return jsonify({'error': f'Trabajador #{tid} no existe'}), 404
+            # Validar 1:1: si otro usuario ya está ligado a este trabajador, rechazar.
+            existente = User.query.filter(
+                User.trabajador_id == tid,
+                User.id != user.id,
+            ).first()
+            if existente:
+                return jsonify({
+                    'error': (
+                        f'El empleado {trabajador.no_empleado} ya está ligado al usuario '
+                        f"'{existente.username}'. Desvincula primero."
+                    ),
+                }), 409
+            user.trabajador_id = tid
 
     # El rol queda explícitamente fuera del payload aceptado. Si alguien lo
     # incluye, se ignora silenciosamente.
@@ -242,9 +276,10 @@ def eliminar(user_id):
     if user.username == 'admin':
         return jsonify({'error': 'El usuario administrador no puede ser eliminado'}), 400
 
-    # Anti-escalación lateral: solo super_admin puede eliminar a otros admins.
-    if user.role in ('admin', 'super_admin') and not _is_super_admin():
-        return jsonify({'error': 'Solo super_admin puede eliminar cuentas admin'}), 403
+    # super_admin queda protegido como última línea de recuperación: solo otro
+    # super_admin puede eliminarlo.
+    if user.role == 'super_admin' and not _is_super_admin():
+        return jsonify({'error': 'Solo super_admin puede eliminar cuentas super_admin'}), 403
 
     try:
         db.session.delete(user)

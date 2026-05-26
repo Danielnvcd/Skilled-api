@@ -236,10 +236,11 @@ def create_app():
         auth, main, users, trabajadores, horas, prenomina, proyectos,
         historico_nominas, prestamos, ficha, proyecto_total, bitacora, info,
         ajustes, reportes, ausencias, metricas, inventario_ui, inventario_api,
-        notificaciones, manual_uso,
+        notificaciones, manual_uso, herramientas_api,
         api_auth, api_trabajadores, api_proyectos, api_notificaciones, api_horas,
         api_prenomina, api_prestamos, api_ajustes, api_proyecto_total,
         api_historico, api_users, api_dashboard, api_bitacora, api_metricas,
+        api_search,
     )
 
     # ── API JWT (siempre activa — es lo que consume el SPA React en Vercel) ──
@@ -261,6 +262,8 @@ def create_app():
     csrf.exempt(api_bitacora.bp);     app.register_blueprint(api_bitacora.bp)
     csrf.exempt(api_metricas.bp);      app.register_blueprint(api_metricas.bp)
     csrf.exempt(inventario_api.bp);    app.register_blueprint(inventario_api.bp)
+    csrf.exempt(herramientas_api.bp);  app.register_blueprint(herramientas_api.bp)
+    csrf.exempt(api_search.bp);        app.register_blueprint(api_search.bp)
 
     # ── UI legacy Flask + Jinja ──
     # Apagada por defecto en producción (frontend vive en Vercel).
