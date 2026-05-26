@@ -521,6 +521,20 @@ def health_check():
 
 # ─── Productos ────────────────────────────────────────────────────────────────
 
+@bp.route('/productos/by-codigo/<string:codigo>', methods=['GET'])
+@_require_inventario
+def get_producto_por_codigo(codigo: str):
+    """Lookup de producto por su código (usado por el scanner móvil cuando
+    el QR escaneado no es estante ni herramienta)."""
+    codigo = (codigo or '').strip()
+    if not codigo:
+        return jsonify({'detail': 'codigo requerido'}), 422
+    prod = Producto.query.filter(Producto.codigo == codigo, Producto.activo == True).first()
+    if not prod:
+        return jsonify({'detail': f'Producto {codigo} no encontrado'}), 404
+    return jsonify(_producto_to_dict(prod))
+
+
 @bp.route('/productos/', methods=['GET'])
 @_require_inventario
 def get_productos():
