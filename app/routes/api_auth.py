@@ -728,17 +728,37 @@ def api_setup_2fa():
 @jwt_required
 @limiter.limit('6 per minute')
 def api_confirm_2fa():
-    """Paso 2: valida el código TOTP contra el secret y lo persiste."""
+    """Paso 2: valida el código TOTP contra el secret y lo persiste.
+
+    Si el usuario YA tiene 2FA activo, además exige `current_2fa_code` válido
+    contra el secret existente. Esto bloquea el ataque donde un atacante con
+    sesión activa + contraseña cambia el dispositivo TOTP sin tener el actual.
+    """
     user = g._jwt_user
     data = request.get_json(silent=True) or {}
     current_password = data.get('current_password') or data.get('currentPassword') or ''
     secret = data.get('secret') or ''
     code = (data.get('code') or '').strip()
+    current_2fa_code = (data.get('current_2fa_code') or data.get('currentTwoFaCode') or '').strip()
 
     if not current_password or not secret or not code:
         return jsonify({'error': 'Faltan datos (contraseña, secret o código)'}), 400
     if not check_password_hash(user.password_hash, current_password):
         return jsonify({'error': 'La contraseña actual es incorrecta'}), 401
+
+    # Re-keying: si ya hay 2FA activo, exigir el código actual del dispositivo
+    # registrado antes de aceptar el nuevo secret.
+    if user.totp_secret:
+        if not current_2fa_code:
+            return jsonify({
+                'error': 'Ya tienes 2FA activo. Para cambiar de dispositivo necesitas el código actual.',
+                'requires_current_2fa_code': True,
+            }), 401
+        if not pyotp.TOTP(user.totp_secret).verify(current_2fa_code, valid_window=1):
+            log_action(f"2FA re-key API: código actual incorrecto para {user.username}")
+            return jsonify({'error': 'Código 2FA actual incorrecto'}), 401
+        if _totp_code_already_used(user.id, current_2fa_code):
+            return jsonify({'error': 'Ese código ya fue usado. Espera al siguiente.'}), 401
 
     if not pyotp.TOTP(secret).verify(code, valid_window=1):
         log_action(f"2FA setup API: código incorrecto para {user.username}")
@@ -753,3 +773,40 @@ def api_confirm_2fa():
         db.session.rollback()
         current_app.logger.error('Error guardando totp_secret: %s', e)
         return jsonify({'error': 'Error al activar 2FA'}), 500
+
+
+@bp.route('/disable-2fa', methods=['POST'])
+@jwt_required
+@limiter.limit('4 per minute')
+def api_disable_2fa():
+    """Desactiva 2FA del propio usuario. Exige:
+      - current_password (re-auth contra hijack de sesión).
+      - code (TOTP actual válido — prueba que el usuario tiene el dispositivo).
+    Doble requisito a propósito: si solo pidiéramos contraseña, un phisher con
+    creds podría apagar el 2FA y luego loguear sin segundo factor."""
+    user = g._jwt_user
+    data = request.get_json(silent=True) or {}
+    current_password = data.get('current_password') or data.get('currentPassword') or ''
+    code = (data.get('code') or '').strip()
+
+    if not user.totp_secret:
+        return jsonify({'error': '2FA no está activo en esta cuenta'}), 400
+    if not current_password or not code:
+        return jsonify({'error': 'Contraseña actual y código 2FA son obligatorios'}), 400
+    if not check_password_hash(user.password_hash, current_password):
+        return jsonify({'error': 'La contraseña actual es incorrecta'}), 401
+    if not pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
+        log_action(f"2FA disable: código incorrecto para {user.username}")
+        return jsonify({'error': 'Código 2FA incorrecto'}), 401
+    if _totp_code_already_used(user.id, code):
+        return jsonify({'error': 'Ese código ya fue usado. Espera al siguiente.'}), 401
+
+    try:
+        user.totp_secret = None
+        db.session.commit()
+        log_action(f"2FA desactivado vía API para {user.username}")
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error desactivando 2FA: %s', e)
+        return jsonify({'error': 'Error al desactivar 2FA'}), 500

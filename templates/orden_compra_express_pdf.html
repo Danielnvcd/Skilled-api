@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Orden de Compra {{ folio }}</title>
+  <style>
+    @page { size: letter; margin: 1.4cm 1.6cm; }
+    body { font-family: Helvetica, Arial, sans-serif; color: #111; margin: 0; padding: 0; font-size: 10pt; }
+
+    table.header-table { width: 100%; margin-bottom: 8px; }
+    table.header-table td { vertical-align: middle; padding: 0; }
+    .logo-text { font-size: 22pt; font-weight: bold; color: #111827; }
+    .logo-text-accent { color: #4F46E5; }
+    .logo-sub { font-size: 8pt; color: #888; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
+    .folio-cell { text-align: right; }
+    .folio-num { font-size: 14pt; font-weight: bold; color: #111827; }
+    .folio-date { font-size: 9pt; color: #888; margin-top: 2px; }
+    hr.divider { border: none; border-top: 2px solid #111827; margin: 6px 0 14px 0; height: 0; }
+
+    table.info-table { width: 100%; margin-bottom: 12px; }
+    table.info-table td { padding: 0 8px 0 0; vertical-align: top; width: 50%; }
+    .info-label { font-size: 7pt; font-weight: bold; color: #888; text-transform: uppercase; padding-bottom: 2px; }
+    .info-value { font-size: 11pt; font-weight: bold; color: #111827; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+
+    .notes-box { background-color: #F9FAFB; border-left: 3px solid #6B7280; padding: 8px 12px; margin-bottom: 14px; }
+    .notes-label { font-size: 7pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
+    .notes-text { font-size: 9pt; color: #374151; }
+
+    .section-title { font-size: 9pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin: 14px 0 6px 0; }
+
+    table.main-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    table.main-table th, table.main-table td {
+      border: 1px solid #D1D5DB;
+      padding: 6px 8px;
+      font-size: 9pt;
+      vertical-align: middle;
+    }
+    table.main-table th {
+      background-color: #4F46E5;
+      color: #ffffff;
+      text-align: left;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 8pt;
+    }
+    table.main-table th.center, table.main-table td.center { text-align: center; }
+    table.main-table th.right,  table.main-table td.right  { text-align: right; }
+    table.main-table tr.row-alt td { background-color: #F9FAFB; }
+
+    td.bold-mat { font-weight: bold; color: #4F46E5; }
+    td.muted    { color: #9CA3AF; font-size: 8pt; }
+    td.wrap     { word-wrap: break-word; }
+    .sku-pill {
+      background-color: #F3F4F6;
+      color: #6B7280;
+      padding: 1px 6px;
+      font-size: 8pt;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .totales-box {
+      background-color: #EEF2FF;
+      border-left: 3px solid #4F46E5;
+      padding: 7px 12px;
+      margin: 8px 0 18px 0;
+      font-size: 9pt;
+      color: #111827;
+    }
+
+    table.sig-table { width: 100%; margin-top: 26px; }
+    table.sig-table td { width: 33%; padding: 0 12px; vertical-align: top; text-align: center; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 5px; font-size: 8pt; color: #6B7280; font-weight: bold; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+  <table class="header-table">
+    <tr>
+      <td>
+        {% if logo_path %}
+          <img src="{{ logo_path }}" height="32" alt="SKILLED"/>
+        {% else %}
+          <span class="logo-text">SKIL<span class="logo-text-accent">LED</span></span>
+        {% endif %}
+        <div class="logo-sub">Orden de compra express</div>
+      </td>
+      <td class="folio-cell">
+        <div class="folio-num">{{ folio }}</div>
+        <div class="folio-date">{{ fecha }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <hr class="divider"/>
+
+  <table class="info-table">
+    <tr>
+      <td>
+        <div class="info-label">Proveedor</div>
+        <div class="info-value">{{ proveedor or '—' }}</div>
+      </td>
+      <td>
+        <div class="info-label">Contacto</div>
+        <div class="info-value">{{ contacto or '—' }}</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div class="info-label">Solicitado por</div>
+        <div class="info-value">{{ solicitante or '—' }}</div>
+      </td>
+      <td>
+        <div class="info-label">Fecha</div>
+        <div class="info-value">{{ fecha }}</div>
+      </td>
+    </tr>
+  </table>
+
+  {% if notas %}
+  <div class="notes-box">
+    <div class="notes-label">Observaciones</div>
+    <div class="notes-text">{{ notas }}</div>
+  </div>
+  {% endif %}
+
+  <div class="section-title">Productos solicitados ({{ items|length }})</div>
+  <table class="main-table">
+    <thead>
+      <tr>
+        <th class="center" style="width: 26px;">#</th>
+        <th>Descripción</th>
+        <th style="width: 110px;">Código (SKU)</th>
+        <th class="center" style="width: 60px;">Cantidad</th>
+        <th class="center" style="width: 70px;">Unidad</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr {% if loop.index is even %}class="row-alt"{% endif %}>
+        <td class="center">{{ loop.index }}</td>
+        <td class="wrap">{{ it.descripcion }}</td>
+        <td><span class="sku-pill">{{ it.codigo }}</span></td>
+        <td class="center bold-mat">{{ it.cantidad }}</td>
+        <td class="center">{{ it.unidad or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totales-box">
+    Total de líneas: <b>{{ items|length }}</b>
+  </div>
+
+  <table class="sig-table">
+    <tr>
+      <td><div class="sig-line">Solicitado por</div></td>
+      <td><div class="sig-line">Recibido por</div></td>
+      <td><div class="sig-line">Autorizado</div></td>
+    </tr>
+  </table>
+
+</body>
+</html>

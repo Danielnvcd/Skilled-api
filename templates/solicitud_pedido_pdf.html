@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Solicitud {{ folio }}</title>
+  <style>
+    @page { size: letter; margin: 1.4cm 1.6cm; }
+    body { font-family: Helvetica, Arial, sans-serif; color: #111; margin: 0; padding: 0; font-size: 10pt; }
+
+    /* ─── Header ─────────────────────────────────────────────────────────── */
+    table.header-table { width: 100%; margin-bottom: 8px; }
+    table.header-table td { vertical-align: middle; padding: 0; }
+    .logo-text { font-size: 22pt; font-weight: bold; color: #111827; }
+    .logo-text-accent { color: #4F46E5; }
+    .logo-sub { font-size: 8pt; color: #888; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
+    .folio-cell { text-align: right; }
+    .folio-num { font-size: 14pt; font-weight: bold; color: #111827; }
+    .folio-date { font-size: 9pt; color: #888; margin-top: 2px; }
+    hr.divider { border: none; border-top: 2px solid #111827; margin: 6px 0 14px 0; height: 0; }
+
+    /* ─── Info bloque solicitante/proyecto ───────────────────────────────── */
+    table.info-table { width: 100%; margin-bottom: 12px; }
+    table.info-table td { padding: 0 8px 0 0; vertical-align: top; width: 50%; }
+    .info-label { font-size: 7pt; font-weight: bold; color: #888; text-transform: uppercase; padding-bottom: 2px; }
+    .info-value { font-size: 11pt; font-weight: bold; color: #111827; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+
+    /* ─── Observaciones ──────────────────────────────────────────────────── */
+    .notes-box { background-color: #F9FAFB; border-left: 3px solid #6B7280; padding: 8px 12px; margin-bottom: 14px; }
+    .notes-label { font-size: 7pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
+    .notes-text { font-size: 9pt; color: #374151; }
+
+    /* ─── Sección ─────────────────────────────────────────────────────────── */
+    .section-title { font-size: 9pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin: 14px 0 6px 0; }
+    .section-title-tools { color: #B45309; }
+
+    /* ─── Tablas de detalles ─────────────────────────────────────────────── */
+    table.main-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    table.main-table th, table.main-table td {
+      border: 1px solid #D1D5DB;
+      padding: 6px 8px;
+      font-size: 9pt;
+      vertical-align: middle;
+    }
+    table.main-table th {
+      background-color: #111827;
+      color: #ffffff;
+      text-align: left;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 8pt;
+    }
+    table.main-table th.tools { background-color: #B45309; }
+    table.main-table th.center, table.main-table td.center { text-align: center; }
+    table.main-table th.right,  table.main-table td.right  { text-align: right; }
+
+    /* Filas alternadas: xhtml2pdf no soporta nth-child, así que usamos clase */
+    table.main-table tr.row-alt td { background-color: #F9FAFB; }
+
+    td.bold-mat   { font-weight: bold; color: #4F46E5; }
+    td.bold-tools { font-weight: bold; color: #B45309; }
+    td.muted      { color: #9CA3AF; font-size: 8pt; }
+    td.wrap       { word-wrap: break-word; }
+
+    .sku-pill {
+      background-color: #F3F4F6;
+      color: #6B7280;
+      padding: 1px 6px;
+      font-size: 8pt;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .complemento { color: #888; font-style: italic; }
+
+    /* ─── Totales ────────────────────────────────────────────────────────── */
+    .totales-box {
+      background-color: #EEF2FF;
+      border-left: 3px solid #4F46E5;
+      padding: 7px 12px;
+      margin: 8px 0 18px 0;
+      font-size: 9pt;
+      color: #111827;
+    }
+
+    /* ─── Firmas ─────────────────────────────────────────────────────────── */
+    table.sig-table { width: 100%; margin-top: 26px; }
+    table.sig-table td { width: 33%; padding: 0 12px; vertical-align: top; text-align: center; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 5px; font-size: 8pt; color: #6B7280; font-weight: bold; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+  <table class="header-table">
+    <tr>
+      <td>
+        {% if logo_path %}
+          <img src="{{ logo_path }}" height="32" alt="SKILLED"/>
+        {% else %}
+          <span class="logo-text">SKIL<span class="logo-text-accent">LED</span></span>
+        {% endif %}
+        <div class="logo-sub">Solicitud de Materiales y Herramientas</div>
+      </td>
+      <td class="folio-cell">
+        <div class="folio-num">{{ folio }}</div>
+        <div class="folio-date">{{ fecha }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <hr class="divider"/>
+
+  <table class="info-table">
+    <tr>
+      <td>
+        <div class="info-label">Solicitante</div>
+        <div class="info-value">{{ solicitante or '—' }}</div>
+      </td>
+      <td>
+        <div class="info-label">Proyecto</div>
+        <div class="info-value">{{ proyecto or '—' }}</div>
+      </td>
+    </tr>
+  </table>
+
+  {% if notas %}
+  <div class="notes-box">
+    <div class="notes-label">Observaciones</div>
+    <div class="notes-text">{{ notas }}</div>
+  </div>
+  {% endif %}
+
+  {% if materiales %}
+  <div class="section-title">Materiales solicitados ({{ materiales|length }})</div>
+  <table class="main-table">
+    <thead>
+      <tr>
+        <th class="center" style="width: 26px;">#</th>
+        <th>Descripción</th>
+        <th style="width: 90px;">Código (SKU)</th>
+        <th style="width: 95px;">Categoría</th>
+        <th class="center" style="width: 55px;">Cant.</th>
+        <th class="center" style="width: 70px;">Unidad</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in materiales %}
+      <tr {% if loop.index is even %}class="row-alt"{% endif %}>
+        <td class="center">{{ loop.index }}</td>
+        <td class="wrap">{{ m.descripcion }}</td>
+        <td><span class="sku-pill">{{ m.codigo }}</span></td>
+        <td class="muted">{{ m.categoria or '—' }}</td>
+        <td class="center bold-mat">{{ m.cantidad }}</td>
+        <td class="center">{{ m.unidad or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if herramientas %}
+  <div class="section-title section-title-tools">Herramientas solicitadas ({{ herramientas|length }})</div>
+  <table class="main-table">
+    <thead>
+      <tr>
+        <th class="tools center" style="width: 26px;">#</th>
+        <th class="tools">Descripción</th>
+        <th class="tools" style="width: 80px;">SKU</th>
+        <th class="tools center" style="width: 45px;">Cant.</th>
+        <th class="tools" style="width: 105px;">Uso (desde → hasta)</th>
+        <th class="tools">Justificación</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in herramientas %}
+      <tr {% if loop.index is even %}class="row-alt"{% endif %}>
+        <td class="center">{{ loop.index }}</td>
+        <td class="wrap">{{ h.descripcion }}</td>
+        <td><span class="sku-pill">{{ h.sku }}</span></td>
+        <td class="center bold-tools">{{ h.cantidad }}</td>
+        <td class="muted">{% if h.fecha_uso_inicio %}{{ h.fecha_uso_inicio }} → {{ h.fecha_uso_fin or '?' }}{% else %}—{% endif %}</td>
+        <td class="wrap">
+          {{ h.justificacion or '—' }}
+          {% if h.complementos %}<br/><span class="complemento">+ {{ h.complementos }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="totales-box">
+    Total de líneas: <b>{{ (materiales|length) + (herramientas|length) }}</b>
+    {% if materiales %} &nbsp;·&nbsp; Materiales: <b>{{ materiales|length }}</b>{% endif %}
+    {% if herramientas %} &nbsp;·&nbsp; Herramientas: <b>{{ herramientas|length }}</b>{% endif %}
+  </div>
+
+  <table class="sig-table">
+    <tr>
+      <td><div class="sig-line">Solicitante</div></td>
+      <td><div class="sig-line">Jefe de Almacén</div></td>
+      <td><div class="sig-line">Autorizado por</div></td>
+    </tr>
+  </table>
+
+</body>
+</html>
