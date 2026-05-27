@@ -204,6 +204,7 @@ def _csrf_protected_cookie_endpoint():
 def _user_to_dict(user: User) -> dict:
     """Vista completa del usuario — incluye role, totp_enabled, last_seen.
     Solo se debe devolver al PROPIO usuario (en /me) o a un admin."""
+    t = getattr(user, 'trabajador', None)
     return {
         'id': user.id,
         'username': user.username,
@@ -216,6 +217,8 @@ def _user_to_dict(user: User) -> dict:
         'profile_pic': user.profile_pic,
         'totp_enabled': bool(user.totp_secret),
         'last_seen': user.last_seen.isoformat() if user.last_seen else None,
+        'trabajador_id': user.trabajador_id,
+        'trabajador_no_empleado': t.no_empleado if t else None,
     }
 
 
@@ -224,6 +227,7 @@ def _user_to_dict_public(user: User) -> dict:
     HIGH-01 fix: NO devuelve `role`, `totp_enabled` ni `last_seen` (reconocimiento
     para atacantes que buscan admins sin 2FA o ventanas de actividad).
     """
+    t = getattr(user, 'trabajador', None)
     return {
         'id': user.id,
         'username': user.username,
@@ -233,6 +237,8 @@ def _user_to_dict_public(user: User) -> dict:
         'factory': user.factory,
         'contact_info': user.contact_info,
         'profile_pic': user.profile_pic,
+        'trabajador_id': user.trabajador_id,
+        'trabajador_no_empleado': t.no_empleado if t else None,
     }
 
 
