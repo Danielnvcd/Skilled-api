@@ -330,7 +330,7 @@ def _save_foto(t: Trabajador, file) -> None:
 @jwt_required
 def listar():
     page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    per_page = min(request.args.get('per_page', 20, type=int), 10000)
     q = (request.args.get('q') or '').strip()
     estado = (request.args.get('estado') or 'activos').lower()  # activos|bajas|todos
 
