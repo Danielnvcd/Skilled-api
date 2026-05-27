@@ -69,7 +69,7 @@ def _user_to_dict(u: User) -> dict:
         # herramienta y filtros "lo mío" basados en empleado.
         'trabajador_id': u.trabajador_id,
         'trabajador_no_empleado': t.no_empleado if t else None,
-        'trabajador_nombre': (t.nombre_apellidos or t.nombre) if t else None,
+        'trabajador_nombre': t.nombre_completo if t else None,
     }
 
 
