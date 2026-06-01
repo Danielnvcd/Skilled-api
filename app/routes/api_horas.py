@@ -16,6 +16,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db, limiter
 from app.models import Proyecto, RegistroDiarioHoras, ReporteSemanal, Trabajador
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.utils import calcular_horas_productivas, log_action, turnos_se_traslapan
 
@@ -243,6 +244,9 @@ def crear_reporte():
         db.session.add(nuevo)
         db.session.commit()
         log_action(f"API: abrió reporte semanal para proyecto ID {proyecto_id}")
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'reporte:lista_changed', {
+            'id': nuevo.id, 'action': 'created',
+        })
         return jsonify({'id': nuevo.id, 'estado': nuevo.estado}), 201
     except Exception:
         db.session.rollback()
@@ -296,6 +300,9 @@ def cerrar_reporte(reporte_id):
         r.estado = 'TERMINADO'
         db.session.commit()
         log_action(f"API: cerró reporte semanal ID {r.id} ({r.proyecto.numero_proyecto})")
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'reporte:lista_changed', {
+            'id': r.id, 'action': 'cerrado',
+        })
 
         try:
             from app.models import crear_notif_admins

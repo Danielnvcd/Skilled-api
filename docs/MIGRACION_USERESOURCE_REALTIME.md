@@ -4,6 +4,10 @@ Guía paso a paso para llevar el patrón ya implementado en `/empleados` y
 `/usuarios` al resto de los módulos admin del SPA. Cada migración toma ~10
 minutos y los cambios son aditivos — no rompe nada existente.
 
+> **Estado:** migración completa en todos los módulos admin (ver tabla
+> abajo). Esta guía se conserva como referencia del patrón y para añadir
+> módulos nuevos.
+
 ## TL;DR del patrón
 
 **Frontend:** reemplazar `useState + useEffect + load + refetch` por
@@ -21,16 +25,16 @@ cuando otro usuario muta el recurso.
 |---|---|---|---|
 | Empleados | ✅ | ✅ | `empleado:changed` |
 | Usuarios | ✅ | ✅ | `usuario:changed` |
-| Proyectos | ❌ | ❌ | `proyecto:changed` |
-| Horas (lista) | ❌ | ❌ | `reporte:lista_changed` |
-| Prenómina | ❌ | ❌ | `prenomina:changed` |
-| Préstamos | ❌ | ❌ | `prestamo:changed` |
-| Ajustes | ❌ | ❌ | `ajuste:changed` |
-| Histórico | ❌ | ❌ | `historico:changed` |
-| Credenciales | ❌ | ❌ | `credencial:changed` |
-| Bitácora | ❌ | — (read-only) | — |
-| Métricas | ❌ | — (read-only) | — |
-| Proyecto Total | ❌ | — (read-only) | — |
+| Proyectos | ✅ | ✅ | `proyecto:changed` |
+| Horas (lista) | ✅ | ✅ | `reporte:lista_changed` |
+| Prenómina | ✅ | ✅ | `prenomina:changed` |
+| Préstamos | ✅ | ✅ | `prestamo:changed` |
+| Ajustes | ✅ | ✅ | `ajuste:changed` |
+| Histórico | ✅ | — (archivo, sin emit) | — |
+| Credenciales | ✅ | ✅ | `credencial:changed` |
+| Bitácora | ✅ | — (read-only) | — |
+| Métricas | ✅ | — (read-only) | — |
+| Proyecto Total | ✅ | — (read-only) | — |
 
 ---
 

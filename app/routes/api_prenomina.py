@@ -29,6 +29,7 @@ from app.models import (
     ReporteSemanal,
     crear_notif_admins,
 )
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.routes.prenomina import calcular_preview_prenomina
 from app.routes.reportes import _aplicar_estilos_y_retornar, _sanitize_rows
@@ -353,6 +354,9 @@ def guardar_semana(fecha_str):
             r.estado = 'PRENOMINA_CERRADA'
         db.session.commit()
         log_action(f'API: prenómina global guardada para semana {fecha_str}')
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'fecha': fecha_str, 'action': 'guardada',
+        })
         return jsonify({'success': True, 'creadas': len(nuevas)})
     except Exception:
         db.session.rollback()
@@ -516,6 +520,9 @@ def cerrar_semana(fecha_str):
 
         db.session.commit()
         log_action(f'API: prenómina cerrada para semana {fecha_str}')
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'fecha': fecha_str, 'action': 'cerrada',
+        })
 
         try:
             crear_notif_admins(

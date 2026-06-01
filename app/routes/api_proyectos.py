@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models import Proyecto, Trabajador, User
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.utils import log_action
 
@@ -273,6 +274,9 @@ def crear():
         db.session.add(nuevo)
         db.session.commit()
         log_action(f"Creó el proyecto {nuevo.numero_proyecto} - {nuevo.nombre}")
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'proyecto:changed', {
+            'id': nuevo.id, 'action': 'created',
+        })
         return jsonify(_proyecto_detail(nuevo)), 201
 
     except Exception as e:
@@ -340,6 +344,9 @@ def actualizar(id):
 
         db.session.commit()
         log_action(f"Actualizó el proyecto {p.numero_proyecto} - {p.nombre}")
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'proyecto:changed', {
+            'id': p.id, 'action': 'updated',
+        })
         return jsonify(_proyecto_detail(p))
 
     except Exception as e:
