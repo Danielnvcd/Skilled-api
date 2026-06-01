@@ -267,6 +267,19 @@ def jwt_required(fn):
         # Invalidar JWT si la contraseña cambió desde que se emitió.
         if (user.password_version or 1) != payload.get('pv', 1):
             return jsonify({'error': 'Sesión inválida, vuelve a iniciar sesión'}), 401
+        # Mantener `last_seen` fresco para el indicador "en línea". Throttled
+        # a 60s para no commitear en cada request. La conexión Socket.IO y su
+        # handler 'heartbeat' cubren el caso de lectura pura (sin requests).
+        try:
+            now = datetime.now()
+            if not user.last_seen or (now - user.last_seen).total_seconds() > 60:
+                user.last_seen = now
+                db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
         g._jwt_user = user
         return fn(*args, **kwargs)
 

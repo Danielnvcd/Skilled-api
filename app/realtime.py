@@ -301,6 +301,19 @@ def _register_handlers() -> None:
         # Guardamos el user_id en la session del socket para que otros handlers
         # (join:reporte) puedan revalidar permisos sin pedir el token de nuevo.
         socketio.server.save_session(request.sid, {'user_id': user.id})
+        # Marcar presencia. Reconexiones automáticas + el handler 'heartbeat'
+        # mantienen este timestamp fresco mientras el SPA esté abierto.
+        try:
+            from datetime import datetime
+            from app.extensions import db as _db
+            user.last_seen = datetime.now()
+            _db.session.commit()
+        except Exception:
+            try:
+                from app.extensions import db as _db
+                _db.session.rollback()
+            except Exception:
+                pass
         _logger.debug(
             'socket: conectado sid=%s user_id=%s role=%s room=%s',
             request.sid, user.id, role_name, room,
@@ -361,6 +374,35 @@ def _register_handlers() -> None:
         join_room(room)
         _logger.debug('socket: join sid=%s user_id=%s room=%s', request.sid, user_id, room)
         return {'ok': True, 'reporte_id': reporte_id}
+
+    @socketio.on('heartbeat')
+    def _on_heartbeat():  # type: ignore[no-redef]
+        """Pulso de presencia desde el SPA: refresca `user.last_seen`.
+
+        El cliente lo emite cada ~90s mientras el socket esté conectado, para
+        que el indicador "en línea" del directorio/usuarios no expire por
+        inactividad si el usuario solo está leyendo (sin requests HTTP)."""
+        try:
+            sess = socketio.server.get_session(request.sid) or {}
+        except Exception:
+            sess = {}
+        user_id = sess.get('user_id')
+        if not user_id:
+            return
+        try:
+            from datetime import datetime
+            from app.extensions import db as _db
+            from app.models import User
+            u = User.query.get(user_id)
+            if u:
+                u.last_seen = datetime.now()
+                _db.session.commit()
+        except Exception:
+            try:
+                from app.extensions import db as _db
+                _db.session.rollback()
+            except Exception:
+                pass
 
 
 # ── API de emisión usada desde los blueprints ──────────────────────────────

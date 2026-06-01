@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models import AbonoPrestamo, Prestamo, Trabajador
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.routes.prestamos import _recalcular_prenominas_abiertas
 from app.routes.reportes import _aplicar_estilos_y_retornar, _sanitize_rows
@@ -195,6 +196,9 @@ def crear():
         db.session.commit()
         _recalcular_prenominas_abiertas(trabajador_id)
         log_action(f'API: préstamo #{prestamo.id} creado para trab #{trabajador_id} por ${monto_total}')
+        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+            'id': prestamo.id, 'action': 'created',
+        })
         return jsonify({'id': prestamo.id}), 201
     except Exception:
         db.session.rollback()
@@ -249,6 +253,9 @@ def editar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(p.trabajador_id)
         log_action(f'API: préstamo #{id} modificado. Total: ${nuevo_monto:.2f}, Restante: ${p.monto_restante:.2f}')
+        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+            'id': p.id, 'action': 'updated',
+        })
         return jsonify(_prestamo_row(p))
     except Exception:
         db.session.rollback()
@@ -297,6 +304,9 @@ def abonar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(p.trabajador_id)
         log_action(f'API: abono ${monto} al préstamo #{id}. Restante: ${p.monto_restante}')
+        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+            'id': p.id, 'action': 'abonado',
+        })
         return jsonify({
             'monto_restante': _num(p.monto_restante),
             'estado': p.estado,
@@ -334,6 +344,9 @@ def liquidar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(p.trabajador_id)
         log_action(f'API: préstamo #{id} liquidado manualmente (saldo ${saldo})')
+        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+            'id': p.id, 'action': 'liquidado',
+        })
         return jsonify({'estado': p.estado, 'monto_restante': 0.0})
     except Exception:
         db.session.rollback()

@@ -706,6 +706,9 @@ def guardar_credenciales(id):
         _replace_credenciales(t, json.dumps(data.get('credenciales', [])))
         db.session.commit()
         log_action(f'Actualizó credenciales del trabajador {t.nombre} ({t.no_empleado})')
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'credencial:changed', {
+            'trabajador_id': t.id,
+        })
         return jsonify({'ok': True})
     except ValueError as e:
         db.session.rollback()

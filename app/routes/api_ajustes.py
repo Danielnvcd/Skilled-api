@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models import AjusteDescuento, AjustePeriodo, AjusteTrabajadorPeriodo, Trabajador
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.routes.reportes import _aplicar_estilos_y_retornar, _sanitize_rows
 from app.utils import log_action, to_dec
@@ -167,6 +168,9 @@ def crear_periodo():
 
         db.session.commit()
         log_action(f'API: periodo de ajuste creado: {nombre}')
+        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+            'id': periodo.id, 'action': 'created',
+        })
         return jsonify({'id': periodo.id, 'creados': creados}), 201
     except Exception:
         db.session.rollback()
@@ -288,6 +292,9 @@ def agregar_descuento(periodo_id):
         db.session.add(desc)
         db.session.commit()
         log_action(f'API: descuento ajuste #{desc.id} agregado en periodo {periodo.nombre}')
+        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+            'id': periodo.id, 'descuento_id': desc.id, 'action': 'descuento_agregado',
+        })
         return jsonify({
             'id': desc.id,
             'fecha_descuento': desc.fecha_descuento.isoformat(),
@@ -315,8 +322,12 @@ def eliminar_descuento(descuento_id):
         return jsonify({'error': 'Este descuento ya fue cobrado en la prenómina'}), 400
 
     try:
+        periodo_id = desc.periodo_id
         db.session.delete(desc)
         db.session.commit()
+        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+            'id': periodo_id, 'descuento_id': descuento_id, 'action': 'descuento_eliminado',
+        })
         return jsonify({'ok': True})
     except Exception:
         db.session.rollback()
@@ -339,6 +350,9 @@ def cerrar_periodo(periodo_id):
         periodo.estado = 'CERRADO'
         db.session.commit()
         log_action(f'API: periodo de ajuste cerrado: {periodo.nombre}')
+        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+            'id': periodo.id, 'action': 'cerrado',
+        })
         return jsonify({'estado': periodo.estado})
     except Exception:
         db.session.rollback()
