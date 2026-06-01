@@ -25,6 +25,12 @@ from sqlalchemy import or_, and_, func
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
+from app.realtime import emit_to_role
+
+# Roles que ven herramientas (catalogo + unidades + asignaciones + incidencias).
+# coordinador es relevante porque puede recibir asignaciones; solicitante_material
+# las pide vía solicitudes. Mantengo simétrico con _INV_ROLES.
+_HERR_ROLES = ['admin', 'super_admin', 'inventario', 'coordinador']
 from app.models import (
     User, AuditLog, Trabajador, Almacen, Estante,
     Herramienta, HerramientaUnidad, HerramientaCategoria,
@@ -483,6 +489,9 @@ def create_herramienta():
     _audit(user, f"Herramienta creada: {data['sku']} — {data['descripcion']}")
     db.session.commit()
     db.session.refresh(nueva)
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': nueva.id, 'action': 'created',
+    })
     return jsonify(_herramienta_to_dict(nueva, incluir_stats=True)), 201
 
 
@@ -509,6 +518,9 @@ def update_herramienta(hid: int):
     _audit(request.current_user, f"Herramienta #{hid} editada")
     db.session.commit()
     db.session.refresh(h)
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': h.id, 'action': 'updated',
+    })
     return jsonify(_herramienta_to_dict(h, incluir_stats=True))
 
 
@@ -531,6 +543,9 @@ def soft_delete_herramienta(hid: int):
     h.activo = False
     _audit(request.current_user, f"Herramienta #{hid} ({h.sku}) desactivada")
     db.session.commit()
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': hid, 'action': 'deleted',
+    })
     return Response(status=204)
 
 
@@ -713,6 +728,9 @@ def create_unidad():
     _audit(user, f"Unidad herramienta creada: {nueva.codigo_interno} (herr #{h.id})")
     db.session.commit()
     db.session.refresh(nueva)
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': h.id, 'unidad_id': nueva.id, 'action': 'unidad_created',
+    })
     return jsonify(_unidad_to_dict(nueva, incluir_relacion=True)), 201
 
 
@@ -761,6 +779,9 @@ def update_unidad(uid: int):
     _audit(request.current_user, f"Unidad #{uid} editada")
     db.session.commit()
     db.session.refresh(u)
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': u.herramienta_id, 'unidad_id': uid, 'action': 'unidad_updated',
+    })
     return jsonify(_unidad_to_dict(u, incluir_relacion=True))
 
 
@@ -872,6 +893,9 @@ def crear_asignacion():
     _audit(user, f"Asignación herramienta #{asig.id}: unidad {unidad.codigo_interno} → {trab.nombre_completo}")
     db.session.commit()
     db.session.refresh(asig)
+    emit_to_role(_HERR_ROLES, 'asignacion:changed', {
+        'id': asig.id, 'unidad_id': unidad.id, 'action': 'created',
+    })
     return jsonify(_asignacion_to_dict(asig)), 201
 
 
@@ -954,6 +978,9 @@ def devolver_asignacion(aid: int):
     _audit(user, f"Devolución asignación #{aid}: {estado_anterior} → {nuevo_estado}")
     db.session.commit()
     db.session.refresh(asig)
+    emit_to_role(_HERR_ROLES, 'asignacion:changed', {
+        'id': aid, 'unidad_id': unidad.id, 'action': 'devuelta',
+    })
     return jsonify(_asignacion_to_dict(asig))
 
 
@@ -1010,6 +1037,9 @@ def crear_mantenimiento():
     _audit(user, f"Mantenimiento #{mant.id} abierto en unidad {unidad.codigo_interno}")
     db.session.commit()
     db.session.refresh(mant)
+    emit_to_role(_HERR_ROLES, 'mantenimiento:changed', {
+        'id': mant.id, 'unidad_id': unidad.id, 'action': 'abierto',
+    })
     return jsonify(_mantenimiento_to_dict(mant)), 201
 
 
@@ -1090,6 +1120,9 @@ def cerrar_mantenimiento(mid: int):
     _audit(user, f"Mantenimiento #{mid} cerrado: unidad → {nuevo_estado}")
     db.session.commit()
     db.session.refresh(mant)
+    emit_to_role(_HERR_ROLES, 'mantenimiento:changed', {
+        'id': mid, 'unidad_id': unidad.id, 'action': 'cerrado',
+    })
     return jsonify(_mantenimiento_to_dict(mant))
 
 
@@ -1135,6 +1168,9 @@ def crear_incidencia():
     _audit(user, f"Incidencia #{inc.id} reportada en unidad #{unidad.id}")
     db.session.commit()
     db.session.refresh(inc)
+    emit_to_role(_HERR_ROLES, 'incidencia:changed', {
+        'id': inc.id, 'unidad_id': unidad.id, 'action': 'created',
+    })
     return jsonify(_incidencia_to_dict(inc)), 201
 
 
@@ -1181,6 +1217,9 @@ def atender_incidencia(iid: int):
     _audit(user, f"Incidencia #{iid} → {data['estado']}")
     db.session.commit()
     db.session.refresh(inc)
+    emit_to_role(_HERR_ROLES, 'incidencia:changed', {
+        'id': iid, 'unidad_id': inc.unidad_id, 'action': data['estado'],
+    })
     return jsonify(_incidencia_to_dict(inc))
 
 
@@ -1240,6 +1279,9 @@ def crear_solicitud_baja():
     _audit(user, f"Solicitud de baja #{sol.id} para unidad #{unidad.id}")
     db.session.commit()
     db.session.refresh(sol)
+    emit_to_role(_HERR_ROLES, 'baja:changed', {
+        'id': sol.id, 'unidad_id': unidad.id, 'action': 'created',
+    })
     return jsonify(_solicitud_baja_to_dict(sol)), 201
 
 
@@ -1289,6 +1331,9 @@ def autorizar_baja(sid: int):
     _audit(user, f"Solicitud baja #{sid} autorizada")
     db.session.commit()
     db.session.refresh(sol)
+    emit_to_role(_HERR_ROLES, 'baja:changed', {
+        'id': sid, 'unidad_id': sol.unidad_id, 'action': 'autorizada',
+    })
     return jsonify(_solicitud_baja_to_dict(sol))
 
 
@@ -1320,6 +1365,9 @@ def rechazar_baja(sid: int):
     _audit(user, f"Solicitud baja #{sid} rechazada")
     db.session.commit()
     db.session.refresh(sol)
+    emit_to_role(_HERR_ROLES, 'baja:changed', {
+        'id': sid, 'unidad_id': sol.unidad_id, 'action': 'rechazada',
+    })
     return jsonify(_solicitud_baja_to_dict(sol))
 
 
@@ -1369,6 +1417,14 @@ def ejecutar_baja(sid: int):
     _audit(user, f"Baja ejecutada #{sid}: unidad #{unidad.id}")
     db.session.commit()
     db.session.refresh(sol)
+    emit_to_role(_HERR_ROLES, 'baja:changed', {
+        'id': sid, 'unidad_id': unidad.id, 'action': 'ejecutada',
+    })
+    # Cambia también el estado de la unidad → notificar herramienta:changed
+    # para que las vistas de catálogo/unidades refresquen sus stats.
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': unidad.herramienta_id, 'unidad_id': unidad.id, 'action': 'baja_ejecutada',
+    })
     return jsonify(_solicitud_baja_to_dict(sol))
 
 
@@ -1423,6 +1479,12 @@ def baja_directa(uid: int):
     _audit(user, f"Baja directa unidad #{uid}")
     db.session.commit()
     db.session.refresh(sol)
+    emit_to_role(_HERR_ROLES, 'baja:changed', {
+        'id': sol.id, 'unidad_id': unidad.id, 'action': 'baja_directa',
+    })
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': unidad.herramienta_id, 'unidad_id': unidad.id, 'action': 'baja_directa',
+    })
     return jsonify(_solicitud_baja_to_dict(sol)), 201
 
 

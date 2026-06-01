@@ -23,18 +23,36 @@ cuando otro usuario muta el recurso.
 
 | Módulo | Frontend | Backend | Evento |
 |---|---|---|---|
+| Dashboard (inicio admin) | ✅ | reusa `empleado:changed` + `proyecto:changed` | — |
 | Empleados | ✅ | ✅ | `empleado:changed` |
 | Usuarios | ✅ | ✅ | `usuario:changed` |
 | Proyectos | ✅ | ✅ | `proyecto:changed` |
 | Horas (lista) | ✅ | ✅ | `reporte:lista_changed` |
+| Horas — Detalle/Captura (coord) | ✅ | reusa `reporte:lista_changed` | — |
 | Prenómina | ✅ | ✅ | `prenomina:changed` |
 | Préstamos | ✅ | ✅ | `prestamo:changed` |
 | Ajustes | ✅ | ✅ | `ajuste:changed` |
 | Histórico | ✅ | — (archivo, sin emit) | — |
 | Credenciales | ✅ | ✅ | `credencial:changed` |
+| Directorio | ✅ | reusa `usuario:changed` | `usuario:changed` |
+| Perfil (mío/ajeno) | ✅ | reusa `usuario:changed` | `usuario:changed` |
 | Bitácora | ✅ | — (read-only) | — |
-| Métricas | ✅ | — (read-only) | — |
+| Métricas | ✅ | reusa `empleado:changed` + `credencial:changed` | — |
 | Proyecto Total | ✅ | — (read-only) | — |
+| **Inventario — Dashboard** | ✅ | reusa eventos abajo | — |
+| Inventario — Catálogo productos | ✅ | ✅ | `producto:changed` |
+| Inventario — Bajo mínimo | ✅ | reusa `producto:changed` + `movimiento:changed` | — |
+| Inventario — Movimientos (lista) | — | ✅ | `movimiento:changed` |
+| Inventario — Solicitudes material | ✅ | ✅ | `solicitud:changed` |
+| Herramientas — Catálogo | ✅ | ✅ | `herramienta:changed` |
+| Herramientas — Unidades | ✅ | reusa `herramienta:changed` + derivados | — |
+| Herramientas — Asignaciones | ✅ | ✅ | `asignacion:changed` |
+| Herramientas — Incidencias y bajas | ✅ | ✅ | `incidencia:changed`, `baja:changed` |
+| Coordinador — Mis Proyectos | ✅ | reusa `proyecto:changed` | — |
+| Coordinador — Ficha Técnica | ✅ | reusa `empleado:changed` | — |
+| Solicitante — Mis Pedidos (form) | ✅ | reusa `producto:changed` + `herramienta:changed` + `proyecto:changed` | — |
+| Solicitante — Mis Herramientas | ✅ | reusa `asignacion:changed` + derivados | — |
+| Solicitante — Mis Incidencias | ✅ | reusa `incidencia:changed` + `baja:changed` | — |
 
 ---
 

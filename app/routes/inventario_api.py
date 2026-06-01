@@ -28,6 +28,16 @@ from sqlalchemy import distinct as sql_distinct
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
+from app.realtime import emit_to_role
+
+# Roles que reciben eventos de inventario (productos, almacenes, movimientos,
+# tomas). Coordinador/solicitante ven productos en sus solicitudes pero no
+# editan; igual les incluimos para que sus listas (catalogo en SolicitudForm)
+# refresquen al cambiar el stock.
+_INV_ROLES = ['admin', 'super_admin', 'inventario', 'coordinador', 'solicitante_material']
+# Las solicitudes involucran a todos: solicitante las crea, inventario aprueba,
+# coordinador puede crearlas también.
+_SOL_ROLES = ['admin', 'super_admin', 'inventario', 'coordinador', 'solicitante_material']
 from app.models import (
     Almacen, Estante, Producto, MovimientoInventario, StockPorAlmacen,
     ProductoEstante, TomaInventario, TomaInventarioDetalle, ESTADOS_TOMA,
@@ -673,6 +683,9 @@ def create_producto():
     _audit(user, f"Producto creado: {data['codigo']} — {data['descripcion']}")
     db.session.commit()
     db.session.refresh(nuevo)
+    emit_to_role(_INV_ROLES, 'producto:changed', {
+        'id': nuevo.id, 'action': 'created',
+    })
     return jsonify(_producto_to_dict(nuevo))
 
 
@@ -713,6 +726,9 @@ def update_producto(producto_id: int):
 
     db.session.commit()
     db.session.refresh(prod)
+    emit_to_role(_INV_ROLES, 'producto:changed', {
+        'id': prod.id, 'action': 'updated',
+    })
     return jsonify(_producto_to_dict(prod))
 
 
@@ -958,6 +974,9 @@ def delete_producto(producto_id: int):
     prod.activo = False  # Soft delete: mantener histórico de movimientos/solicitudes
     _audit(request.current_user, f"Producto #{producto_id} ({prod.codigo}) desactivado (soft delete)")
     db.session.commit()
+    emit_to_role(_INV_ROLES, 'producto:changed', {
+        'id': producto_id, 'action': 'deleted',
+    })
     return Response(status=204)
 
 
@@ -1437,6 +1456,9 @@ def _perform_movimiento(data: dict, user):
     _audit(user, f"Movimiento {tipo} — producto #{data['producto_id']} — cantidad: {cantidad_raw}")
     db.session.commit()
     db.session.refresh(nuevo_mov)
+    emit_to_role(_INV_ROLES, 'movimiento:changed', {
+        'id': nuevo_mov.id, 'producto_id': nuevo_mov.producto_id, 'tipo': tipo,
+    })
     return jsonify(_movimiento_to_dict(nuevo_mov))
 
 
@@ -1588,6 +1610,9 @@ def create_solicitud():
     _audit(user, f"Nueva solicitud — proyecto: {data.get('proyecto') or 'Sin proyecto'}")
     db.session.commit()
     db.session.refresh(nueva)
+    emit_to_role(_SOL_ROLES, 'solicitud:changed', {
+        'id': nueva.id, 'action': 'created',
+    })
 
     return jsonify(_solicitud_to_dict(nueva))
 
@@ -1727,6 +1752,10 @@ def update_solicitud_estado(sol_id: int):
 
     db.session.refresh(sol)
     _ = list(sol.detalles)
+    if estado_previo != nuevo_estado:
+        emit_to_role(_SOL_ROLES, 'solicitud:changed', {
+            'id': sol.id, 'action': f'estado:{nuevo_estado}',
+        })
     return jsonify(_solicitud_to_dict(sol))
 
 
@@ -1815,6 +1844,9 @@ def patch_solicitud_detalle(sol_id: int, det_id: int):
         raise
 
     db.session.refresh(det)
+    emit_to_role(_SOL_ROLES, 'solicitud:changed', {
+        'id': sol_id, 'detalle_id': det_id, 'action': 'detalle_updated',
+    })
     return jsonify(_solicitud_detalle_to_dict(det))
 
 
@@ -2153,6 +2185,15 @@ def entregar_solicitud(sol_id: int):
 
     db.session.refresh(sol)
     _ = list(sol.detalles)
+    emit_to_role(_SOL_ROLES, 'solicitud:changed', {
+        'id': sol.id, 'action': 'entregada' if sol.estatus == 'ENTREGADA' else 'entrega_parcial',
+    })
+    # Una entrega real genera SALIDAs de material → notificar también que
+    # cambió stock para que el catalogo/bajo-minimo refresquen.
+    if entregas_material:
+        emit_to_role(_INV_ROLES, 'movimiento:changed', {
+            'origen': 'solicitud_entrega', 'solicitud_id': sol.id,
+        })
     return jsonify(_solicitud_to_dict(sol))
 
 
