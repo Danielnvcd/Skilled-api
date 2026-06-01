@@ -10,6 +10,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
 from flask_compress import Compress
 from flask_cors import CORS
+from app.realtime import init_socketio, socketio  # noqa: F401  (re-export usado por run.py)
 
 def create_app():
     load_dotenv()
@@ -197,7 +198,8 @@ def create_app():
         'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
         # blob: necesario para getUserMedia (cámara) y WebWorkers del QR scanner
         # stream.mux.com: HLS de fondo en Login/Inicio del SPA React
-        'connect-src': ['\'self\'', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net', 'https://stream.mux.com', 'https://*.mux.com'],
+        # ws:/wss: en connect-src permiten el handshake de Socket.IO al mismo origen.
+        'connect-src': ['\'self\'', 'ws:', 'wss:', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net', 'https://stream.mux.com', 'https://*.mux.com'],
         'media-src': ['\'self\'', 'blob:', 'https://stream.mux.com', 'https://*.mux.com'],  # stream de cámara + HLS de fondo
         'worker-src': ['\'self\'', 'blob:'],           # WebWorker del scanner QR
         'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
@@ -452,11 +454,16 @@ def create_app():
             Notificacion.__table__.create(db.engine)
 
     app.wsgi_app = ProxyFix(
-        app.wsgi_app, 
-        x_for=2, 
-        x_proto=1, 
-        x_host=1, 
+        app.wsgi_app,
+        x_for=2,
+        x_proto=1,
+        x_host=1,
         x_prefix=1
-    )    
+    )
+
+    # Tiempo real (Socket.IO): la inicialización debe ir DESPUÉS de ProxyFix
+    # para que SocketIO vea los headers X-Forwarded-* corregidos al validar
+    # el origen del handshake.
+    init_socketio(app)
 
     return app

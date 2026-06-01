@@ -28,3 +28,6 @@ redis[hiredis]==7.4.0
 httpx==0.28.1
 PyJWT==2.10.1
 Flask-Cors==5.0.0
+Flask-SocketIO==5.4.1
+python-socketio==5.11.4
+eventlet==0.36.1

@@ -16,3 +16,5 @@ run_venv.py
 Gunicorn .config
 nginx.config
 .idea
+scripts/
+backups/

@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 
 from app.extensions import db, limiter
 from app.models import CredencialPlanta, DocumentoTrabajador, Proyecto, Trabajador
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.routes.trabajadores import (
     _CURP_RE,
@@ -497,6 +498,9 @@ def crear():
         db.session.add(t)
         db.session.commit()
         log_action(f'Agregó al trabajador {t.nombre} ({t.no_empleado})')
+        emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+            'id': t.id, 'action': 'created',
+        })
         return jsonify({'id': t.id, 'warnings': warnings}), 201
     except Exception as e:
         db.session.rollback()
@@ -547,6 +551,11 @@ def actualizar(id):
 
         db.session.commit()
         log_action(f'Actualizó al trabajador {t.nombre} ({t.no_empleado})')
+        # Coordinador también dispara la invalidación: edita campos médicos /
+        # contacto que aparecen en la lista de empleados de admin.
+        emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+            'id': t.id, 'action': 'updated',
+        })
         return jsonify({'id': t.id, 'warnings': warnings})
     except Exception as e:
         db.session.rollback()
@@ -567,6 +576,9 @@ def dar_baja(id):
         t.fecha_baja = date.today()
         db.session.commit()
         log_action(f'Dio de baja al trabajador {t.nombre} ({t.no_empleado})')
+        emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+            'id': t.id, 'action': 'baja',
+        })
         return jsonify({'ok': True})
     except Exception as e:
         db.session.rollback()
@@ -587,6 +599,9 @@ def reactivar(id):
         t.fecha_baja = None
         db.session.commit()
         log_action(f'Reactivó al trabajador {t.nombre} ({t.no_empleado})')
+        emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+            'id': t.id, 'action': 'reactivado',
+        })
         return jsonify({'ok': True})
     except Exception as e:
         db.session.rollback()
@@ -1016,6 +1031,9 @@ def importar_excel():
         try:
             db.session.commit()
             log_action(f'Importó masivamente {exitosos} trabajadores desde Excel')
+            emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+                'action': 'imported', 'count': exitosos,
+            })
         except Exception as e:
             db.session.rollback()
             current_app.logger.error('Error commit import: %s', e)

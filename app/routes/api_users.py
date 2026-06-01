@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash
 
 from app.extensions import db, limiter
 from app.models import RefreshToken, Trabajador, User
+from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
 from app.utils import is_strong_password, log_action
 
@@ -120,6 +121,9 @@ def crear():
         db.session.add(new_user)
         db.session.commit()
         log_action(f"Creó usuario '{username}' con rol '{role}'")
+        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+            'id': new_user.id, 'action': 'created',
+        })
         return jsonify(_user_to_dict(new_user)), 201
     except Exception as e:
         db.session.rollback()
@@ -194,6 +198,9 @@ def actualizar(user_id):
     try:
         db.session.commit()
         log_action(f"Actualizó perfil del usuario '{user.username}'")
+        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+            'id': user.id, 'action': 'updated',
+        })
         return jsonify(_user_to_dict(user))
     except Exception as e:
         db.session.rollback()
@@ -252,6 +259,9 @@ def subir_foto(user_id):
     try:
         db.session.commit()
         log_action(f"Actualizó la foto del usuario '{user.username}'")
+        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+            'id': user.id, 'action': 'foto',
+        })
         return jsonify(_user_to_dict(user))
     except Exception as e:
         db.session.rollback()
@@ -282,9 +292,13 @@ def eliminar(user_id):
         return jsonify({'error': 'Solo super_admin puede eliminar cuentas super_admin'}), 403
 
     try:
+        deleted_id = user.id
         db.session.delete(user)
         db.session.commit()
         log_action(f"Eliminó usuario '{user.username}'")
+        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+            'id': deleted_id, 'action': 'deleted',
+        })
         return jsonify({'ok': True})
     except Exception as e:
         db.session.rollback()
