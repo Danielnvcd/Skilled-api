@@ -100,6 +100,8 @@ def _registro_dict(reg: RegistroDiarioHoras) -> dict:
         'aplica_dia_festivo': bool(reg.aplica_dia_festivo),
         'incidencia': reg.incidencia or '',
         'horas_productivas': float(reg.horas_productivas) if reg.horas_productivas is not None else 0.0,
+        'client_record_id': reg.client_record_id,
+        'modificado_en': reg.modificado_en.isoformat() if reg.modificado_en else None,
     }
 
 
@@ -332,8 +334,14 @@ def _validar_y_aplicar_registro(reg: RegistroDiarioHoras, payload: dict, *, trab
     aplica_dia_festivo = bool(payload.get('aplica_dia_festivo'))
     incidencia = (payload.get('incidencia') or '').strip()
 
-    if (not hora_entrada_str or not hora_salida_str) and not incidencia:
-        return ('Debes registrar hora de entrada y salida, o seleccionar una incidencia.', 400)
+    # Permitimos guardar con solo hora_entrada (trabajador "dentro", esperando
+    # salida) — caso del kiosko RFID al pasar la primera tarjeta del día.
+    # Requisitos mínimos: o hay entrada, o hay incidencia. Salida sin entrada
+    # sí es error porque no podemos calcular nada.
+    if not hora_entrada_str and not incidencia:
+        return ('Debes registrar al menos la hora de entrada, o seleccionar una incidencia.', 400)
+    if hora_salida_str and not hora_entrada_str:
+        return ('No puedes registrar salida sin entrada.', 400)
 
     monto_viaticos_manual = None
     if aplica_viaticos:
@@ -355,13 +363,19 @@ def _validar_y_aplicar_registro(reg: RegistroDiarioHoras, payload: dict, *, trab
     hora_salida = None
     horas_productivas = 0.0
 
-    if hora_entrada_str and hora_salida_str:
+    if hora_entrada_str:
         try:
             hora_entrada = _parse_time(hora_entrada_str)
+        except ValueError:
+            return ('Formato de hora inválido (HH:MM)', 400)
+
+    if hora_salida_str:
+        try:
             hora_salida = _parse_time(hora_salida_str)
         except ValueError:
             return ('Formato de hora inválido (HH:MM)', 400)
 
+    if hora_entrada and hora_salida:
         if hora_entrada == hora_salida:
             return ('La hora de salida debe ser distinta a la hora de entrada.', 400)
 
@@ -417,6 +431,21 @@ def crear_registro(reporte_id):
     if not trabajador_id or not fecha_str:
         return jsonify({'error': 'trabajador_id y fecha son obligatorios'}), 400
 
+    # Idempotencia: si el cliente (kiosko offline) reintenta, el mismo client_record_id
+    # debe devolver el registro existente sin crear duplicado.
+    #
+    # IDOR fix: `client_record_id` es único globalmente, pero la idempotencia
+    # solo aplica al MISMO reporte. Si el registro existente pertenece a otro
+    # reporte (potencialmente fuera del scope del coordinador), devolvemos 404
+    # — no 403, para no confirmarle al atacante que el ID existe en otra parte.
+    client_record_id = (payload.get('client_record_id') or '').strip() or None
+    if client_record_id:
+        existente = RegistroDiarioHoras.query.filter_by(client_record_id=client_record_id).first()
+        if existente:
+            if existente.reporte_id != reporte.id:
+                return jsonify({'error': 'Registro no encontrado'}), 404
+            return jsonify(_registro_dict(existente)), 200
+
     try:
         fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     except ValueError:
@@ -432,6 +461,8 @@ def crear_registro(reporte_id):
         return jsonify({'error': 'Este trabajador no está asignado al proyecto'}), 400
 
     reg = RegistroDiarioHoras(reporte_id=reporte.id, trabajador_id=trabajador.id, fecha=fecha)
+    if client_record_id:
+        reg.client_record_id = client_record_id
     err = _validar_y_aplicar_registro(reg, payload, trabajador=trabajador, reporte=reporte)
     if err:
         return jsonify({'error': err[0]}), err[1]
@@ -457,6 +488,31 @@ def editar_registro(registro_id):
         return jsonify({'error': 'El reporte ya está cerrado'}), 409
 
     payload = request.get_json(silent=True) or {}
+
+    # LWW: si el cliente declara cuándo modificó su copia local y el servidor tiene
+    # una versión más reciente, devolvemos 409 con el estado actual para que el
+    # cliente decida (sobrescribir, descartar local, o resolver manualmente).
+    cliente_modificado_en_str = (payload.get('modificado_en') or '').strip()
+    if cliente_modificado_en_str and reg.modificado_en:
+        try:
+            cliente_dt = datetime.fromisoformat(cliente_modificado_en_str.replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({'error': 'modificado_en con formato inválido (esperado ISO 8601)'}), 400
+        # SQLite no preserva tzinfo aunque la columna declare timezone=True: el
+        # valor que regresa SQLAlchemy llega naive. Asumimos UTC en ambos lados.
+        from datetime import timezone as _tz
+        if cliente_dt.tzinfo is None:
+            cliente_dt = cliente_dt.replace(tzinfo=_tz.utc)
+        servidor_dt = reg.modificado_en
+        if servidor_dt.tzinfo is None:
+            servidor_dt = servidor_dt.replace(tzinfo=_tz.utc)
+        if servidor_dt > cliente_dt:
+            return jsonify({
+                'error': 'conflicto',
+                'conflicto': True,
+                'servidor': _registro_dict(reg),
+            }), 409
+
     err = _validar_y_aplicar_registro(reg, payload, trabajador=reg.trabajador, reporte=reporte)
     if err:
         return jsonify({'error': err[0]}), err[1]
@@ -723,3 +779,123 @@ def qr_imagen(qr_code):
     img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png')
+
+
+# ── Kiosko RFID: asociar tarjeta + bajar trabajadores del reporte ─────────────
+#
+# El kiosko de asistencias (Electron + sidecar Python) usa estos endpoints solo
+# cuando hay internet:
+#   1. Al loguear el coordinador: GET /rfid/trabajadores-reporte/<id> para cachear
+#      qué tarjeta corresponde a qué trabajador en cada reporte BORRADOR activo.
+#   2. Al asociar una tarjeta nueva en sitio: POST /rfid/asociar con el UID leído.
+# El registro de asistencias en sí usa los endpoints estándar POST/PUT/DELETE de
+# registros — con client_record_id (idempotencia) y modificado_en (LWW).
+
+def _normalizar_uid(raw: str) -> str:
+    """Normaliza un UID RFID a hexadecimal en mayúsculas, sin prefijos ni espacios.
+
+    Distintos lectores (Wiegand vía Arduino, USB-HID) entregan el UID en
+    formatos heterogéneos: decimal puro, hex con/sin '0x', con guiones, etc.
+    Normalizamos para que la búsqueda y la unicidad funcionen sin importar la
+    fuente del lector.
+    """
+    if not raw:
+        return ''
+    s = raw.strip().upper().replace(' ', '').replace('-', '').replace(':', '')
+    if s.startswith('0X'):
+        s = s[2:]
+    # Si es decimal puro lo dejamos así (no asumimos base); para hex validamos.
+    return s
+
+
+@bp.route('/rfid/asociar', methods=['POST'])
+@jwt_required
+@limiter.limit('20 per minute')
+def rfid_asociar():
+    """Asocia una tarjeta RFID a un trabajador.
+
+    Body: {"trabajador_id": int, "uid": "ABCD1234"}
+    El UID se normaliza (uppercase, sin separadores) antes de guardarlo para
+    evitar duplicados por diferencias de formato entre lectores.
+    """
+    if not (_is_admin() or _is_coordinador()):
+        return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    trabajador_id = payload.get('trabajador_id')
+    uid = _normalizar_uid(payload.get('uid') or '')
+
+    if not trabajador_id or not uid:
+        return jsonify({'ok': False, 'error': 'trabajador_id y uid son obligatorios'}), 400
+    if len(uid) > 64:
+        return jsonify({'ok': False, 'error': 'UID demasiado largo (máx 64 chars)'}), 400
+
+    trabajador = Trabajador.query.get_or_404(trabajador_id)
+
+    # Si el coordinador intenta asociar tarjeta a un trabajador, debe ser de un
+    # proyecto suyo (mismo criterio que el resto del módulo).
+    if _is_coordinador():
+        proyectos_coord = Proyecto.query.filter_by(coordinador_id=_u().id).all()
+        if not any(trabajador in p.participantes for p in proyectos_coord):
+            return jsonify({'ok': False, 'error': 'Este trabajador no está en tus proyectos'}), 403
+
+    # Unicidad: si el UID ya pertenece a otro trabajador, rechazar para no pisar.
+    duenio = Trabajador.query.filter(
+        Trabajador.rfid_uid == uid,
+        Trabajador.id != trabajador.id,
+    ).first()
+    if duenio:
+        return jsonify({
+            'ok': False,
+            'error': f'Esta tarjeta ya está asociada a {duenio.nombre_completo} ({duenio.no_empleado}).',
+        }), 409
+
+    try:
+        trabajador.rfid_uid = uid
+        db.session.commit()
+        log_action(f"API: asoció RFID {uid} a {trabajador.nombre} ({trabajador.no_empleado})")
+        return jsonify({
+            'ok': True,
+            'trabajador_id': trabajador.id,
+            'rfid_uid': trabajador.rfid_uid,
+        })
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error("Error asociando RFID: %s", traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Error al asociar la tarjeta'}), 500
+
+
+@bp.route('/rfid/trabajadores-reporte/<int:reporte_id>', methods=['GET'])
+@jwt_required
+def rfid_trabajadores_reporte(reporte_id):
+    """Devuelve los trabajadores del reporte con su rfid_uid y datos para el
+    cache local del kiosko (no_empleado, nombre, foto, tipo_nomina, viaticos,
+    pago_dia_festivo). El kiosko llama este endpoint al descargar un reporte
+    antes de irse offline.
+    """
+    r = ReporteSemanal.query.options(
+        joinedload(ReporteSemanal.proyecto).selectinload(Proyecto.participantes),
+    ).get_or_404(reporte_id)
+
+    if not _puede_acceder_proyecto(r.proyecto):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    items = []
+    for t in sorted(r.proyecto.participantes, key=lambda x: (x.nombre or '').lower()):
+        items.append({
+            'id': t.id,
+            'no_empleado': t.no_empleado,
+            'nombre_completo': t.nombre_completo,
+            'tipo_nomina': t.tipo_nomina or 'Semanal',
+            'viaticos': float(t.viaticos) if t.viaticos is not None else 0.0,
+            'pago_dia_festivo': float(t.pago_dia_festivo) if t.pago_dia_festivo is not None else 0.0,
+            'rfid_uid': t.rfid_uid or '',
+            'foto_url': f'/uploads/{t.foto_perfil}' if t.foto_perfil else None,
+        })
+
+    return jsonify({
+        'reporte_id': r.id,
+        'fecha_inicio': r.fecha_inicio_semana.isoformat(),
+        'fecha_fin': r.fecha_fin_semana.isoformat(),
+        'trabajadores': items,
+    })

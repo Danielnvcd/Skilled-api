@@ -60,6 +60,7 @@ class Trabajador(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     no_empleado = db.Column(db.String(50), unique=True, nullable=False)
     qr_code = db.Column(db.String(100), unique=True, nullable=True, index=True)
+    rfid_uid = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
     # Credenciales de plantas (One-to-Many)
     credenciales = db.relationship('CredencialPlanta', backref='trabajador', lazy=True, cascade="all, delete-orphan")
@@ -238,7 +239,13 @@ class RegistroDiarioHoras(db.Model):
     
     # Horas productivas calculadas (en formato número)
     horas_productivas = db.Column(db.Numeric(5, 2), nullable=True)
-    
+
+    # Sincronización offline (cliente kiosko RFID):
+    # client_record_id = UUID generado por el cliente; permite idempotencia en reintentos.
+    # modificado_en = timestamp del último cambio, usado para LWW al sincronizar.
+    client_record_id = db.Column(db.String(36), unique=True, nullable=True, index=True)
+    modificado_en = db.Column(db.DateTime(timezone=True), default=_now_utc, onupdate=_now_utc)
+
     # Relaciones
     reporte = db.relationship('ReporteSemanal', backref=db.backref('registros', lazy=True, cascade="all, delete-orphan"))
     trabajador = db.relationship('Trabajador')

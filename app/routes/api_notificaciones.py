@@ -9,6 +9,7 @@ from flask import Blueprint, g, jsonify
 
 from app.extensions import db
 from app.models import Notificacion
+from app.realtime import emit_to_user
 from app.routes.api_auth import jwt_required
 from app.routes.notificaciones import (
     _purgar_notificaciones_viejas,
@@ -77,6 +78,9 @@ def marcar_leida(notif_id):
     if not n.leida:
         n.leida = True
         db.session.commit()
+    unread = Notificacion.query.filter_by(usuario_id=_u().id, leida=False).count()
+    # Sincroniza otras pestañas/dispositivos del mismo usuario.
+    emit_to_user(_u().id, 'notif:read', {'id': notif_id, 'no_leidas': unread})
     return jsonify({'success': True})
 
 
@@ -87,4 +91,5 @@ def marcar_todas():
         return jsonify({'error': 'Acceso denegado'}), 403
     Notificacion.query.filter_by(usuario_id=_u().id, leida=False).update({'leida': True})
     db.session.commit()
+    emit_to_user(_u().id, 'notif:read_all', {'no_leidas': 0})
     return jsonify({'success': True})
