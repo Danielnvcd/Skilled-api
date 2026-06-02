@@ -484,6 +484,134 @@ def crear_registro(reporte_id):
         return jsonify({'error': 'Error al guardar el registro'}), 500
 
 
+@bp.route('/reportes/<int:reporte_id>/registros/bulk', methods=['POST'])
+@jwt_required
+def bulk_upsert_registros(reporte_id):
+    """Crea o actualiza varios registros en una sola transacción.
+
+    Body: { "registros": [{trabajador_id, fecha, hora_entrada?, hora_salida?,
+            tomo_comida?, incidencia?}, ...] }  (1..200 filas).
+
+    Para cada fila:
+      - upsert por (trabajador_id, fecha) — si ya existe, se actualiza;
+        si no, se crea.
+      - se valida con `_validar_y_aplicar_registro` (mismas reglas que la
+        creación/edición individual: traslapes, fechas dentro de la semana,
+        formato de hora, etc.).
+      - si una fila falla validación, se omite (no rollback total); el error
+        se reporta en `skipped: [{idx, reason}]`.
+
+    El emit de `reporte:registros_cambio` lo hace el hook
+    `_register_registros_emit_hook` automáticamente al commit; no se duplica
+    desde aquí.
+    """
+    reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    if not _puede_acceder_proyecto(reporte.proyecto):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if reporte.estado != 'BORRADOR':
+        return jsonify({'error': 'El reporte ya está cerrado'}), 409
+
+    payload = request.get_json(silent=True) or {}
+    rows = payload.get('registros') or []
+    if not isinstance(rows, list) or not rows:
+        return jsonify({'error': 'Lista de registros vacía'}), 422
+    if len(rows) > 200:
+        return jsonify({'error': 'Máximo 200 registros por operación'}), 422
+
+    # Map de trabajadores válidos del proyecto: id -> Trabajador
+    participantes = {t.id: t for t in reporte.proyecto.participantes}
+
+    # Precarga de registros existentes en la semana, indexados por (tid, fecha)
+    existentes = {
+        (r.trabajador_id, r.fecha): r
+        for r in RegistroDiarioHoras.query.filter_by(reporte_id=reporte.id).all()
+    }
+
+    created = []
+    updated = []
+    skipped = []
+
+    for idx, raw in enumerate(rows):
+        if not isinstance(raw, dict):
+            skipped.append({'idx': idx, 'reason': 'formato inválido'})
+            continue
+        try:
+            trabajador_id = int(raw.get('trabajador_id'))
+        except (TypeError, ValueError):
+            skipped.append({'idx': idx, 'reason': 'trabajador_id inválido'})
+            continue
+        fecha_str = (raw.get('fecha') or '').strip()
+        if not fecha_str:
+            skipped.append({'idx': idx, 'reason': 'fecha vacía'})
+            continue
+        try:
+            fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        except ValueError:
+            skipped.append({'idx': idx, 'reason': 'fecha inválida'})
+            continue
+        if not (reporte.fecha_inicio_semana <= fecha <= reporte.fecha_fin_semana):
+            skipped.append({'idx': idx, 'reason': 'fecha fuera de la semana'})
+            continue
+        trabajador = participantes.get(trabajador_id)
+        if not trabajador:
+            skipped.append({'idx': idx, 'reason': 'trabajador no asignado al proyecto'})
+            continue
+
+        existing = existentes.get((trabajador_id, fecha))
+        if existing:
+            reg = existing
+            is_new = False
+        else:
+            reg = RegistroDiarioHoras(reporte_id=reporte.id, trabajador_id=trabajador.id, fecha=fecha)
+            is_new = True
+
+        # Preservar viáticos/festivo del existente si no vienen en el payload
+        # (el flujo "pegar desde Excel" no captura esos campos).
+        merged = dict(raw)
+        if existing and 'aplica_viaticos' not in raw:
+            merged['aplica_viaticos'] = bool(existing.aplica_viaticos)
+            merged['viaticos_modo'] = 'manual' if existing.monto_viaticos_manual is not None else 'perfil'
+            merged['monto_viaticos_manual'] = (
+                float(existing.monto_viaticos_manual) if existing.monto_viaticos_manual is not None else None
+            )
+        if existing and 'aplica_dia_festivo' not in raw:
+            merged['aplica_dia_festivo'] = bool(existing.aplica_dia_festivo)
+
+        err = _validar_y_aplicar_registro(reg, merged, trabajador=trabajador, reporte=reporte)
+        if err:
+            skipped.append({'idx': idx, 'reason': err[0]})
+            continue
+
+        if is_new:
+            db.session.add(reg)
+            created.append(idx)
+            # Para que upserts dentro del mismo batch (mismo tid+fecha) no
+            # generen duplicados, indexamos el nuevo en `existentes`.
+            existentes[(trabajador_id, fecha)] = reg
+        else:
+            updated.append(idx)
+
+    if not created and not updated:
+        return jsonify({
+            'ok': True, 'created': 0, 'updated': 0,
+            'skipped': skipped,
+        })
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Error bulk upsert registros: %s', traceback.format_exc())
+        return jsonify({'error': 'Error al guardar en lote'}), 500
+
+    return jsonify({
+        'ok': True,
+        'created': len(created),
+        'updated': len(updated),
+        'skipped': skipped,
+    })
+
+
 @bp.route('/registros/<int:registro_id>', methods=['PUT'])
 @jwt_required
 def editar_registro(registro_id):

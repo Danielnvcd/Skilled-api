@@ -452,6 +452,231 @@ def obtener(id):
     return jsonify(_full_detail(t))
 
 
+@bp.route('/<int:id>/timeline', methods=['GET'])
+@jwt_required
+def timeline(id):
+    """Eventos cronológicos consolidados de un trabajador.
+
+    Une horas registradas, ausencias, ajustes (descuentos Inbursa),
+    préstamos creados, abonos a préstamos y documentos subidos en un
+    solo stream ordenado por fecha desc.
+
+    Query params:
+      desde   YYYY-MM-DD  default: hoy - 90 días
+      hasta   YYYY-MM-DD  default: hoy
+      limit   int         default: 200, máx 500
+
+    Acceso: admin/super_admin siempre; coordinador solo si el trabajador
+    pertenece a uno de sus proyectos (vía `_authorized`).
+    """
+    from datetime import date as _date, timedelta as _td
+
+    from datetime import datetime
+
+    from app.models import (
+        AbonoPrestamo, AjusteDescuento, AjustePeriodo, Ausencia,
+        DocumentoTrabajador, Prestamo, ReporteSemanal, RegistroDiarioHoras,
+    )
+
+    t = Trabajador.query.get(id)
+    if not t:
+        return jsonify({'error': 'No encontrado'}), 404
+    if not _authorized(t):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    hoy = _date.today()
+    try:
+        desde = _parse_date(request.args.get('desde')) or (hoy - _td(days=90))
+        hasta = _parse_date(request.args.get('hasta')) or hoy
+    except ValueError:
+        return jsonify({'error': 'Fecha inválida (YYYY-MM-DD)'}), 400
+    if desde > hasta:
+        desde, hasta = hasta, desde
+
+    try:
+        limit = int(request.args.get('limit') or 200)
+    except (TypeError, ValueError):
+        limit = 200
+    limit = max(1, min(limit, 500))
+
+    eventos: list[dict] = []
+
+    # ── Horas registradas ────────────────────────────────────────────────
+    horas_rows = (
+        db.session.query(RegistroDiarioHoras, ReporteSemanal, Proyecto)
+        .join(ReporteSemanal, RegistroDiarioHoras.reporte_id == ReporteSemanal.id)
+        .join(Proyecto, ReporteSemanal.proyecto_id == Proyecto.id)
+        .filter(
+            RegistroDiarioHoras.trabajador_id == t.id,
+            RegistroDiarioHoras.fecha >= desde,
+            RegistroDiarioHoras.fecha <= hasta,
+        )
+        .order_by(RegistroDiarioHoras.fecha.desc())
+        .limit(limit)
+        .all()
+    )
+    for reg, rep, proy in horas_rows:
+        horas = float(reg.horas_productivas or 0)
+        if reg.incidencia:
+            titulo = reg.incidencia
+        elif reg.hora_entrada and reg.hora_salida:
+            titulo = f'{reg.hora_entrada.strftime("%H:%M")}–{reg.hora_salida.strftime("%H:%M")}'
+        elif reg.hora_entrada:
+            titulo = f'Entró {reg.hora_entrada.strftime("%H:%M")} (sin salida)'
+        else:
+            titulo = 'Registro'
+        eventos.append({
+            'tipo': 'horas',
+            'fecha': reg.fecha.isoformat(),
+            'titulo': titulo,
+            'subtitle': f'{proy.nombre or proy.numero_proyecto}',
+            'monto': None,
+            'horas': horas,
+            'url': f'/horas/{rep.id}',
+        })
+
+    # ── Ausencias ────────────────────────────────────────────────────────
+    aus_rows = (
+        Ausencia.query
+        .filter(
+            Ausencia.trabajador_id == t.id,
+            Ausencia.fecha_inicio <= hasta,
+            Ausencia.fecha_fin >= desde,
+        )
+        .order_by(Ausencia.fecha_inicio.desc())
+        .limit(limit)
+        .all()
+    )
+    for a in aus_rows:
+        rango = a.fecha_inicio.isoformat()
+        if a.fecha_fin and a.fecha_fin != a.fecha_inicio:
+            rango = f'{a.fecha_inicio.isoformat()} → {a.fecha_fin.isoformat()}'
+        dias = a.dias_solicitados or 1
+        eventos.append({
+            'tipo': 'ausencia',
+            'fecha': a.fecha_inicio.isoformat(),
+            'titulo': f'{a.tipo_ausencia} ({dias} día{"" if dias == 1 else "s"})',
+            'subtitle': f'{a.estado} · {rango}',
+            'monto': None,
+            'url': None,
+        })
+
+    # ── Ajustes (descuentos Inbursa) ─────────────────────────────────────
+    aj_rows = (
+        db.session.query(AjusteDescuento, AjustePeriodo)
+        .join(AjustePeriodo, AjusteDescuento.periodo_id == AjustePeriodo.id)
+        .filter(
+            AjusteDescuento.trabajador_id == t.id,
+            AjusteDescuento.fecha_descuento >= desde,
+            AjusteDescuento.fecha_descuento <= hasta,
+        )
+        .order_by(AjusteDescuento.fecha_descuento.desc())
+        .limit(limit)
+        .all()
+    )
+    for d, p in aj_rows:
+        eventos.append({
+            'tipo': 'ajuste',
+            'fecha': d.fecha_descuento.isoformat(),
+            'titulo': f'Descuento Inbursa — {p.nombre}',
+            'subtitle': 'Cobrado en prenómina' if getattr(d, 'cobrado', False) else 'Pendiente de cobro',
+            'monto': float(d.monto) if d.monto else 0.0,
+            'url': f'/ajustes/{p.id}',
+        })
+
+    # ── Préstamos creados ────────────────────────────────────────────────
+    prest_rows = (
+        Prestamo.query
+        .filter(
+            Prestamo.trabajador_id == t.id,
+            db.or_(
+                db.and_(Prestamo.fecha_inicio != None, Prestamo.fecha_inicio >= desde, Prestamo.fecha_inicio <= hasta),  # noqa: E711
+                db.and_(Prestamo.fecha_inicio == None, Prestamo.creado_en != None,  # noqa: E711
+                        Prestamo.creado_en >= datetime.combine(desde, datetime.min.time()),
+                        Prestamo.creado_en <= datetime.combine(hasta, datetime.max.time())),
+            ),
+        )
+        .order_by(Prestamo.id.desc())
+        .limit(limit)
+        .all()
+    )
+    for p in prest_rows:
+        fecha_evt = (p.fecha_inicio or (p.creado_en.date() if p.creado_en else hoy))
+        eventos.append({
+            'tipo': 'prestamo_creado',
+            'fecha': fecha_evt.isoformat(),
+            'titulo': f'Préstamo otorgado — {p.motivo or "Sin motivo"}',
+            'subtitle': f'{p.plazo_semanas} {p.frecuencia or "semanas"} · resta {float(p.monto_restante or 0):.2f}',
+            'monto': float(p.monto_total) if p.monto_total else 0.0,
+            'url': f'/prestamos?trabajador_id={t.id}',
+        })
+
+    # ── Abonos a préstamos ───────────────────────────────────────────────
+    abono_rows = (
+        db.session.query(AbonoPrestamo, Prestamo)
+        .join(Prestamo, AbonoPrestamo.prestamo_id == Prestamo.id)
+        .filter(
+            Prestamo.trabajador_id == t.id,
+            AbonoPrestamo.fecha_abono >= desde,
+            AbonoPrestamo.fecha_abono <= hasta,
+        )
+        .order_by(AbonoPrestamo.fecha_abono.desc())
+        .limit(limit)
+        .all()
+    )
+    for ab, pr in abono_rows:
+        eventos.append({
+            'tipo': 'abono',
+            'fecha': ab.fecha_abono.isoformat(),
+            'titulo': f'Abono — {pr.motivo or "Préstamo"}',
+            'subtitle': f'{ab.tipo or "MANUAL"}{f" · {ab.notas}" if ab.notas else ""}',
+            'monto': float(ab.monto) if ab.monto else 0.0,
+            'url': f'/prestamos?trabajador_id={t.id}',
+        })
+
+    # ── Documentos subidos ───────────────────────────────────────────────
+    doc_rows = (
+        DocumentoTrabajador.query
+        .filter(
+            DocumentoTrabajador.trabajador_id == t.id,
+            DocumentoTrabajador.fecha_subida != None,  # noqa: E711
+            DocumentoTrabajador.fecha_subida >= datetime.combine(desde, datetime.min.time()),
+            DocumentoTrabajador.fecha_subida <= datetime.combine(hasta, datetime.max.time()),
+        )
+        .order_by(DocumentoTrabajador.fecha_subida.desc())
+        .limit(limit)
+        .all()
+    )
+    for d in doc_rows:
+        sub = d.tipo_documento or d.nombre_archivo
+        venc = ''
+        if d.fecha_fin:
+            venc = f' · vence {d.fecha_fin.isoformat()}'
+        eventos.append({
+            'tipo': 'documento',
+            'fecha': d.fecha_subida.date().isoformat(),
+            'titulo': f'Documento: {sub}',
+            'subtitle': f'{d.nombre_archivo}{venc}',
+            'monto': None,
+            'url': f'/empleados/{t.id}',
+        })
+
+    # Sort global desc por fecha y aplicar tope agregado.
+    eventos.sort(key=lambda e: e['fecha'], reverse=True)
+    eventos = eventos[:limit]
+
+    return jsonify({
+        'trabajador': {
+            'id': t.id,
+            'no_empleado': t.no_empleado,
+            'nombre': f'{t.nombre or ""} {t.nombre_apellidos or ""}'.strip(),
+        },
+        'rango': {'desde': desde.isoformat(), 'hasta': hasta.isoformat()},
+        'total': len(eventos),
+        'eventos': eventos,
+    })
+
+
 @bp.route('', methods=['POST'])
 @jwt_required
 @limiter.limit('10 per minute')
@@ -607,6 +832,77 @@ def reactivar(id):
         db.session.rollback()
         current_app.logger.error('Error reactivar: %s', e)
         return jsonify({'error': 'Error al reactivar'}), 500
+
+
+# ── Acciones en lote (baja / reactivar varios a la vez) ──────────────────────
+
+@bp.route('/bulk', methods=['POST'])
+@jwt_required
+def bulk_accion():
+    if not _is_admin():
+        return jsonify({'error': 'Solo admin puede realizar acciones en lote'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get('action') or '').strip()
+    raw_ids = payload.get('ids') or []
+
+    if action not in ('baja', 'reactivar'):
+        return jsonify({'error': 'Acción no válida'}), 422
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'Lista de IDs vacía'}), 422
+    # Tope defensivo: evita una operación accidental sobre miles de filas.
+    if len(raw_ids) > 100:
+        return jsonify({'error': 'Máximo 100 IDs por operación'}), 422
+    try:
+        ids = sorted({int(i) for i in raw_ids})
+    except (TypeError, ValueError):
+        return jsonify({'error': 'IDs deben ser enteros'}), 422
+
+    trabajadores = Trabajador.query.filter(Trabajador.id.in_(ids)).all()
+    found_ids = {t.id for t in trabajadores}
+    skipped = [{'id': i, 'reason': 'no_encontrado'} for i in ids if i not in found_ids]
+
+    affected = []
+    today = date.today()
+    for t in trabajadores:
+        if action == 'baja':
+            if not t.activo:
+                skipped.append({'id': t.id, 'reason': 'ya_inactivo'})
+                continue
+            t.activo = False
+            t.fecha_baja = today
+        else:  # reactivar
+            if t.activo:
+                skipped.append({'id': t.id, 'reason': 'ya_activo'})
+                continue
+            t.activo = True
+            t.fecha_baja = None
+        affected.append(t.id)
+
+    if not affected:
+        return jsonify({'ok': True, 'affected': 0, 'ids': [], 'skipped': skipped})
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error bulk %s: %s', action, e)
+        return jsonify({'error': 'Error en operación en lote'}), 500
+
+    log_action(f'Bulk {action} sobre {len(affected)} trabajadores: {affected}')
+    # Un solo emit cubre la operación completa: otros admins recargan la lista
+    # una vez (no N veces). El payload incluye ids para que el receptor pueda
+    # invalidar caches selectivas si quisiera más adelante.
+    emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+        'action': f'bulk_{action}',
+        'ids': affected,
+    })
+    return jsonify({
+        'ok': True,
+        'affected': len(affected),
+        'ids': affected,
+        'skipped': skipped,
+    })
 
 
 # ── Credenciales (bulk) ────────────────────────────────────────────────────────
@@ -833,6 +1129,9 @@ def subir_documento(id):
     db.session.add(doc)
     db.session.commit()
     log_action(f'Subió documento {filename} para {t.nombre} ({t.no_empleado})')
+    emit_to_role(['admin', 'super_admin', 'coordinador'], 'documento:changed', {
+        'trabajador_id': t.id, 'doc_id': doc.id, 'action': 'created',
+    })
     return jsonify(doc.to_dict()), 201
 
 
@@ -871,8 +1170,13 @@ def eliminar_documento(doc_id):
     except Exception as e:
         current_app.logger.error('Error eliminando archivo físico: %s', e)
     log_action(f'Eliminó documento {doc.nombre_archivo} del trabajador {doc.trabajador_id}')
+    trabajador_id = doc.trabajador_id
+    doc_id = doc.id
     db.session.delete(doc)
     db.session.commit()
+    emit_to_role(['admin', 'super_admin', 'coordinador'], 'documento:changed', {
+        'trabajador_id': trabajador_id, 'doc_id': doc_id, 'action': 'deleted',
+    })
     return jsonify({'ok': True})
 
 
@@ -1190,6 +1494,90 @@ def exportar_uno(id):
     safe_name = f"{t.no_empleado}_{(t.nombre_apellidos or '').replace(' ', '_')}.xlsx"
     return send_file(
         buf, as_attachment=True, download_name=safe_name,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+
+
+@bp.route('/bulk-exportar', methods=['POST'])
+@jwt_required
+def bulk_exportar():
+    """Exporta a Excel solo los empleados de la selección recibida.
+
+    Body: { "ids": [int, ...] }  (1..200 ids).
+
+    Reusa el mismo layout y estilos del export-todos pero filtrado por IDs.
+    El filtro de coordinador sigue aplicando: solo verá empleados de sus
+    proyectos aunque haya pasado IDs ajenos en el body — anti IDOR.
+    """
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'Lista de IDs vacía'}), 422
+    if len(raw_ids) > 200:
+        return jsonify({'error': 'Máximo 200 IDs por operación'}), 422
+    try:
+        ids = sorted({int(i) for i in raw_ids})
+    except (TypeError, ValueError):
+        return jsonify({'error': 'IDs deben ser enteros'}), 422
+
+    base = Trabajador.query.filter(Trabajador.id.in_(ids))
+    # Mismo gate que /exportar-todos: el coordinador solo ve a los suyos.
+    # Si pasa IDs fuera de su scope se filtran silenciosamente.
+    if _u().role == 'coordinador':
+        mis = Proyecto.query.filter_by(activo=True, coordinador_id=_u().id).all()
+        permitidos = {t.id for p in mis for t in p.participantes}
+        base = base.filter(Trabajador.id.in_(permitidos))
+    elif not _is_admin():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    trabajadores = base.order_by(func.lower(Trabajador.nombre)).all()
+    if not trabajadores:
+        return jsonify({'error': 'Ninguno de los IDs es accesible'}), 404
+
+    S = _build_export_styles()
+    mask_pii = not _is_admin()
+
+    wb = Workbook(); ws = wb.active; ws.title = 'Empleados'
+    ws.row_dimensions[1].height = 38
+    ws.merge_cells(f'A1:{get_column_letter(len(_HEADERS_EXPORT))}1')
+    c = ws['A1']
+    c.value = (
+        f"LISTADO DE EMPLEADOS (SELECCIÓN) — "
+        f"{len(trabajadores)} de {len(ids)} solicitados — "
+        f"Generado: {date.today().strftime('%d/%m/%Y')}"
+    )
+    c.fill = S['AZUL_OSC']; c.font = S['FONT_TITLE']; c.alignment = S['CENTER']; c.border = S['BORDER_HDR']
+
+    ws.row_dimensions[2].height = 22
+    for i, header in enumerate(_HEADERS_EXPORT, 1):
+        cc = ws.cell(row=2, column=i, value=header)
+        cc.fill = S['AZUL_HDR']; cc.font = S['FONT_WHITE_BOLD']; cc.alignment = S['CENTER']; cc.border = S['BORDER_HDR']
+
+    for row_idx, t in enumerate(trabajadores, start=3):
+        fill = S['GRIS_ALT'] if (row_idx % 2 == 0) else S['BLANCO']
+        ws.row_dimensions[row_idx].height = 16
+        for i, val in enumerate(_row_values(t, mask_pii), 1):
+            cc = ws.cell(row=row_idx, column=i, value=safe_excel_value(val) if val is not None else '')
+            cc.fill = fill; cc.font = S['FONT_BODY']; cc.alignment = S['LEFT']; cc.border = S['BORDER']
+
+    widths = [14, 18, 20, 14, 20, 14, 14, 8, 14, 14, 6, 28, 14, 32,
+              16, 20, 16, 16, 14, 14, 14, 12, 12, 20,
+              12, 8, 16, 10, 16, 16,
+              22, 14, 14,
+              16, 14, 12, 14, 12, 12, 12, 12, 12, 14,
+              20, 16, 14, 20]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = 'A3'
+
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    fname = f"empleados_seleccion_{date.today().strftime('%Y%m%d')}.xlsx"
+    log_action(f'Bulk export trabajadores: {len(trabajadores)} de {len(ids)} solicitados')
+    return send_file(
+        buf, as_attachment=True, download_name=fname,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
 

@@ -72,8 +72,9 @@ def resumen():
 @bp.route('/<int:notif_id>/leer', methods=['POST'])
 @jwt_required
 def marcar_leida(notif_id):
-    if not _is_admin():
-        return jsonify({'error': 'Acceso denegado'}), 403
+    # El gate real es `usuario_id == _u().id` en el filter_by: un usuario solo
+    # puede tocar sus propias notifs. No filtramos por rol aquí para que el
+    # endpoint sobreviva si en el futuro se mandan notifs a coord u otros roles.
     n = Notificacion.query.filter_by(id=notif_id, usuario_id=_u().id).first_or_404()
     if not n.leida:
         n.leida = True
@@ -87,8 +88,7 @@ def marcar_leida(notif_id):
 @bp.route('/marcar_todas', methods=['POST'])
 @jwt_required
 def marcar_todas():
-    if not _is_admin():
-        return jsonify({'error': 'Acceso denegado'}), 403
+    # Mismo principio que arriba: el WHERE por usuario_id ya es el gate.
     Notificacion.query.filter_by(usuario_id=_u().id, leida=False).update({'leida': True})
     db.session.commit()
     emit_to_user(_u().id, 'notif:read_all', {'no_leidas': 0})
