@@ -335,6 +335,79 @@ def eliminar_descuento(descuento_id):
         return jsonify({'error': 'Error al eliminar'}), 500
 
 
+@bp.route('/descuentos/bulk-delete', methods=['POST'])
+@jwt_required
+def eliminar_descuentos_bulk():
+    """Elimina varios descuentos en una sola transacción.
+
+    Body: { "descuento_ids": [int, ...] }  (1..200 ids).
+
+    Respeta las mismas reglas de negocio que el delete individual: salta
+    (no falla) los descuentos cuyo periodo esté cerrado o ya estén cobrados,
+    y los reporta en `skipped` para que la UI los muestre.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('descuento_ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'Lista de descuentos vacía'}), 422
+    if len(raw_ids) > 200:
+        return jsonify({'error': 'Máximo 200 descuentos por operación'}), 422
+    try:
+        ids = sorted({int(i) for i in raw_ids})
+    except (TypeError, ValueError):
+        return jsonify({'error': 'IDs deben ser enteros'}), 422
+
+    descuentos = (
+        AjusteDescuento.query
+        .options(selectinload(AjusteDescuento.periodo))
+        .filter(AjusteDescuento.id.in_(ids))
+        .all()
+    )
+    found_ids = {d.id for d in descuentos}
+    skipped = [{'id': i, 'reason': 'no_encontrado'} for i in ids if i not in found_ids]
+
+    deleted_ids = []
+    periodo_ids = set()
+    for d in descuentos:
+        if d.periodo.estado != 'ABIERTO':
+            skipped.append({'id': d.id, 'reason': 'periodo_cerrado'})
+            continue
+        if getattr(d, 'cobrado', False):
+            skipped.append({'id': d.id, 'reason': 'ya_cobrado'})
+            continue
+        periodo_ids.add(d.periodo_id)
+        deleted_ids.append(d.id)
+        db.session.delete(d)
+
+    if not deleted_ids:
+        return jsonify({'ok': True, 'deleted': 0, 'ids': [], 'skipped': skipped})
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.error('Error bulk delete descuentos: %s', traceback.format_exc())
+        return jsonify({'error': 'Error al eliminar descuentos'}), 500
+
+    log_action(f'API bulk-delete descuentos ajuste: {len(deleted_ids)} eliminados, ids={deleted_ids}')
+    emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+        'action': 'descuentos_bulk_eliminados',
+        'periodo_ids': sorted(periodo_ids),
+        'descuento_ids': deleted_ids,
+    })
+    return jsonify({
+        'ok': True,
+        'deleted': len(deleted_ids),
+        'ids': deleted_ids,
+        'periodo_ids': sorted(periodo_ids),
+        'skipped': skipped,
+    })
+
+
 @bp.route('/periodos/<int:periodo_id>/cerrar', methods=['POST'])
 @jwt_required
 def cerrar_periodo(periodo_id):

@@ -936,6 +936,99 @@ def enviar_correo(fecha_str, trabajador_id):
         return jsonify({'error': 'Error al enviar el correo'}), 500
 
 
+@bp.route('/semanas/<fecha_str>/correo/bulk', methods=['POST'])
+@jwt_required
+def enviar_correo_bulk(fecha_str):
+    """Envía recibo por correo a un subconjunto de trabajadores de la semana.
+
+    Body: { "trabajador_ids": [int, ...] }  (1..100 ids)
+    Devuelve la misma forma que `enviar_correo_todos` para que el modal de
+    resultados del SPA se reuse sin cambios.
+    """
+    denied = _admin_required()
+    if denied:
+        return denied
+
+    try:
+        fecha_obj = _parse_fecha(fecha_str)
+    except ValueError:
+        return jsonify({'error': 'Fecha inválida'}), 400
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('trabajador_ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'Lista de trabajadores vacía'}), 422
+    if len(raw_ids) > 100:
+        return jsonify({'error': 'Máximo 100 trabajadores por operación'}), 422
+    try:
+        ids = sorted({int(i) for i in raw_ids})
+    except (TypeError, ValueError):
+        return jsonify({'error': 'IDs deben ser enteros'}), 422
+
+    reportes = _reportes_de_semana(fecha_obj)
+    if not reportes:
+        return jsonify({'error': 'No hay reportes cerrados para esta semana'}), 404
+
+    prenominas_q = Prenomina.query.options(
+        selectinload(Prenomina.trabajador),
+        selectinload(Prenomina.descuentos_detalle),
+        selectinload(Prenomina.depositos_detalle),
+    ).filter_by(fecha_inicio=fecha_obj).filter(Prenomina.trabajador_id.in_(ids)).all()
+
+    # Si la prenómina no está guardada aún, el subset puede no estar en DB:
+    # caemos al preview en memoria y filtramos por ids ahí.
+    if not prenominas_q:
+        todas = calcular_preview_prenomina(fecha_obj, reportes)
+        prenominas_q = [p for p in todas if p.trabajador_id in set(ids)]
+    if not prenominas_q:
+        return jsonify({'error': 'Ningún trabajador encontrado en esta nómina'}), 404
+
+    enviados = sin_correo = errores = 0
+    resultados = []
+    ids_enviados = []
+    for p in prenominas_q:
+        nombre = p.trabajador.nombre_completo
+        correo = p.trabajador.correo
+        if not correo:
+            sin_correo += 1
+            resultados.append({'nombre': nombre, 'correo': '—', 'estado': 'sin_correo'})
+            continue
+        try:
+            ok, msg = _enviar_recibo_por_correo(reportes, p, correo, fecha_obj)
+            if not ok:
+                raise RuntimeError(msg)
+            enviados += 1
+            ids_enviados.append(p.trabajador_id)
+            resultados.append({'nombre': nombre, 'correo': correo, 'estado': 'enviado'})
+        except Exception as e:
+            errores += 1
+            resultados.append({'nombre': nombre, 'correo': correo, 'estado': 'error', 'detalle': str(e)[:120]})
+
+    log_action(
+        f'API enviar_correo_bulk: semana {fecha_str} — '
+        f'pedidos={len(ids)}, enviados={enviados}, sin_correo={sin_correo}, errores={errores}'
+    )
+
+    # Push a otros admins para que sepan que se envió un lote. No cambia
+    # estado de DB visible en la lista de semanas, pero permite que un futuro
+    # badge de "ya se enviaron recibos" reaccione sin polling.
+    if enviados:
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'fecha': fecha_str,
+            'action': 'correos_enviados',
+            'enviados': enviados,
+            'trabajador_ids': ids_enviados,
+        })
+
+    return jsonify({
+        'success': True,
+        'enviados': enviados,
+        'sin_correo': sin_correo,
+        'errores': errores,
+        'resultados': resultados,
+    })
+
+
 @bp.route('/semanas/<fecha_str>/correo', methods=['POST'])
 @jwt_required
 def enviar_correo_todos(fecha_str):

@@ -75,6 +75,8 @@ def init_socketio(app) -> SocketIO:
     _register_notif_emit_hook()
     _register_reporte_estado_emit_hook()
     _register_registros_emit_hook()
+    _register_audit_emit_hook()
+    _register_abono_emit_hook()
     return socketio
 
 
@@ -256,6 +258,118 @@ def _register_registros_emit_hook() -> None:
     @event.listens_for(db.session, 'after_rollback')
     def _clear_reg_emits(session):
         session.info.pop('_pending_reg_emits', None)
+
+
+def _register_audit_emit_hook() -> None:
+    """Emite `bitacora:new` a admin/super_admin cuando se inserta un AuditLog.
+
+    Mismo patrón que `_register_notif_emit_hook`: snapshot en `after_insert`
+    (id ya está poblado), flush en `after_commit` para no fantasmear eventos
+    si la transacción se hace rollback.
+
+    Frontend: `Bitacora.jsx` y `Dashboard.jsx` (actividad_reciente) escuchan
+    este evento vía `invalidateOn` y refrescan su caché.
+    """
+    from sqlalchemy import event
+    from app.extensions import db
+    from app.models import AuditLog
+
+    @event.listens_for(AuditLog, 'after_insert')
+    def _stash_audit(mapper, connection, target):  # noqa: ARG001
+        try:
+            bucket = db.session.info.setdefault('_pending_audit_emits', [])
+            bucket.append({
+                'id': target.id,
+                'user': target.user,
+                'action': target.action,
+                'ip': target.ip,
+                'created_at': target.created_at,
+            })
+        except Exception:
+            pass
+
+    @event.listens_for(db.session, 'after_commit')
+    def _flush_audit_emits(session):
+        bucket = session.info.pop('_pending_audit_emits', None)
+        if not bucket:
+            return
+        for snap in bucket:
+            try:
+                created = snap.get('created_at')
+                emit_to_role(['admin', 'super_admin'], 'bitacora:new', {
+                    'id': snap['id'],
+                    'user': snap.get('user'),
+                    'action': snap.get('action'),
+                    'ip': snap.get('ip'),
+                    'created_at': created.isoformat() if created else None,
+                })
+            except Exception as e:  # pragma: no cover
+                _logger.warning('emit bitacora:new post-commit falló id=%s err=%s', snap.get('id'), e)
+
+    @event.listens_for(db.session, 'after_rollback')
+    def _clear_audit_emits(session):
+        session.info.pop('_pending_audit_emits', None)
+
+
+def _register_abono_emit_hook() -> None:
+    """Emite `abono:new` cuando se inserta un AbonoPrestamo.
+
+    Cubre tanto los abonos manuales (creados desde `/api/prestamos`) como los
+    automáticos generados por el cierre de prenómina (NOMINA), que son los
+    que el emit explícito en endpoints no alcanza.
+
+    Mismo patrón snapshot+flush que el resto de hooks: si la transacción se
+    revierte, el evento nunca se emite.
+    """
+    from sqlalchemy import event
+    from app.extensions import db
+    from app.models import AbonoPrestamo
+
+    @event.listens_for(AbonoPrestamo, 'after_insert')
+    def _stash_abono(mapper, connection, target):  # noqa: ARG001
+        try:
+            bucket = db.session.info.setdefault('_pending_abono_emits', [])
+            bucket.append({
+                'id': target.id,
+                'prestamo_id': target.prestamo_id,
+                'monto': float(target.monto) if target.monto else 0.0,
+                'fecha_abono': target.fecha_abono.isoformat() if target.fecha_abono else None,
+                'tipo': target.tipo,
+            })
+        except Exception:
+            pass
+
+    @event.listens_for(db.session, 'after_commit')
+    def _flush_abono_emits(session):
+        bucket = session.info.pop('_pending_abono_emits', None)
+        if not bucket:
+            return
+        # Lookup de trabajador_id por prestamo_id (una sola query si hay varios).
+        from app.models import Prestamo
+        prestamo_ids = list({b['prestamo_id'] for b in bucket if b.get('prestamo_id')})
+        trabajador_by_prestamo = {}
+        if prestamo_ids:
+            try:
+                rows = (
+                    db.session.query(Prestamo.id, Prestamo.trabajador_id)
+                    .filter(Prestamo.id.in_(prestamo_ids))
+                    .all()
+                )
+                trabajador_by_prestamo = {pid: tid for pid, tid in rows}
+            except Exception:
+                trabajador_by_prestamo = {}
+        for snap in bucket:
+            try:
+                emit_to_role(['admin', 'super_admin'], 'abono:new', {
+                    **snap,
+                    'trabajador_id': trabajador_by_prestamo.get(snap.get('prestamo_id')),
+                })
+            except Exception as e:  # pragma: no cover
+                _logger.warning('emit abono:new post-commit falló id=%s err=%s', snap.get('id'), e)
+
+    @event.listens_for(db.session, 'after_rollback')
+    def _clear_abono_emits(session):
+        session.info.pop('_pending_abono_emits', None)
 
 
 def _register_handlers() -> None:
