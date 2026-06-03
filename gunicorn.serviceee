@@ -17,34 +17,34 @@ Environment="PATH=/opt/nominas/venv/bin"
 # GROQ_API_KEY. Solo el user del servicio debe poder leerlo.
 EnvironmentFile=/opt/nominas/.env
 
-# Modo API-only para el SPA en Vercel. WebSockets habilitados vía gthread.
+# Modo API-only para el SPA en Vercel. WebSockets habilitados vía gevent.
 #
-# Worker class: gthread
-#   Intentamos eventlet inicialmente pero psycopg3 lo rompe al boot — el
-#   monkey_patch() de eventlet 0.36+ reemplaza queue.Queue con la verde, que
-#   no implementa __class_getitem__; psycopg3 hace `class Queue(queue.Queue[T])`
-#   y truena con `TypeError: type 'Queue' is not subscriptable`. Ver
+# Worker class: geventwebsocket.gunicorn.workers.GeventWebSocketWorker
+#   gthread (anterior) NO soporta el upgrade WebSocket — acepta el GET pero
+#   no implementa el cambio de protocolo, así que el SPA cae en loop de
+#   reconexión. eventlet no es opción: su monkey_patch reemplaza queue.Queue
+#   y rompe psycopg3 al boot.
+#
+#   gevent SÍ funciona: monkey-patch en run.py (gateado por SOCKETIO_ASYNC_MODE),
+#   y psycopg3 >=3.1.14 lo soporta nativamente sin necesidad de psycogreen
+#   (psycogreen es psycopg2-only y no aplica aquí). Ver
 #   docs/MIGRACION_EVENTLET_A_GEVENT.md.
 #
-#   gthread no necesita monkey-patching y convive con psycopg3 sin problemas.
-#   Para Socket.IO usamos async_mode='threading' (no requiere libs externas).
-#
-# Workers: 4 + Threads: 6
+# Workers: 4 + worker-connections: 1000
 #   Dimensionado para Lenovo ThinkCentre Tiny (i5 6ta gen = 4 cores/4 threads,
 #   8 GB RAM compartidos con Postgres + Redis + nginx + SO).
-#   4 procesos = 1 por core físico. 6 threads/worker = sweet spot del GIL para
-#   gthread (más allá de ~8 la contención degrada throughput sin sumar
-#   capacidad). Total: 24 conexiones simultáneas. Cada cliente Socket.IO ocupa
-#   un thread (long-poll/WS), así que el techo realista de realtime es
-#   ~20-22 usuarios concurrentes dejando margen para REST.
+#   4 procesos = 1 por core físico. Con gevent cada worker maneja miles de
+#   conexiones concurrentes vía greenlets cooperativos (no hay GIL contention
+#   como gthread). worker-connections=1000 es el máximo de greenlets por worker.
 #
 #   Memoria estimada: 4 × ~200 MB = ~800 MB en workers, dejando ~3 GB para
 #   shared_buffers de Postgres tras OS + Redis. NO subir workers a 6+ sin
 #   ampliar RAM a 16 GB — Postgres se queda sin cache y entra a swap.
 #
-#   Si llegamos al techo de WS, el paso correcto es gevent + psycogreen (ver
-#   doc de migración) NO eventlet — pero antes valida que CPU/RAM aguanten,
-#   gevent no inventa cores.
+#   Trade-off de gevent vs gthread: gevent gana en concurrencia I/O (WS, REST
+#   con DB) pero un export pesado (PDF, Excel grande) bloquea el worker entero
+#   mientras dura. Si los exports empiezan a degradar latencia, considerar
+#   subir workers a 6 o mover exports a un worker dedicado.
 #
 # Timeout 120s: aguanta exports de Excel grandes y PDFs consolidados de
 # prenómina con muchos trabajadores. Subir aquí Y en nginx (proxy_read_timeout)
@@ -69,12 +69,12 @@ EnvironmentFile=/opt/nominas/.env
 # Logs a stdout/stderr → journald los captura (`journalctl -u gunicorn`).
 ExecStart=/opt/nominas/venv/bin/gunicorn \
     --workers 4 \
-    --worker-class gthread \
-    --threads 6 \
+    --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    --worker-connections 1000 \
     --worker-tmp-dir /dev/shm \
     --bind 127.0.0.1:8000 \
     --timeout 120 \
-    --graceful-timeout 30 \
+    --graceful-timeout 60 \
     --keep-alive 5 \
     --max-requests 1000 \
     --max-requests-jitter 100 \
@@ -119,8 +119,10 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 # MemoryDenyWriteExecute: bloquea JIT (PyPy, ctypes con código generado).
-# CPython estándar funciona, pero si en el futuro agregas una dep con JIT,
-# desactiva esta línea.
+# CPython estándar funciona. Con gevent: greenlet usa mmap para stacks y en
+# algunas plataformas/glibc puede requerir W+X. Si al boot ves
+# "PermissionError" o gunicorn no arranca tras migrar a gevent, comenta esta
+# línea (la pérdida de hardening es aceptable a cambio de WebSocket funcional).
 MemoryDenyWriteExecute=yes
 
 # Capabilities: el servicio no necesita ninguna (no escucha puertos privilegiados,
@@ -145,11 +147,11 @@ LimitNPROC=512
 Environment="PYTHONDONTWRITEBYTECODE=1"
 Environment="PIP_DISABLE_PIP_VERSION_CHECK=1"
 
-# Socket.IO: usa primitivas async de threading (coincide con --worker-class
-# gthread). En dev (sin esta variable) la app cae igual a 'threading' y usa
-# `socketio.run` con Werkzeug — el comportamiento es idéntico entre dev y prod
-# en este aspecto.
-Environment="SOCKETIO_ASYNC_MODE=threading"
+# Socket.IO async_mode=gevent: coincide con --worker-class gevent y permite
+# manejar WebSocket real (upgrade HTTP→WS). También dispara el monkey-patching
+# en run.py (la cabecera del archivo gatea `monkey.patch_all()` con esta var).
+# En dev local sin esta variable, run.py NO parchea y socketio.run usa Werkzeug.
+Environment="SOCKETIO_ASYNC_MODE=gevent"
 
 [Install]
 WantedBy=multi-user.target
