@@ -1032,6 +1032,9 @@ def subir_foto(id):
         _save_foto(t, foto)
         db.session.commit()
         log_action(f'Actualizó foto de perfil del trabajador {t.nombre} ({t.no_empleado})')
+        emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+            'id': t.id, 'action': 'foto',
+        })
         return jsonify({'foto_perfil': t.foto_perfil})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400

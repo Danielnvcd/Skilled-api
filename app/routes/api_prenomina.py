@@ -623,6 +623,9 @@ def agregar_descuento():
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"API descuento_agregado: prenomina_id={prenomina_id} monto={monto}")
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'prenomina_id': prenomina_id, 'action': 'descuento_agregado',
+        })
         return jsonify({
             'id': desc.id,
             'total_deducciones': _num(prenomina.total_deducciones),
@@ -653,6 +656,9 @@ def eliminar_descuento(id):
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"API descuento_eliminado: descuento_id={id} prenomina_id={prenomina.id}")
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'prenomina_id': prenomina.id, 'action': 'descuento_eliminado',
+        })
         return jsonify({
             'total_deducciones': _num(prenomina.total_deducciones),
             'total_a_pagar': _num(prenomina.total_a_pagar),
@@ -705,6 +711,9 @@ def agregar_deposito():
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"API deposito_agregado: prenomina_id={prenomina_id} monto={monto}")
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'prenomina_id': prenomina_id, 'action': 'deposito_agregado',
+        })
         return jsonify({
             'id': dep.id,
             'total_percepciones': _num(prenomina.total_percepciones),
@@ -735,6 +744,9 @@ def eliminar_deposito(id):
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
         log_action(f"API deposito_eliminado: deposito_id={id} prenomina_id={prenomina.id}")
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'prenomina_id': prenomina.id, 'action': 'deposito_eliminado',
+        })
         return jsonify({
             'total_percepciones': _num(prenomina.total_percepciones),
             'total_a_pagar': _num(prenomina.total_a_pagar),
@@ -774,6 +786,9 @@ def _patch_monto(field_name: str, payload_key: str):
         setattr(prenomina, field_name, monto)
         recalcular_totales_prenomina(prenomina)
         db.session.commit()
+        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+            'prenomina_id': prenomina_id, 'action': f'patch_{field_name}',
+        })
         return jsonify({
             field_name: _num(getattr(prenomina, field_name)),
             'total_percepciones': _num(prenomina.total_percepciones),

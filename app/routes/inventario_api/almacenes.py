@@ -16,7 +16,9 @@ from ._core import (
     EstanteCreateSchema, EstanteUpdateSchema,
     _almacen_to_dict, _estante_to_dict, _producto_to_dict,
     _audit,
+    _INV_ROLES,
 )
+from app.realtime import emit_to_role
 
 
 # ─── Almacenes ────────────────────────────────────────────────────────────────
@@ -44,6 +46,9 @@ def create_almacen():
     _audit(request.current_user, f"Almacén creado: {data['nombre']}")
     db.session.commit()
     db.session.refresh(nuevo)
+    emit_to_role(_INV_ROLES, 'almacen:changed', {
+        'id': nuevo.id, 'action': 'created',
+    })
     return jsonify(_almacen_to_dict(nuevo))
 
 
@@ -63,6 +68,9 @@ def update_almacen(almacen_id: int):
     _audit(request.current_user, f"Almacén #{almacen_id} editado")
     db.session.commit()
     db.session.refresh(alm)
+    emit_to_role(_INV_ROLES, 'almacen:changed', {
+        'id': alm.id, 'action': 'updated',
+    })
     return jsonify(_almacen_to_dict(alm))
 
 
@@ -75,6 +83,9 @@ def delete_almacen(almacen_id: int):
     alm.activo = False
     _audit(request.current_user, f"Almacén #{almacen_id} ({alm.nombre}) desactivado (soft delete)")
     db.session.commit()
+    emit_to_role(_INV_ROLES, 'almacen:changed', {
+        'id': alm.id, 'action': 'deleted',
+    })
     return Response(status=204)
 
 
@@ -127,6 +138,9 @@ def create_estante():
     _audit(request.current_user, f"Estante creado: {data['nombre']} en almacén #{data['almacen_id']}")
     db.session.commit()
     db.session.refresh(nuevo)
+    emit_to_role(_INV_ROLES, 'estante:changed', {
+        'id': nuevo.id, 'almacen_id': nuevo.almacen_id, 'action': 'created',
+    })
     return jsonify(_estante_to_dict(nuevo))
 
 
@@ -150,6 +164,9 @@ def update_estante(estante_id: int):
     _audit(request.current_user, f"Estante #{estante_id} editado")
     db.session.commit()
     db.session.refresh(est)
+    emit_to_role(_INV_ROLES, 'estante:changed', {
+        'id': est.id, 'almacen_id': est.almacen_id, 'action': 'updated',
+    })
     return jsonify(_estante_to_dict(est))
 
 
@@ -162,6 +179,9 @@ def delete_estante(estante_id: int):
     est.activo = False
     _audit(request.current_user, f"Estante #{estante_id} ({est.nombre}) desactivado (soft delete)")
     db.session.commit()
+    emit_to_role(_INV_ROLES, 'estante:changed', {
+        'id': est.id, 'almacen_id': est.almacen_id, 'action': 'deleted',
+    })
     return Response(status=204)
 
 
@@ -232,6 +252,9 @@ def set_estante_productos(estante_id: int):
         db.session.add(ProductoEstante(producto_id=pid, estante_id=est.id))
     _audit(request.current_user, f"Estante #{est.id} ({est.nombre}): {len(set(ids))} productos asignados")
     db.session.commit()
+    emit_to_role(_INV_ROLES, 'estante:changed', {
+        'id': est.id, 'almacen_id': est.almacen_id, 'action': 'productos_asignados',
+    })
     return jsonify({'success': True, 'asignados': len(set(ids))})
 
 
