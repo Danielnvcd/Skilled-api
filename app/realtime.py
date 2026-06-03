@@ -29,6 +29,7 @@ import os
 
 from flask import request
 from flask_socketio import SocketIO, join_room, disconnect
+from socketio.exceptions import ConnectionRefusedError as SocketIOConnectionRefusedError
 
 socketio = SocketIO()
 
@@ -381,7 +382,10 @@ def _register_handlers() -> None:
         token = (auth or {}).get('token') if isinstance(auth, dict) else None
         if not token:
             _logger.info('socket: rechazado (sin token) sid=%s', request.sid)
-            return False  # rechaza handshake
+            # ConnectionRefusedError viaja como `err.message` en el cliente, así
+            # el SocketContext puede distinguir un fallo de auth de un fallo de
+            # red y disparar refresh de token solo cuando aplica.
+            raise SocketIOConnectionRefusedError('token_missing')
 
         # Import diferido para evitar dependencia circular con app.routes.api_auth
         from app.routes.api_auth import _decode_token
@@ -390,19 +394,19 @@ def _register_handlers() -> None:
         payload = _decode_token(token, 'access')
         if not payload:
             _logger.info('socket: rechazado (token inválido) sid=%s', request.sid)
-            return False
+            raise SocketIOConnectionRefusedError('token_expired')
 
         try:
             user_id = int(payload['sub'])
         except (KeyError, TypeError, ValueError):
-            return False
+            raise SocketIOConnectionRefusedError('token_invalid')
 
         user = User.query.get(user_id)
         if not user:
-            return False
+            raise SocketIOConnectionRefusedError('user_not_found')
         # Invalidar si la contraseña fue rotada después de emitir el JWT.
         if (user.password_version or 1) != payload.get('pv', 1):
-            return False
+            raise SocketIOConnectionRefusedError('token_revoked')
 
         room = f'user:{user.id}'
         join_room(room)
