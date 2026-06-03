@@ -112,12 +112,3 @@ Leído el contenido de la presente licencia, las partes manifiestan su conformid
 **EL AUTOR / TITULAR**
 
 _______________________________
-Juan Daniel Rivera Pérez
-
-
-**POR EL LICENCIATARIO**
-Skilled, S.A. de C.V.
-
-_______________________________
-Nombre: ____________________________
-Cargo: _____________________________
