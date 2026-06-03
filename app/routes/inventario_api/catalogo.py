@@ -18,7 +18,9 @@ from ._core import (
     CategoriaConfigUpsertSchema,
     CODIGO_REGEX, _IMAGEN_URL_REGEX,
     _audit, _almacen_default_id,
+    _INV_ROLES,
 )
+from app.realtime import emit_to_role
 
 
 # ─── Proyectos ────────────────────────────────────────────────────────────────
@@ -536,6 +538,14 @@ def importar_materiales():
         db.session.rollback()
         current_app.logger.exception('Error commit importar_materiales')
         return jsonify({'detail': f'Error al guardar en base de datos: {str(e)[:100]}'}), 500
+
+    # Refresca catálogos abiertos en otras sesiones tras la importación masiva.
+    # Mandamos un solo emit aunque hayan sido N productos — el front invalida
+    # el namespace completo de productos vía `useResource.invalidateOn`.
+    if exitosos > 0:
+        emit_to_role(_INV_ROLES, 'producto:changed', {
+            'action': 'bulk_import', 'count': exitosos,
+        })
 
     return jsonify({
         'exitosos': exitosos,

@@ -892,6 +892,9 @@ def qr_generar(trabajador_id):
         trabajador.qr_code = str(uuid.uuid4())
         db.session.commit()
         log_action(f"API: regeneró QR de {trabajador.nombre} ({trabajador.no_empleado})")
+        emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+            'id': trabajador.id, 'action': 'qr_regenerado',
+        })
         return jsonify({
             'ok': True,
             'qr_code': trabajador.qr_code,
@@ -989,6 +992,9 @@ def rfid_asociar():
         trabajador.rfid_uid = uid
         db.session.commit()
         log_action(f"API: asoció RFID {uid} a {trabajador.nombre} ({trabajador.no_empleado})")
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'empleado:changed', {
+            'id': trabajador.id, 'action': 'rfid_asociado',
+        })
         return jsonify({
             'ok': True,
             'trabajador_id': trabajador.id,
