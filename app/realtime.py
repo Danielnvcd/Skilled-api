@@ -4,8 +4,9 @@ Reemplaza el polling cada 60s de la campana de notificaciones por push.
 Pensado para coexistir con Flask-JWT (igual que el resto de la API).
 
 Diseño:
-- `async_mode='threading'` — funciona con el worker `gthread` de Gunicorn
-  que ya usa este servicio. No requiere monkey-patching de eventlet/gevent.
+- `async_mode='gevent'` en prod — el worker `geventwebsocket` de Gunicorn
+  hace el upgrade HTTP→WS real. En dev (sin SOCKETIO_ASYNC_MODE setado)
+  cae a 'threading' y usa Werkzeug, lo cual basta para iterar local.
 - `message_queue=REDIS_URL` cuando hay Redis — permite que cualquier worker
   emita un evento a la sala del usuario aunque la conexión WS viva en otro
   worker. Sin Redis (entornos de test) cae a memoria local (single worker).
@@ -15,11 +16,11 @@ Diseño:
 
 En producción (WebSocket sobre Cloudflare Tunnel + nginx) hay que validar:
   - nginx: proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection "upgrade";
+           proxy_set_header Connection "upgrade"; (ya en nginx.config)
   - Cloudflare: WebSocket habilitado en el panel (lo está por default en
     planes pagos; en Free está OK para nuestro tráfico).
-  - Si en algún momento se escala a varios procesos Gunicorn detrás del LB,
-    forzar sticky sessions en nginx o subir a worker-class eventlet/gevent.
+  - gunicorn debe usar geventwebsocket worker (no gthread, no eventlet).
+    eventlet rompe psycopg3; gthread no soporta el upgrade WS.
 """
 from __future__ import annotations
 
@@ -47,10 +48,9 @@ def init_socketio(app) -> SocketIO:
     redis_url = os.environ.get('REDIS_URL')
     message_queue = redis_url if redis_url and not redis_url.startswith('memory://') else None
 
-    # Dev usa `threading` (Werkzeug `socketio.run`). Prod monta gunicorn con
-    # `--worker-class eventlet`, que hace monkey_patch automáticamente; ahí
-    # ponemos SOCKETIO_ASYNC_MODE=eventlet en el systemd unit para que la app
-    # use las primitivas async correctas.
+    # Dev usa `threading` (Werkzeug `socketio.run`). Prod usa gunicorn con
+    # `--worker-class geventwebsocket...` + SOCKETIO_ASYNC_MODE=gevent (ver
+    # gunicorn.serviceee). El monkey-patching lo hace run.py al boot.
     async_mode = os.environ.get('SOCKETIO_ASYNC_MODE', 'threading')
 
     socketio.init_app(
