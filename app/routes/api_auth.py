@@ -773,8 +773,11 @@ def api_login():
     _notify_new_device_login(u.id, ip, ua)
 
     resp = jsonify({'token': token, 'user': _user_to_dict(u)})
-    if remember:
-        _set_rt_cookie(resp, _issue_refresh_token(u.id))
+    # Emitimos refresh token siempre (no depende de `remember`) para que el
+    # SPA pueda rotar el JWT corto cada ~20 min sin forzar relogin al usuario.
+    # `remember` se mantiene en el payload por compatibilidad, pero ya no
+    # condiciona la emisión. El logout limpia la cookie igual.
+    _set_rt_cookie(resp, _issue_refresh_token(u.id))
     return resp
 
 
