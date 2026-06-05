@@ -388,13 +388,23 @@ def _register_handlers() -> None:
             raise SocketIOConnectionRefusedError('token_missing')
 
         # Import diferido para evitar dependencia circular con app.routes.api_auth
-        from app.routes.api_auth import _decode_token
+        from app.routes.api_auth import _decode_token, _is_jti_revoked
         from app.models import User
 
         payload = _decode_token(token, 'access')
         if not payload:
             _logger.info('socket: rechazado (token inválido) sid=%s', request.sid)
             raise SocketIOConnectionRefusedError('token_expired')
+
+        # Blacklist por jti: si el usuario hizo logout (o un admin revocó el
+        # token), el JWT queda inutilizable para REST. Sin este check, ese
+        # mismo JWT podía abrir un canal de eventos vivo — el atacante con
+        # un token robado mantenía push de datos aunque el usuario "cerrara
+        # sesión". Mantener sincronizado con jwt_required().
+        jti = payload.get('jti')
+        if jti and _is_jti_revoked(jti):
+            _logger.info('socket: rechazado (jti blacklisted) sid=%s', request.sid)
+            raise SocketIOConnectionRefusedError('token_revoked')
 
         try:
             user_id = int(payload['sub'])
@@ -574,3 +584,48 @@ def emit_to_reporte(reporte_id: int, event: str, payload: dict) -> None:
         socketio.emit(event, payload, to=f'reporte:{reporte_id}')
     except Exception as e:  # pragma: no cover
         _logger.warning('socket.emit_to_reporte falló reporte_id=%s event=%s err=%s', reporte_id, event, e)
+
+
+def force_logout_user(user_id: int) -> None:
+    """Cierra TODAS las conexiones WebSocket activas del usuario.
+
+    Pensado para acciones de seguridad — panic-revoke (`/auth/sessions/all`),
+    desactivación de 2FA, cambio de password — donde el JWT vivo del usuario
+    queda invalidado al instante por bump de `password_version`, pero los
+    sockets ya abiertos seguirían recibiendo pushes (notif:new, bitacora:new…)
+    hasta que el cliente haga otro request HTTP y reciba 401.
+
+    Doble mecanismo para cubrir prod multi-worker:
+
+      1) Emit `auth:force_logout` a la sala `user:{id}` — esto viaja por el
+         message_queue (Redis) y llega a cualquier worker que tenga sockets
+         del usuario. El SPA escucha el evento y limpia su sesión local.
+
+      2) Best-effort: si los sockets del usuario viven en ESTE worker, los
+         desconectamos inmediatamente. En un worker distinto, el paso (1)
+         es lo que los cierra (vía el handler del cliente).
+
+    Cross-worker sin Redis (entornos de test/dev de un solo worker) sigue
+    funcionando: emit local + disconnect local cubre el caso.
+    """
+    try:
+        socketio.emit('auth:force_logout', {'reason': 'sessions_revoked'}, to=f'user:{user_id}')
+    except Exception as e:  # pragma: no cover
+        _logger.warning('force_logout_user emit falló user_id=%s err=%s', user_id, e)
+    # Best-effort local disconnect — solo afecta sockets de este worker, pero
+    # garantiza que el sid quede cerrado incluso si el SPA tarda en procesar
+    # el evento o lo perdió por una desconexión transitoria.
+    try:
+        manager = socketio.server.manager
+        # rooms[namespace][room] = OrderedDict de sids
+        ns_rooms = manager.rooms.get('/', {}) if hasattr(manager, 'rooms') else {}
+        sids = list((ns_rooms.get(f'user:{user_id}') or {}).keys())
+        for sid in sids:
+            try:
+                socketio.server.disconnect(sid, namespace='/')
+            except Exception:
+                pass
+        if sids:
+            _logger.info('force_logout_user: desconectados %d sids locales del user_id=%s', len(sids), user_id)
+    except Exception as e:  # pragma: no cover
+        _logger.warning('force_logout_user disconnect local falló user_id=%s err=%s', user_id, e)

@@ -854,7 +854,12 @@ def qr_check():
 @bp.route('/qr/trabajadores', methods=['GET'])
 @jwt_required
 def qr_listar_trabajadores():
-    """Lista de trabajadores activos con su QR actual (solo admin)."""
+    """Lista de trabajadores activos con su QR actual (solo admin).
+
+    Incluye datos requeridos para imprimir credenciales corporativas tamaño
+    CR80 (foto, puesto, área, tipo sangre y contacto de emergencia para el
+    reverso de la credencial).
+    """
     if not _is_admin():
         return jsonify({'error': 'Acceso denegado'}), 403
 
@@ -870,6 +875,11 @@ def qr_listar_trabajadores():
                 'no_empleado': t.no_empleado,
                 'nombre_completo': t.nombre_completo,
                 'area': t.area or '',
+                'puesto': t.puesto or '',
+                'foto_perfil': t.foto_perfil or '',
+                'tipo_sangre': t.tipo_sangre or '',
+                'contacto_emergencia': t.contacto_emergencia or '',
+                'numero_contacto_emerg': t.numero_contacto_emerg or '',
                 'qr_code': t.qr_code or '',
             }
             for t in trabajadores
@@ -913,6 +923,43 @@ def qr_imagen(qr_code):
     import io
     import qrcode
     img = qrcode.make(qr_code)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+
+
+@bp.route('/qr/imagen/<int:trabajador_id>', methods=['GET'])
+@jwt_required
+def qr_imagen_trabajador(trabajador_id):
+    """Devuelve el PNG del QR del trabajador. Solo admin.
+
+    Si el trabajador aún no tiene `qr_code`, lo genera al vuelo (mismo flujo
+    que `/qr/generar` pero ahorra el round-trip POST → GET desde el frontend).
+    """
+    import io
+    import qrcode
+    import uuid
+
+    if not _is_admin():
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    trabajador = Trabajador.query.get_or_404(trabajador_id)
+
+    # Generar si no existe — útil para empleados nuevos sin QR todavía.
+    if not trabajador.qr_code:
+        try:
+            trabajador.qr_code = str(uuid.uuid4())
+            db.session.commit()
+            log_action(f"API: QR generado on-demand para {trabajador.nombre} ({trabajador.no_empleado})")
+            emit_to_role(['admin', 'super_admin'], 'empleado:changed', {
+                'id': trabajador.id, 'action': 'qr_regenerado',
+            })
+        except Exception:
+            db.session.rollback()
+            return jsonify({'error': 'Error generando QR'}), 500
+
+    img = qrcode.make(trabajador.qr_code)
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     buf.seek(0)

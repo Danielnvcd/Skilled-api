@@ -1,3 +1,4 @@
+import io
 import os
 import logging
 from functools import wraps
@@ -5,7 +6,7 @@ from flask import session, redirect, url_for, flash, request, current_app
 from app.extensions import db
 from app.models import AuditLog
 import filetype
-from PIL import Image
+from PIL import Image, ImageOps
 import pillow_heif
 import re
 
@@ -262,6 +263,60 @@ def allowed_image_file(file_storage):
         return False
 
     return True
+
+
+# ──────────────────────────────────────────────
+# Conversión a WebP
+# ──────────────────────────────────────────────
+# Todas las imágenes que entran al sistema (fotos de perfil, documentos imagen)
+# se reencoden a WebP: mejora compresión 25–35 % vs JPEG con la misma calidad
+# percibida, y unifica el formato en disco. Pillow + pillow_heif soportan
+# leer JPG/PNG/HEIC; la salida siempre es WebP.
+
+# Calidad por defecto para WebP (escala 1–100). 85 es el sweet spot percibido
+# similar a JPEG-90 con archivos notablemente más chicos.
+DEFAULT_WEBP_QUALITY = 85
+
+
+def image_to_webp(file_storage, quality=DEFAULT_WEBP_QUALITY, max_dim=None):
+    """Convierte un FileStorage de imagen a WebP en memoria.
+
+    - Aplica EXIF orientation antes de guardar (iPhone suele rotar vía metadata
+      y sin esto la foto sale acostada).
+    - Si la imagen viene con paleta o modo raro, la normaliza a RGB/RGBA.
+    - Si `max_dim` se especifica, redimensiona a ese máximo conservando ratio.
+    - Devuelve un BytesIO posicionado al inicio.
+
+    El stream original se rebobina al inicio al terminar para que el caller
+    pueda re-leerlo si lo necesita (p.ej. para magic-bytes posteriores).
+    """
+    file_storage.seek(0)
+    try:
+        with Image.open(file_storage) as img:
+            img = ImageOps.exif_transpose(img)
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            elif img.mode not in ('RGB', 'RGBA'):
+                img = img.convert('RGBA' if 'A' in img.mode else 'RGB')
+            if max_dim:
+                img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format='WEBP', quality=quality, method=6)
+            buf.seek(0)
+    finally:
+        file_storage.seek(0)
+    return buf
+
+
+def replace_ext_with_webp(filename):
+    """Devuelve `filename` con su extensión cambiada a .webp.
+
+    Si no tiene extensión, le añade .webp al final.
+    """
+    if not filename:
+        return 'imagen.webp'
+    base = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    return f"{base}.webp"
 
 # ──────────────────────────────────────────────
 # Matriz declarativa: rol → blueprints permitidos

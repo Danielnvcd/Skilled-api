@@ -46,6 +46,28 @@ class RefreshToken(db.Model):
     user = db.relationship('User', backref=db.backref('refresh_tokens', lazy=True, cascade='all, delete-orphan'))
 
 
+class TwoFactorBackupCode(db.Model):
+    """Códigos de respaldo para 2FA TOTP.
+
+    Permite al usuario recuperar acceso cuando pierde el dispositivo
+    autenticador. Cada código es one-shot (al consumirse queda marcado);
+    regenerar invalida todos los anteriores.
+
+    Almacenamos solo SHA-256 del código (no bcrypt) porque los códigos son
+    aleatorios de 12+ chars urlsafe — equivalentes a >70 bits, no necesitan
+    estiramiento. Bcrypt sería bcrypteo gratuito sin defensa adicional.
+    """
+    __tablename__ = "totp_backup_codes"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    # SHA-256 hex = 64 chars
+    code_hash = db.Column(db.String(64), nullable=False, index=True)
+    consumed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now_utc)
+
+    user = db.relationship('User', backref=db.backref('backup_codes', lazy=True, cascade='all, delete-orphan'))
+
+
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user = db.Column(db.String(80))
