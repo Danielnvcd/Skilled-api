@@ -235,12 +235,14 @@ def subir_foto(user_id):
     if not allowed_image_file(foto):
         return jsonify({'error': 'Foto rechazada: solo se permiten imágenes JPG o PNG reales.'}), 400
 
-    ext = foto.filename.rsplit('.', 1)[-1].lower() if '.' in foto.filename else 'png'
-    unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+    from app.utils import image_to_webp
+    unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.webp"
     upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
 
     try:
-        foto.save(upload_path)
+        webp_buf = image_to_webp(foto)
+        with open(upload_path, 'wb') as f:
+            f.write(webp_buf.getvalue())
     except Exception as e:
         current_app.logger.error('Error guardando foto: %s', e)
         return jsonify({'error': 'No se pudo guardar la imagen'}), 500
@@ -337,8 +339,15 @@ def admin_revocar_sesiones(user_id):
         }), 403
 
     n = RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
+    # Incrementar password_version invalida TODOS los JWT vivos del usuario
+    # al instante (no espera al exp). Único camino para forzar logout
+    # inmediato sin esperar 20 min ni mantener lista negra masiva de jtis.
+    user.password_version = (user.password_version or 1) + 1
     db.session.commit()
-    log_action(f"Admin revocó {n} sesiones del usuario '{user.username}'")
+    log_action(
+        f"Admin revocó {n} sesiones del usuario '{user.username}' "
+        f"y forzó logout (password_version++)"
+    )
     return jsonify({'ok': True, 'revocadas': n})
 
 

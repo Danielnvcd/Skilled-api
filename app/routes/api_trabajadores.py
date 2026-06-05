@@ -168,6 +168,7 @@ def _full_detail(t: Trabajador) -> dict:
         'observaciones': t.observaciones or '',
         # Multimedia / Relaciones
         'foto_perfil': t.foto_perfil or '',
+        'qr_code': t.qr_code or '',
         'activo': t.activo,
         'credenciales': credenciales,
         'documentos': documentos,
@@ -330,6 +331,13 @@ def _save_foto(t: Trabajador, file) -> None:
 @bp.route('', methods=['GET'])
 @jwt_required
 def listar():
+    # AuthZ explícito: solo admin/super_admin y coordinador deben listar
+    # trabajadores. Sin este gate, un solicitante_material o inventario podía
+    # enumerar el padrón completo (no_empleado, nombre, área, puesto).
+    role = _u().role
+    if role not in ('admin', 'super_admin', 'coordinador'):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 10000)
     q = (request.args.get('q') or '').strip()
@@ -346,7 +354,7 @@ def listar():
     else:
         query = Trabajador.query.filter(Trabajador.activo == True, Trabajador.fecha_baja == None)  # noqa: E712
 
-    if _u().role == 'coordinador':
+    if role == 'coordinador':
         mis_proyectos = Proyecto.query.options(selectinload(Proyecto.participantes)).filter_by(
             activo=True, coordinador_id=_u().id,
         ).all()
@@ -1116,10 +1124,27 @@ def subir_documento(id):
         return jsonify({'error': 'tipo_documento demasiado largo (máx. 100)'}), 400
 
     filename = secure_filename(file.filename)
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
     unique_filename = f'{int(time.time())}_{filename}'
     upload_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'trabajadores', str(t.id))
     os.makedirs(upload_folder, exist_ok=True)
-    file.save(os.path.join(upload_folder, unique_filename))
+
+    # Imágenes (JPG/PNG/HEIC) se reencoden a WebP para ahorrar disco y unificar
+    # formato. PDF se guarda intacto. El nombre humano (`nombre_archivo`) también
+    # se ajusta a .webp para que coincida con lo que el usuario descarga después.
+    if ext in {'jpg', 'jpeg', 'png', 'heic'}:
+        from app.utils import image_to_webp, replace_ext_with_webp
+        try:
+            webp_buf = image_to_webp(file)
+        except Exception as e:
+            current_app.logger.warning('Error convirtiendo documento a webp: %s', e)
+            return jsonify({'error': 'No se pudo procesar la imagen'}), 400
+        unique_filename = replace_ext_with_webp(unique_filename)
+        filename = replace_ext_with_webp(filename)
+        with open(os.path.join(upload_folder, unique_filename), 'wb') as f:
+            f.write(webp_buf.getvalue())
+    else:
+        file.save(os.path.join(upload_folder, unique_filename))
 
     doc = DocumentoTrabajador(
         trabajador_id=t.id,

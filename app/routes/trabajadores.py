@@ -433,33 +433,40 @@ def procesar_importacion():
     return redirect(url_for('trabajadores.importar'))
 
 def _generate_thumbnail(original_path: str, thumb_path: str, size: tuple = (100, 100)) -> None:
-    """Genera un thumbnail JPEG de `size` px a partir de `original_path`."""
-    from PIL import Image
+    """Genera un thumbnail WebP de `size` px a partir de `original_path`."""
+    from PIL import Image, ImageOps
     with Image.open(original_path) as img:
-        img = img.convert('RGB')
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ('RGB', 'RGBA'):
+            img = img.convert('RGBA' if 'A' in img.mode else 'RGB')
         img.thumbnail(size, Image.LANCZOS)
-        img.save(thumb_path, 'JPEG', quality=85, optimize=True)
+        img.save(thumb_path, 'WEBP', quality=82, method=6)
 
 
 def _save_profile_picture(file, pp_folder: str, unique_filename: str) -> str:
     """
-    Guarda la foto original y genera su thumbnail.
-    Devuelve la ruta relativa al UPLOAD_FOLDER de la imagen original
-    (p.ej. 'perfiles/pp_123_foto.jpg').
-    El thumbnail se guarda como 'perfiles/thumb_pp_123_foto.jpg'.
+    Guarda la foto original convertida a WebP y genera su thumbnail también WebP.
+    Devuelve la ruta relativa al UPLOAD_FOLDER (p.ej. 'perfiles/pp_123_foto.webp').
+    El thumbnail se guarda como 'perfiles/thumb_pp_123_foto.webp'.
     """
-    os.makedirs(pp_folder, exist_ok=True)
-    original_path = os.path.join(pp_folder, unique_filename)
-    file.save(original_path)
+    from app.utils import image_to_webp, replace_ext_with_webp
 
-    thumb_filename = f"thumb_{unique_filename}"
+    os.makedirs(pp_folder, exist_ok=True)
+    webp_filename = replace_ext_with_webp(unique_filename)
+    original_path = os.path.join(pp_folder, webp_filename)
+
+    webp_buf = image_to_webp(file)
+    with open(original_path, 'wb') as f:
+        f.write(webp_buf.getvalue())
+
+    thumb_filename = f"thumb_{webp_filename}"
     thumb_path = os.path.join(pp_folder, thumb_filename)
     try:
         _generate_thumbnail(original_path, thumb_path)
     except Exception as e:
-        current_app.logger.warning(f"No se pudo generar thumbnail para {unique_filename}: {e}")
+        current_app.logger.warning(f"No se pudo generar thumbnail para {webp_filename}: {e}")
 
-    return f"perfiles/{unique_filename}"
+    return f"perfiles/{webp_filename}"
 
 
 def _delete_profile_picture(foto_perfil_rel: str) -> None:

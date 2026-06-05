@@ -167,7 +167,15 @@ def mios():
 @bp.route('', methods=['GET'])
 @jwt_required
 def listar():
-    """Listado con filtros opcionales `q` (texto) y `estado` (activos|inactivos|todos)."""
+    """Listado con filtros opcionales `q` (texto) y `estado` (activos|inactivos|todos).
+
+    AuthZ: admin/super_admin ven todos los proyectos. Coordinador ve solo los
+    suyos (sin distinción de estado: si está asignado, lo ve). Otros roles 403.
+    """
+    user = _u()
+    if not (_is_admin() or user.role == 'coordinador'):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
     q = (request.args.get('q') or '').strip().lower()
     estado = (request.args.get('estado') or 'todos').lower()
 
@@ -179,6 +187,10 @@ def listar():
         query = query.filter_by(activo=True)
     elif estado == 'inactivos':
         query = query.filter_by(activo=False)
+
+    # Coordinador solo ve sus propios proyectos (mismo gate que en `/mios`).
+    if user.role == 'coordinador':
+        query = query.filter_by(coordinador_id=user.id)
 
     proyectos = query.all()
     if q:
@@ -196,7 +208,15 @@ def listar():
 @bp.route('/meta', methods=['GET'])
 @jwt_required
 def meta():
-    """Datos auxiliares para el modal de alta/edición."""
+    """Datos auxiliares para el modal de alta/edición de proyectos.
+
+    AuthZ: solo admin/super_admin. Expone la lista completa de coordinadores
+    (usernames, full_names) y todos los trabajadores activos (no_empleado,
+    nombre) — eso es PII que NO debe estar accesible a roles operativos.
+    """
+    denied = _admin_only()
+    if denied:
+        return denied
     coordinadores = (
         User.query.filter(User.role.in_(['coordinador', 'admin']))
         .order_by(User.username)
@@ -219,9 +239,19 @@ def meta():
 @bp.route('/<int:id>', methods=['GET'])
 @jwt_required
 def obtener(id):
+    """Detalle de un proyecto.
+
+    AuthZ: admin/super_admin ven todo. Coordinador solo el propio. Otros roles
+    no tienen razón de ver detalles de proyectos (incluye participantes, fechas,
+    costo) — devolvemos 403 antes de leer la BD para no leakear existencia del
+    proyecto vía 404 vs 403.
+    """
+    user = _u()
+    if not (_is_admin() or user.role == 'coordinador'):
+        return jsonify({'error': 'Acceso denegado'}), 403
     p = Proyecto.query.options(selectinload(Proyecto.participantes)).get_or_404(id)
-    # Misma regla que el blueprint clásico: coordinador solo accede a los propios.
-    if _u().role == 'coordinador' and p.coordinador_id != _u().id:
+    # Coordinador solo accede a los propios.
+    if user.role == 'coordinador' and p.coordinador_id != user.id:
         return jsonify({'error': 'Acceso denegado'}), 403
     return jsonify(_proyecto_detail(p))
 

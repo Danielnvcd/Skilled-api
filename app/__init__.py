@@ -430,6 +430,9 @@ def create_app():
         # Bloquea hot-linking y previene que otros sites embedeen nuestras respuestas
         # como recursos (img, script) para inferir información por side-channels.
         response.headers.setdefault('Cross-Origin-Resource-Policy', 'same-origin')
+        # NOTA: HSTS no se setea aquí — Talisman ya lo emite en producción con
+        # max-age=31536000 e includeSubDomains (ver setup de Talisman arriba).
+        # Duplicarlo aquí causaba dos headers idénticos y ruido en logs.
         return response
 
     @app.after_request
@@ -447,11 +450,14 @@ def create_app():
 
     with app.app_context():
         os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
-        # Crear tabla de notificaciones si aún no existe (idempotente, no afecta otras tablas)
+        # Crear tablas auxiliares si aún no existen (idempotente, no afecta otras).
         from sqlalchemy import inspect as _sqla_inspect
         if not _sqla_inspect(db.engine).has_table('notificaciones'):
             from app.models import Notificacion
             Notificacion.__table__.create(db.engine)
+        if not _sqla_inspect(db.engine).has_table('totp_backup_codes'):
+            from app.models import TwoFactorBackupCode
+            TwoFactorBackupCode.__table__.create(db.engine)
 
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
