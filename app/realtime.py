@@ -532,6 +532,27 @@ def _register_handlers() -> None:
             except Exception:
                 pass
 
+    @socketio.on('app:ping')
+    def _on_app_ping():  # type: ignore[no-redef]
+        """Ping/pong a nivel de aplicación con ack.
+
+        Engine.IO ya hace ping_interval=25s/ping_timeout=60s a nivel de
+        transporte, pero Cloudflare Tunnel a veces cierra el TCP por idle
+        sin que el browser se entere hasta el próximo write — la conexión
+        queda "zombie" (s.connected=true en el cliente pero los emits no
+        llegan). Este handler responde inmediatamente con un ack; el SPA
+        emite `app:ping` cada ~20s con timeout corto (~8s) y, si el ack no
+        llega, fuerza disconnect+connect en vez de esperar los 60s del
+        ping_timeout nativo.
+
+        Why: la detección de Engine.IO falla cuando el ping/pong viaja en el
+        mismo socket que se quedó colgado — el cliente no nota la falta de
+        respuesta hasta el timeout. El ack de este handler corre por el
+        propio socket y vuelve al callback en cliente, así que un fallo del
+        socket se manifiesta como ausencia de ack.
+        """
+        return {'pong': True}
+
 
 # ── API de emisión usada desde los blueprints ──────────────────────────────
 
