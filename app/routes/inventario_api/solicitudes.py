@@ -715,7 +715,11 @@ def _render_solicitud_pdf(*, folio, fecha_str, solicitante, proyecto, notas, mat
         from xhtml2pdf import pisa
     except ImportError:
         return None
-    logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled (1).png')
+    # API-only: `static_folder=None`. Resolvemos el logo contra BASE_DIR.
+    base_dir = current_app.config.get('BASE_DIR') or os.path.dirname(current_app.root_path)
+    logo_path = os.path.join(base_dir, 'static', 'imagenes', 'skilled (1).png')
+    if not os.path.exists(logo_path):
+        logo_path = None
     html_salida = render_template(
         'solicitud_pedido_pdf.html',
         folio=folio,

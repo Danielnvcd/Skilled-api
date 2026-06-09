@@ -4,7 +4,7 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from flask_migrate import Migrate
 from flask_mail import Mail
-from flask import session, request as flask_request
+from flask import request as flask_request
 from sqlalchemy import String
 from sqlalchemy.types import TypeDecorator
 import ipaddress
@@ -118,8 +118,14 @@ def get_real_client_ip_flask() -> str:
     return get_remote_address()
 
 def rate_limit_key() -> str:
-    """Clave de rate limit: user_id autenticado o IP real del cliente."""
-    return str(session.get("user_id", get_real_client_ip_flask()))
+    """Clave de rate limit: IP real del cliente.
+
+    API-only: no consultamos `session.get("user_id")` porque los endpoints JWT
+    no inicializan la sesión Flask. El bucketing per-user lo hacen los
+    `key_func=` locales en endpoints específicos (ver `_api_login_user`,
+    `_api_verify_2fa_user_key`, `_api_refresh_user_key` en api_auth).
+    """
+    return get_real_client_ip_flask()
 
 limiter = Limiter(
     key_func=rate_limit_key

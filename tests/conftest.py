@@ -1,24 +1,41 @@
+"""Fixtures globales para pytest.
+
+La app es **API-only** (JWT en `Authorization: Bearer …`). Ya no hay rutas
+HTML, así que no existen fixtures de sesión Flask — quien necesite autenticar
+una request usa `auth_headers(user)` o el fixture `auth_headers_factory`.
+"""
 import os
 import shutil
 import tempfile
+
 import pytest
 from werkzeug.security import generate_password_hash
+
 from app import create_app
 from app.extensions import db as _db
-from app.models import (
-    User, Trabajador, Proyecto, Prestamo, AbonoPrestamo,
-    ReporteSemanal, RegistroDiarioHoras, Prenomina,
-    DescuentoPrenomina, DepositoExtra
-)
+
+
+def _encode_token_for(user):
+    """Wrapper sobre `_encode_access_token` que evita import circular en módulo.
+
+    La función real depende de `current_app.config['SECRET_KEY']`, así que
+    debe llamarse dentro de un app_context (el `client` fixture lo asegura).
+    """
+    from app.routes.api_auth import _encode_access_token
+    return _encode_access_token(user)
+
+
+def auth_headers(user):
+    """Devuelve los headers Authorization para `user` (firmados con el SECRET_KEY actual)."""
+    return {'Authorization': f'Bearer {_encode_token_for(user)}'}
 
 
 @pytest.fixture(scope='session')
 def app():
     """Crea la app Flask con SQLite en memoria para tests."""
     os.environ['SECRET_KEY'] = 'test-secret-key-do-not-use-in-prod'
-    os.environ['DATABASE_URL'] = 'sqlite://'  # In-memory SQLite
-    os.environ['REDIS_URL'] = ''  # Desactivar Redis en tests (evita colisiones con datos de producción)
-    # Clave Fernet independiente para tests (no usa la de producción)
+    os.environ['DATABASE_URL'] = 'sqlite://'
+    os.environ['REDIS_URL'] = ''  # Desactiva Redis (evita colisiones con datos reales)
     from cryptography.fernet import Fernet
     os.environ['TOTP_ENCRYPTION_KEY'] = Fernet.generate_key().decode()
 
@@ -26,19 +43,17 @@ def app():
     import app.extensions as _ext
     _ext._redis_client = None
 
-    # Directorio temporal aislado para uploads: evita contaminar uploads/ de producción
     tmp_upload = tempfile.mkdtemp(prefix='test_uploads_')
 
     application = create_app()
     application.config.update({
         'TESTING': True,
-        'WTF_CSRF_ENABLED': False,   # Desactivar CSRF en tests
-        'RATELIMIT_ENABLED': False,  # Desactivar Limiter en tests
+        'WTF_CSRF_ENABLED': False,
+        'RATELIMIT_ENABLED': False,
         'SERVER_NAME': 'localhost',
         'UPLOAD_FOLDER': tmp_upload,
     })
 
-    # Asegurar que el limiter esté apagado durante toda la ejecución
     from app.extensions import limiter
     limiter.enabled = False
 
@@ -50,18 +65,16 @@ def app():
     with application.app_context():
         _db.drop_all()
 
-    # Limpiar todos los archivos generados durante los tests
     shutil.rmtree(tmp_upload, ignore_errors=True)
 
 
 @pytest.fixture(scope='function')
 def db(app):
-    """Provee la sesión de BD y hace rollback tras cada test."""
+    """Provee la sesión de BD y limpia tablas tras cada test."""
     with app.app_context():
         _db.session.begin_nested()
         yield _db
         _db.session.rollback()
-        # Limpiar todas las tablas para el siguiente test
         for table in reversed(_db.metadata.sorted_tables):
             _db.session.execute(table.delete())
         _db.session.commit()
@@ -69,17 +82,30 @@ def db(app):
 
 @pytest.fixture
 def client(app, db):
-    """Test client con sesión limpia."""
+    """Test client sin sesión (los tests autentican con header Bearer)."""
     return app.test_client()
+
+
+@pytest.fixture
+def auth_headers_factory(app):
+    """Fixture-factory: `headers = auth_headers_factory(user)`.
+
+    Útil cuando el test necesita varios usuarios distintos en la misma corrida.
+    Equivale a llamar `auth_headers(user)` pero garantiza el app_context.
+    """
+    def _make(user):
+        return auth_headers(user)
+    return _make
 
 
 @pytest.fixture
 def admin_user(db):
     """Crea un usuario admin de prueba."""
+    from app.models import User
     user = User(
         username='admin_test',
         password_hash=generate_password_hash('password123'),
-        role='admin'
+        role='admin',
     )
     db.session.add(user)
     db.session.commit()
@@ -89,10 +115,11 @@ def admin_user(db):
 @pytest.fixture
 def coordinador_user(db):
     """Crea un usuario coordinador de prueba."""
+    from app.models import User
     user = User(
         username='coord_test',
         password_hash=generate_password_hash('password123'),
-        role='coordinador'
+        role='coordinador',
     )
     db.session.add(user)
     db.session.commit()
@@ -102,6 +129,7 @@ def coordinador_user(db):
 @pytest.fixture
 def trabajador(db):
     """Crea un trabajador de prueba."""
+    from app.models import Trabajador
     t = Trabajador(
         no_empleado='T001',
         nombre_apellidos='Pérez López',
@@ -112,7 +140,7 @@ def trabajador(db):
         hr_extra=100,
         infonavit=200,
         ajuste_inbursa=0,
-        viaticos=50
+        viaticos=50,
     )
     db.session.add(t)
     db.session.commit()
@@ -122,13 +150,14 @@ def trabajador(db):
 @pytest.fixture
 def trabajador2(db):
     """Segundo trabajador de prueba."""
+    from app.models import Trabajador
     t = Trabajador(
         no_empleado='T002',
         nombre_apellidos='García Ruiz',
         nombre='María',
         activo=True,
         tipo_nomina='Por hora',
-        salario_real_pactado_x_sem=150
+        salario_real_pactado_x_sem=150,
     )
     db.session.add(t)
     db.session.commit()
@@ -138,33 +167,14 @@ def trabajador2(db):
 @pytest.fixture
 def proyecto(db, admin_user, trabajador):
     """Crea un proyecto con un participante."""
+    from app.models import Proyecto
     p = Proyecto(
         numero_proyecto='P-001',
         nombre='Proyecto Test',
         activo=True,
-        coordinador_id=admin_user.id
+        coordinador_id=admin_user.id,
     )
     p.participantes.append(trabajador)
     db.session.add(p)
     db.session.commit()
     return p
-
-
-@pytest.fixture
-def logged_in_admin(client, admin_user):
-    """Simula login de admin."""
-    with client.session_transaction() as sess:
-        sess['user_id'] = admin_user.id
-        sess['user'] = admin_user.username
-        sess['role'] = 'admin'
-    return client
-
-
-@pytest.fixture
-def logged_in_coordinador(client, coordinador_user):
-    """Simula login de coordinador."""
-    with client.session_transaction() as sess:
-        sess['user_id'] = coordinador_user.id
-        sess['user'] = coordinador_user.username
-        sess['role'] = 'coordinador'
-    return client

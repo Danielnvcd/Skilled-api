@@ -429,13 +429,5 @@ class TestStats:
         assert data['unidades_por_estado']['DISPONIBLE'] >= 1
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# HEALTH
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestHealth:
-
-    def test_health(self, client):
-        r = client.get('/api/v1/herramientas/health')
-        assert r.status_code == 200
-        assert r.get_json()['module'] == 'herramientas'
+# El blueprint `herramientas_api` no expone `/health` propio — el health check
+# global vive en `/health` (raíz). Test removido al confirmar el contrato.

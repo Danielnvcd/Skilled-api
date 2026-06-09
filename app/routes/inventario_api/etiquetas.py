@@ -460,7 +460,11 @@ def _render_oc_express_pdf(*, folio: str, fecha_str: str, proveedor: str,
         from xhtml2pdf import pisa
     except ImportError:
         return None
-    logo_path = os.path.join(current_app.static_folder, 'imagenes', 'skilled (1).png')
+    # API-only: la app se construye con `static_folder=None`, así que cualquier
+    # asset (logo) tiene que resolverse contra BASE_DIR. Si el archivo no existe
+    # el template se renderiza sin logo (degradación benigna).
+    base_dir = current_app.config.get('BASE_DIR') or os.path.dirname(current_app.root_path)
+    logo_path = os.path.join(base_dir, 'static', 'imagenes', 'skilled (1).png')
     html_salida = render_template(
         'orden_compra_express_pdf.html',
         folio=folio,

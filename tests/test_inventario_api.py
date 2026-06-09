@@ -1,16 +1,17 @@
 """
-Tests del blueprint `inventario_api` (Flask).
+Tests del blueprint `inventario_api` (Flask, JWT API-only).
 
-Migrados de tests/test_fastapi_inventario.py al levantar el cliente Flask en
-lugar del TestClient de FastAPI. Cobertura preservada: auth, autorización,
-CRUD, lógica de negocio (stock, ajustes, traspasos), solicitudes, auditoría,
-edge cases.
+Cobertura: auth, autorización por rol, CRUD, lógica de negocio (stock,
+ajustes, traspasos), solicitudes, auditoría, edge cases.
 
 Notas:
   - CSRF está desactivado vía conftest (WTF_CSRF_ENABLED=False).
   - Rate limiter está desactivado vía conftest (RATELIMIT_ENABLED=False).
+  - Auth: JWT real en `Authorization: Bearer …` — el helper `_login` setea
+    `environ_base['HTTP_AUTHORIZATION']` así que todas las requests siguientes
+    del mismo client ya van firmadas.
   - Códigos esperados: 400 (regla de negocio), 422 (validación), 404 (no existe),
-    403 (sin rol), 401 (sin sesión), 204 (DELETE OK), 200 (resto OK).
+    403 (sin rol), 401 (sin token), 204 (DELETE OK), 200 (resto OK).
 """
 import uuid
 import pytest
@@ -18,25 +19,32 @@ from werkzeug.security import generate_password_hash
 
 from app.extensions import db as flask_db
 from app.models import (
-    User, Almacen, Estante, Producto, MovimientoInventario,
+    User, Almacen, Estante, Producto, StockPorAlmacen, MovimientoInventario,
     SolicitudMaterial, SolicitudMaterialDetalle, AuditLog
 )
+from app.routes.api_auth import _encode_access_token
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def _login(client, user_id: int, role: str, username: str = 'tester'):
-    """Establece la sesión Flask como si el usuario hubiera hecho login."""
-    with client.session_transaction() as sess:
-        sess['user_id'] = user_id
-        sess['user'] = username
-        sess['role'] = role
-        sess['password_version'] = 1
+def _login(client, user_id: int, role: str = None, username: str = None):
+    """Firma el client con un JWT real del usuario indicado.
+
+    Compat con el flujo antiguo de sesión: se llama igual (`_login(client, u.id, 'role')`)
+    pero ahora emite un access token y lo deja en `environ_base`, de modo que TODAS
+    las requests subsiguientes del mismo `client` viajan con `Authorization: Bearer …`.
+
+    `role` y `username` se ignoran — el JWT toma el rol real del User en BD; los
+    parámetros se conservan solo para no romper las llamadas existentes.
+    """
+    user = User.query.get(user_id)
+    assert user is not None, f"_login: user_id={user_id} no existe en BD"
+    token = _encode_access_token(user)
+    client.environ_base['HTTP_AUTHORIZATION'] = f'Bearer {token}'
 
 
 def _logout(client):
-    with client.session_transaction() as sess:
-        sess.clear()
+    client.environ_base.pop('HTTP_AUTHORIZATION', None)
 
 
 # ─── Fixtures locales ─────────────────────────────────────────────────────────
@@ -69,8 +77,9 @@ def inv_solicitante(db):
 
 @pytest.fixture
 def inv_outsider(db):
-    """Usuario con rol no autorizado para inventario (coordinador)."""
-    u = User(username='inv_out', password_hash=generate_password_hash('Pass123!'), role='coordinador')
+    """Usuario sin rol de inventario (coordinador sí puede leer inventario
+    desde 05-25 — usamos `visitor` que no figura en ninguna whitelist)."""
+    u = User(username='inv_out', password_hash=generate_password_hash('Pass123!'), role='visitor')
     db.session.add(u)
     db.session.commit()
     return u
@@ -413,13 +422,36 @@ class TestEstantes:
 
 class TestMovimientos:
 
+    @pytest.fixture(autouse=True)
+    def _bodega_default(self, db):
+        """Movimientos requieren al menos un Almacén activo (fallback
+        cuando el payload no manda almacén_origen/destino). Creamos DOS
+        bodegas activas: la primera es la default (origen), la segunda se
+        usa como destino en los TRASPASOs. IDs expuestos vía
+        `self._bodega_id` y `self._bodega_dest_id`."""
+        a = Almacen(nombre='Bodega Tests', qr_code=str(uuid.uuid4()), activo=True)
+        b = Almacen(nombre='Bodega Tests B', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add_all([a, b]); db.session.commit()
+        self._bodega_id = a.id
+        self._bodega_dest_id = b.id
+        return a
+
     def _crear_producto(self, db, stock=100):
         from decimal import Decimal
         p = Producto(
             codigo=f'MOV-{uuid.uuid4().hex[:6]}', descripcion='X', categoria='T',
             unidad='pza', stock_actual=Decimal(str(stock)), stock_minimo=10,
         )
-        db.session.add(p); db.session.commit()
+        db.session.add(p); db.session.flush()
+        # Refactor 'stock por almacén': la cache `Producto.stock_actual` se
+        # recalcula desde StockPorAlmacen, así que necesitamos sembrar el
+        # registro inicial en la bodega default. Sin esto, todo movimiento
+        # parte de stock=0 y los asserts del test no cuadran.
+        db.session.add(StockPorAlmacen(
+            producto_id=p.id, almacen_id=self._bodega_id,
+            cantidad=Decimal(str(stock)),
+        ))
+        db.session.commit()
         return p
 
     def test_entrada_incrementa_stock(self, client, inv_admin, db):
@@ -501,14 +533,18 @@ class TestMovimientos:
         p = self._crear_producto(db, stock=100)
         resp = client.post('/api/v1/movimientos/', json={
             'tipo': 'TRASPASO', 'producto_id': p.id, 'cantidad': 5.0,
+            'almacen_origen_id': self._bodega_id,
+            'almacen_destino_id': self._bodega_dest_id,
         })
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.get_json()
 
     def test_traspaso_stock_insuficiente(self, client, inv_admin, db):
         _login(client, inv_admin.id, 'admin')
         p = self._crear_producto(db, stock=5)
         resp = client.post('/api/v1/movimientos/', json={
             'tipo': 'TRASPASO', 'producto_id': p.id, 'cantidad': 9999.0,
+            'almacen_origen_id': self._bodega_id,
+            'almacen_destino_id': self._bodega_dest_id,
         })
         assert resp.status_code == 400
 
@@ -582,7 +618,10 @@ class TestSolicitudes:
             'detalles': [{'producto_id': 999999, 'cantidad_solicitada': 5.0}],
         })
         assert resp.status_code == 400
-        assert '999999' in resp.get_json()['detail']
+        # `detail` puede ser str o lista de strings (errores multilínea).
+        detail = resp.get_json()['detail']
+        text = ' '.join(detail) if isinstance(detail, list) else detail
+        assert '999999' in text
 
     def test_rol_no_autorizado_no_crea_solicitud(self, client, inv_outsider, db):
         _login(client, inv_outsider.id, 'coordinador')
