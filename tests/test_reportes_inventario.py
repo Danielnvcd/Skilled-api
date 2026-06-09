@@ -91,13 +91,18 @@ def setup_inventario(db, inv_admin, almacen):
         StockPorAlmacen(producto_id=p_otro.id, almacen_id=almacen.id, cantidad=Decimal('50')),
     ])
     # Movimientos: una ENTRADA y una SALIDA para p_alto.
+    # Fecha explícita en hora local (naive): el endpoint `/reportes/movimientos.xlsx`
+    # filtra por [hoy-30, hoy] con datetimes naive, así que necesitamos que la
+    # `fecha` almacenada también sea naive (sin tzinfo) para que la comparación
+    # SQLite no falle por mezcla de naive/aware en columnas TEXT.
+    ahora = datetime.datetime.now()
     db.session.add_all([
         MovimientoInventario(tipo='ENTRADA', producto_id=p_alto.id, cantidad=Decimal('50'),
                               almacen_destino_id=almacen.id, usuario_id=inv_admin.id,
-                              motivo='Compra inicial'),
+                              motivo='Compra inicial', fecha=ahora),
         MovimientoInventario(tipo='SALIDA', producto_id=p_alto.id, cantidad=Decimal('10'),
                               almacen_origen_id=almacen.id, usuario_id=inv_admin.id,
-                              motivo='Salida prueba'),
+                              motivo='Salida prueba', fecha=ahora),
     ])
     db.session.commit()
     return {'alto': p_alto, 'bajo': p_bajo, 'otro': p_otro}
@@ -243,8 +248,10 @@ class TestConsumoProyecto:
 
     def test_agrupa_por_proyecto(self, client, db, inv_admin, solicitante, setup_inventario, almacen):
         # Crear una solicitud APROBADA con 2 líneas entregadas parcialmente.
+        # fecha_creacion naive para que entre en el filtro [hoy-90, hoy] del endpoint.
         sol = SolicitudMaterial(solicitante_id=solicitante.id, proyecto='Obra A',
-                                  estatus='APROBADA')
+                                  estatus='APROBADA',
+                                  fecha_creacion=datetime.datetime.now())
         db.session.add(sol); db.session.flush()
         db.session.add_all([
             SolicitudMaterialDetalle(
@@ -289,7 +296,8 @@ class TestSolicitudes:
 
     def test_descarga_ok(self, client, db, inv_admin, solicitante, setup_inventario):
         sol = SolicitudMaterial(solicitante_id=solicitante.id, proyecto='Obra X',
-                                  estatus='PENDIENTE')
+                                  estatus='PENDIENTE',
+                                  fecha_creacion=datetime.datetime.now())
         db.session.add(sol); db.session.flush()
         db.session.add(SolicitudMaterialDetalle(
             solicitud_id=sol.id, tipo_item='MATERIAL',
@@ -306,9 +314,10 @@ class TestSolicitudes:
         assert 'Estatus' in headers and 'Total entregado' in headers
 
     def test_filtro_estatus(self, client, db, inv_admin, solicitante, setup_inventario):
+        ahora = datetime.datetime.now()
         for estatus in ('PENDIENTE', 'APROBADA', 'ENTREGADA'):
             sol = SolicitudMaterial(solicitante_id=solicitante.id, proyecto='X',
-                                      estatus=estatus)
+                                      estatus=estatus, fecha_creacion=ahora)
             db.session.add(sol)
         db.session.commit()
         r = client.get(

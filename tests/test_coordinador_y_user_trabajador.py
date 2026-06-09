@@ -58,7 +58,8 @@ def producto(db):
 
 @pytest.fixture
 def trabajador_a(db):
-    t = Trabajador(no_empleado='EMP-100', nombre_apellidos='Juan Pérez',
+    # nombre_completo = f"{nombre} {nombre_apellidos}" → "Juan Pérez"
+    t = Trabajador(no_empleado='EMP-100', nombre_apellidos='Pérez',
                     nombre='Juan', activo=True, tipo_nomina='Semanal',
                     salario_real_pactado_x_sem=5000)
     db.session.add(t); db.session.commit()
@@ -67,7 +68,7 @@ def trabajador_a(db):
 
 @pytest.fixture
 def trabajador_b(db):
-    t = Trabajador(no_empleado='EMP-200', nombre_apellidos='María Ruiz',
+    t = Trabajador(no_empleado='EMP-200', nombre_apellidos='Ruiz',
                     nombre='María', activo=True, tipo_nomina='Semanal',
                     salario_real_pactado_x_sem=5000)
     db.session.add(t); db.session.commit()

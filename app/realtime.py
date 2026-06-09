@@ -97,7 +97,7 @@ def _register_notif_emit_hook() -> None:
     from sqlalchemy import event
     from app.extensions import db
     from app.models import Notificacion
-    from app.routes.notificaciones import _tiempo_relativo
+    from app.routes.api_notificaciones import _tiempo_relativo
 
     @event.listens_for(Notificacion, 'after_insert')
     def _stash_notif(mapper, connection, target):  # noqa: ARG001

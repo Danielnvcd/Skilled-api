@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 from functools import wraps
 
 import qrcode
-from flask import Blueprint, jsonify, request, session, Response, abort, send_file, render_template, current_app, g
+from flask import Blueprint, jsonify, request, Response, abort, send_file, render_template, current_app, g
 from marshmallow import Schema, fields, validate, ValidationError, EXCLUDE
 from sqlalchemy import distinct as sql_distinct
 from sqlalchemy.orm import joinedload, selectinload
