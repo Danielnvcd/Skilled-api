@@ -30,6 +30,8 @@ def dashboard():
     current_month = datetime.now().month
     current_year = datetime.now().year
 
+    # Solo plantilla vigente: la tarjeta dice "Trab. activos", así que las
+    # bajas (bandera o fecha_baja legacy) no deben contar.
     stats = db.session.query(
         func.count(Trabajador.id),
         func.count(case((
@@ -38,6 +40,9 @@ def dashboard():
                 extract('year', Trabajador.fecha_ingreso) == current_year,
             ), 1,
         ))),
+    ).filter(
+        Trabajador.activo == True,  # noqa: E712
+        Trabajador.fecha_baja == None,  # noqa: E711
     ).first()
     total_trabajadores = stats[0]
     nuevos_ingresos = stats[1]
@@ -58,7 +63,10 @@ def dashboard():
         )
         .join(proyecto_trabajador, proyecto_trabajador.c.proyecto_id == Proyecto.id)
         .join(Trabajador, Trabajador.id == proyecto_trabajador.c.trabajador_id)
-        .filter(Proyecto.activo == True, Trabajador.activo == True)  # noqa: E712
+        .filter(
+            Proyecto.activo == True, Trabajador.activo == True,  # noqa: E712
+            Trabajador.fecha_baja == None,  # noqa: E711
+        )
         .group_by(Proyecto.numero_proyecto)
         .all()
     )
@@ -67,6 +75,8 @@ def dashboard():
         Trabajador.puesto, func.count(Trabajador.id),
     ).filter(
         Trabajador.puesto != None, Trabajador.puesto != '',  # noqa: E711
+        Trabajador.activo == True,  # noqa: E712
+        Trabajador.fecha_baja == None,  # noqa: E711
     ).group_by(Trabajador.puesto).all()
 
     # Doble filtro activo+fecha_baja (mismo patrón que credenciales-lista):
