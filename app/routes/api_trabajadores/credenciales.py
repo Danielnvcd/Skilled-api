@@ -46,7 +46,10 @@ def _credencial_row(t: Trabajador) -> dict:
         'ubicacion_estado': t.ubicacion_estado,
         'observaciones': t.observaciones,
         'foto_perfil': t.foto_perfil,
-        'coord_a_cargo': ', '.join(coordinadores) if coordinadores else (t.coord_a_cargo or ''),
+        # Solo coordinadores de proyectos ACTIVOS — sin fallback al string
+        # legacy: si el proyecto se desactivó o sacaron al trabajador, aquí
+        # ya no debe figurar esa relación.
+        'coord_a_cargo': ', '.join(coordinadores),
         'proyectos_activos': ', '.join(proyectos_nombres) if proyectos_nombres else '',
         'credenciales': [
             {

@@ -1,14 +1,15 @@
 # Ordenamiento por columna en listados (`sort` / `dir`)
 
-Feature de la rama `Inventario` (2026-06-09). Los listados paginados de
-**trabajadores** y **préstamos** aceptan orden por columna desde el SPA
-(click en el header de la tabla).
+Feature de la rama `Inventario` (2026-06-09; proyectos agregado 2026-06-10).
+Los listados paginados de **trabajadores**, **préstamos** y **proyectos**
+aceptan orden por columna desde el SPA (click en el header de la tabla).
 
 ## Contrato
 
 ```
 GET /api/trabajadores?sort=<campo>&dir=asc|desc
 GET /api/prestamos?sort=<campo>&dir=asc|desc
+GET /api/proyectos?sort=<campo>&dir=asc|desc
 ```
 
 - `sort` se valida contra una **whitelist** por endpoint (abajo). Un valor
@@ -44,6 +45,18 @@ GET /api/prestamos?sort=<campo>&dir=asc|desc
 | `descuento` | `descuento_semanal` |
 | `inicio` | `fecha_inicio` |
 | `estado` | `estado` |
+
+### `/api/proyectos` (`app/routes/api_proyectos/lectura.py`)
+
+| `sort` | Columna |
+|---|---|
+| *(vacío, default)* | `numero_proyecto` |
+| `numero` | `numero_proyecto` |
+| `nombre` | `lower(nombre)` |
+| `estado` | `activo` |
+| `participantes` | conteo de la M:N (subquery, `coalesce 0`) |
+| `creado` | `created_at` |
+| `coordinador` | `lower(User.username)` (outerjoin) |
 
 ## Decisiones de diseño
 

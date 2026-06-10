@@ -97,14 +97,17 @@ Empleados. Coordinador solo accede a trabajadores de sus proyectos
 
 ## `api_proyectos` — `/api/proyectos`
 
+Relación trabajador↔proyecto M:N; los campos derivados del expediente se
+recalculan en cada mutación (ver `PROYECTOS_DERIVACION_M2M.md`).
+
 | Método | Ruta | Auth | Descripción |
 |---|---|---|---|
-| GET | `/` | — | Listado con filtros `q` y `estado=activos\|inactivos\|todos` |
+| GET | `/` | — | Listado paginado. Filtros `q`, `estado=activos\|inactivos\|todos`, orden `sort`/`dir` |
 | GET | `/mios` | — | Proyectos del usuario (coordinador: solo los suyos) |
-| GET | `/meta` | — | Datos auxiliares para el modal de alta/edición |
-| GET | `/<id>` | — | Detalle de un proyecto |
-| POST | `/` | admin | Crea proyecto |
-| PUT | `/<id>` | admin | Actualiza proyecto (coordinador, participantes, activo) |
+| GET | `/meta` | admin | Datos auxiliares para el modal de alta/edición (coordinadores + trabajadores) |
+| GET | `/<id>` | — | Detalle de un proyecto (coordinador solo el propio) |
+| POST | `/` | admin | Crea proyecto; ids de participantes inexistentes vuelven en `warnings` |
+| PUT | `/<id>` | admin | Actualiza (coordinador, participantes, activo); recalcula expediente de afectados |
 
 ---
 
