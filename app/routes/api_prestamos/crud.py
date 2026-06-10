@@ -29,8 +29,11 @@ def listar():
     per_page = min(100, max(1, request.args.get('per_page', 20, type=int)))
     q = (request.args.get('q') or '').strip()
     estado = (request.args.get('estado') or '').strip().upper()
+    sort = (request.args.get('sort') or '').lower()
+    direccion = (request.args.get('dir') or 'asc').lower()
 
     query = Prestamo.query.options(selectinload(Prestamo.trabajador))
+    joined_trabajador = False
     if q:
         query = query.join(Trabajador, Prestamo.trabajador_id == Trabajador.id).filter(or_(
             Trabajador.nombre.ilike(f'%{q}%'),
@@ -38,10 +41,32 @@ def listar():
             Trabajador.no_empleado.ilike(f'%{q}%'),
             db.cast(Prestamo.id, db.String).ilike(f'%{q}%'),
         ))
+        joined_trabajador = True
     if estado in ('ACTIVO', 'LIQUIDADO'):
         query = query.filter(Prestamo.estado == estado)
 
-    pagination = query.order_by(Prestamo.creado_en.desc()).paginate(
+    # Orden por columna con whitelist; sort desconocido/vacío cae al default
+    # histórico (creado_en desc). 'trabajador' ordena por nombre y requiere el
+    # join — outerjoin para no ocultar préstamos huérfanos, y solo si `q` no
+    # lo agregó ya (un segundo join a la misma tabla revienta la query).
+    sortables = {
+        'trabajador': db.func.lower(Trabajador.nombre),
+        'monto': Prestamo.monto_total,
+        'restante': Prestamo.monto_restante,
+        'descuento': Prestamo.descuento_semanal,
+        'inicio': Prestamo.fecha_inicio,
+        'estado': Prestamo.estado,
+    }
+    if sort in sortables:
+        if sort == 'trabajador' and not joined_trabajador:
+            query = query.outerjoin(Trabajador, Prestamo.trabajador_id == Trabajador.id)
+        col = sortables[sort]
+        orden = col.desc() if direccion == 'desc' else col.asc()
+        query = query.order_by(orden.nullslast(), Prestamo.creado_en.desc(), Prestamo.id)
+    else:
+        query = query.order_by(Prestamo.creado_en.desc())
+
+    pagination = query.paginate(
         page=page, per_page=per_page, error_out=False,
     )
 

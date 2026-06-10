@@ -210,6 +210,36 @@ class TestListar:
         assert body['total'] == 2
         assert body['pages'] == 2
 
+    def test_sort_monto_asc(self, client, pr_admin, prestamo_activo, pr_trab_b, db):
+        # prestamo_activo=5000; p2=1000 → asc pone p2 primero
+        p2 = Prestamo(
+            trabajador_id=pr_trab_b.id, monto_total=Decimal('1000'),
+            monto_restante=Decimal('1000'), plazo_semanas=4,
+            descuento_semanal=Decimal('250'), estado='ACTIVO', activo=True,
+        )
+        db.session.add(p2); db.session.commit()
+        r = client.get('/api/prestamos?sort=monto&dir=asc', headers=_hdr(pr_admin))
+        montos = [i['monto_total'] for i in r.get_json()['items']]
+        assert montos == [1000.0, 5000.0]
+
+    def test_sort_trabajador_con_q(self, client, pr_admin, prestamo_activo, pr_trab_b, db):
+        # sort=trabajador combinado con q: no debe duplicar el join ni tronar.
+        p2 = Prestamo(
+            trabajador_id=pr_trab_b.id, monto_total=Decimal('1000'),
+            monto_restante=Decimal('1000'), plazo_semanas=4,
+            descuento_semanal=Decimal('250'), estado='ACTIVO', activo=True,
+        )
+        db.session.add(p2); db.session.commit()
+        r = client.get('/api/prestamos?q=PR-&sort=trabajador&dir=asc', headers=_hdr(pr_admin))
+        assert r.status_code == 200
+        nombres = [i['trabajador']['nombre'] for i in r.get_json()['items']]
+        assert nombres == sorted(nombres, key=str.lower)
+
+    def test_sort_invalido_cae_a_default(self, client, pr_admin, prestamo_activo):
+        r = client.get('/api/prestamos?sort=hax&dir=desc', headers=_hdr(pr_admin))
+        assert r.status_code == 200
+        assert r.get_json()['total'] == 1
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 3. TRABAJADORES DISPONIBLES

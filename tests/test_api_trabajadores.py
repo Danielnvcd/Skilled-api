@@ -187,6 +187,86 @@ class TestListar:
         codigos = {t['no_empleado'] for t in r.get_json()['items']}
         assert codigos == {'EMP-A'}
 
+    def test_sort_salario_desc(self, client, admin, trab_a, trab_b):
+        # trab_a=5000, trab_b=150 → desc pone a EMP-A primero
+        r = client.get('/api/trabajadores?sort=salario&dir=desc', headers=_hdr(admin))
+        assert r.status_code == 200
+        codigos = [t['no_empleado'] for t in r.get_json()['items']]
+        assert codigos == ['EMP-A', 'EMP-B']
+
+    def test_sort_salario_asc(self, client, admin, trab_a, trab_b):
+        r = client.get('/api/trabajadores?sort=salario&dir=asc', headers=_hdr(admin))
+        codigos = [t['no_empleado'] for t in r.get_json()['items']]
+        assert codigos == ['EMP-B', 'EMP-A']
+
+    def test_sort_campo_invalido_cae_a_default(self, client, admin, trab_a, trab_b):
+        # Whitelist: un sort desconocido no truena (400/500), ordena por nombre.
+        r = client.get('/api/trabajadores?sort=drop_table&dir=desc', headers=_hdr(admin))
+        assert r.status_code == 200
+        codigos = [t['no_empleado'] for t in r.get_json()['items']]
+        # nombre desc: Bruno > Ana
+        assert codigos == ['EMP-B', 'EMP-A']
+
+    def test_sort_nulls_al_final(self, client, admin, trab_a, trab_b, db):
+        # Trabajador sin salario no debe encabezar el orden asc (nullslast).
+        t = Trabajador(no_empleado='EMP-N', nombre='Zoe', nombre_apellidos='Nula', activo=True)
+        db.session.add(t); db.session.commit()
+        r = client.get('/api/trabajadores?sort=salario&dir=asc', headers=_hdr(admin))
+        codigos = [t['no_empleado'] for t in r.get_json()['items']]
+        assert codigos == ['EMP-B', 'EMP-A', 'EMP-N']
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2b. NOTAS (chatter de la ficha)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestNotas:
+
+    def test_admin_crea_y_lista(self, client, admin, trab_a):
+        r = client.post(f'/api/trabajadores/{trab_a.id}/notas',
+                        json={'texto': 'Acordó horario especial'}, headers=_hdr(admin))
+        assert r.status_code == 201
+        assert r.get_json()['texto'] == 'Acordó horario especial'
+
+        r = client.get(f'/api/trabajadores/{trab_a.id}/notas', headers=_hdr(admin))
+        notas = r.get_json()
+        assert len(notas) == 1
+        assert notas[0]['autor']  # nombre del autor presente
+
+    def test_texto_vacio_422(self, client, admin, trab_a):
+        r = client.post(f'/api/trabajadores/{trab_a.id}/notas',
+                        json={'texto': '   '}, headers=_hdr(admin))
+        assert r.status_code == 422
+
+    def test_coordinador_sin_proyecto_403(self, client, coord, trab_a):
+        r = client.get(f'/api/trabajadores/{trab_a.id}/notas', headers=_hdr(coord))
+        assert r.status_code == 403
+
+    def test_coordinador_de_proyecto_puede(self, client, coord, trab_a, proyecto_coord):
+        r = client.post(f'/api/trabajadores/{trab_a.id}/notas',
+                        json={'texto': 'Nota del coordinador'}, headers=_hdr(coord))
+        assert r.status_code == 201
+
+    def test_borrar_solo_autor_o_admin(self, client, admin, coord, trab_a, proyecto_coord):
+        # coord crea una nota
+        r = client.post(f'/api/trabajadores/{trab_a.id}/notas',
+                        json={'texto': 'mía'}, headers=_hdr(coord))
+        nota_id = r.get_json()['id']
+        # admin (no autor) sí puede borrarla
+        r = client.delete(f'/api/trabajadores/{trab_a.id}/notas/{nota_id}', headers=_hdr(admin))
+        assert r.status_code == 200
+
+        # admin crea otra; coord (no autor, no admin) NO puede borrarla
+        r = client.post(f'/api/trabajadores/{trab_a.id}/notas',
+                        json={'texto': 'del admin'}, headers=_hdr(admin))
+        nota_id = r.get_json()['id']
+        r = client.delete(f'/api/trabajadores/{trab_a.id}/notas/{nota_id}', headers=_hdr(coord))
+        assert r.status_code == 403
+
+    def test_trabajador_inexistente_404(self, client, admin):
+        r = client.get('/api/trabajadores/999999/notas', headers=_hdr(admin))
+        assert r.status_code == 404
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 3. FICHA TÉCNICA
