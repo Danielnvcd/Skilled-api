@@ -35,5 +35,6 @@ from . import credenciales   # noqa: F401  /credenciales-lista, /<id>/credencial
 from . import multimedia     # noqa: F401  /<id>/foto*, /<id>/documentos*
 from . import importar       # noqa: F401  /plantilla-importar, /importar
 from . import exportar       # noqa: F401  /<id>/exportar, /bulk-exportar, /exportar-todos
+from . import notas          # noqa: F401  /<id>/notas (chatter de la ficha)
 
 __all__ = ['bp', 'procesar_excel_trabajadores']

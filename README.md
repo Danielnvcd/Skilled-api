@@ -9,18 +9,20 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 - **API**: Flask + SQLAlchemy + Flask-JWT-Extended + Flask-Limiter + Flask-Talisman
 - **DB**: PostgreSQL (psycopg v3)
 - **Cache / Rate-limit / Anti-replay TOTP**: Redis
-- **Realtime**: Socket.IO (`async_mode=threading`, compatible con gthread)
+- **Realtime**: Socket.IO — `gevent` en prod (WebSocket real), `threading` en dev; `message_queue` en Redis para emitir entre workers
 - **Documentos**: pandas + openpyxl (Excel), xhtml2pdf (PDF)
-- **Despliegue**: Gunicorn (gthread, 4 workers × 6 threads) detrás de Nginx → Cloudflare Tunnel
+- **Despliegue**: Gunicorn (gevent + `GeventWebSocketWorker`, 4 workers × 1000 conexiones) detrás de Nginx → Cloudflare Tunnel (`protocol: http2`, requerido para WS estable)
 
 ---
 
 ## Características Principales
 
-- **Empleados**: alta, baja, edición; campos laborales, personales, médicos y financieros con whitelist por rol.
+- **Empleados**: alta, baja, edición; campos laborales, personales, médicos y financieros con whitelist por rol. Notas internas tipo "chatter" en la ficha (ver `docs/NOTAS_TRABAJADOR.md`).
+- **Listados ordenables**: trabajadores y préstamos aceptan `?sort=<campo>&dir=asc|desc` con whitelist de columnas (ver `docs/ORDENAMIENTO_LISTADOS.md`).
 - **Carga masiva**: import/export de plantillas `.xlsx`.
 - **Reportes**: PDF (recibos, constancias) y Excel (totales por proyecto, histórico).
-- **Inventario**: productos, almacenes y estantes con QR; movimientos con lock anti-concurrencia; flujo de solicitudes `PENDIENTE → APROBADA/RECHAZADA/ENTREGADA`; PDF de solicitudes.
+- **Inventario**: productos, almacenes y estantes con QR; movimientos con lock anti-concurrencia; flujo de solicitudes `PENDIENTE → APROBADA/RECHAZADA/ENTREGADA`; PDF de solicitudes; tomas físicas con ajustes automáticos; etiquetas Avery y órdenes de compra express.
+- **Herramientas**: catálogo + unidades físicas rastreables (serie/QR); asignaciones a trabajadores, mantenimientos, incidencias y flujo de baja con autorización.
 - **Realtime**: notificaciones in-app vía Socket.IO; expiración automática a 30 días de las leídas.
 - **Seguridad**: rate-limit a dos niveles (Nginx + Flask-Limiter), JWT con `iss`/`aud`, refresh-token rotation en cookie, lockout escalado, anti-replay TOTP en Redis, validación de magic bytes en uploads.
 
@@ -28,7 +30,7 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 
 ## Requisitos
 
-- Python 3.9+
+- Python 3.11+ (pandas 3.x lo exige; local corre 3.12)
 - PostgreSQL 14+
 - Redis (recomendado en prod; sin él la anti-replay TOTP se degrada)
 - Git
@@ -51,35 +53,26 @@ pip install -r requirements.txt
 
 ### `.env` (crear en la raíz)
 
-```env
-FLASK_APP=run.py
-FLASK_ENV=development
+Copia [`.env.example`](./.env.example) — documenta todas las variables con sus
+comandos de generación — y rellena los valores:
 
-# Generar con: python -c "import secrets; print(secrets.token_hex(64))"
-SECRET_KEY=<32+ hex>
-
-# Driver psycopg v3
-DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/nominas
-
-REDIS_URL=redis://localhost:6379/0
-
-# Recuperación de password, etc.
-MAIL_USERNAME=tu_correo@gmail.com
-MAIL_PASSWORD=<gmail app password>
-
-# Orígenes del SPA. En dev: Vite (5173). En prod: dominio Vercel + custom.
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-
-# Same-origin en dev → Lax. Cross-origin en prod (Vercel + API) → None + Secure.
-RT_COOKIE_SAMESITE=Lax
-
-# Cifrado de TOTP secrets. Generar:
-# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-TOTP_ENCRYPTION_KEY=<fernet key>
-
-# Solo true en prod con nginx + X-Accel-Redirect habilitado
-USE_X_ACCEL_REDIRECT=false
+```bash
+cp .env.example .env
 ```
+
+Las críticas:
+
+| Variable | Notas |
+|---|---|
+| `SECRET_KEY` | Obligatoria, la app no arranca sin ella |
+| `DATABASE_URL` | Driver psycopg v3: `postgresql+psycopg://...` |
+| `TOTP_ENCRYPTION_KEY` | Clave Fernet para cifrar secretos 2FA en BD |
+| `REDIS_URL` | Rate-limit, lockout, anti-replay TOTP y message queue de Socket.IO |
+| `CORS_ORIGINS` | Dev: Vite (5173). Prod: dominios Vercel/custom |
+| `RT_COOKIE_SAMESITE` | `Lax` same-origin (dev); `None` cross-origin (prod) |
+| `SOCKETIO_ASYNC_MODE` | `threading` en dev (default); `gevent` SOLO en prod — gevent crashea con psycopg en Windows local |
+| `USE_X_ACCEL_REDIRECT` | `true` solo en prod con nginx configurado |
+| `HSTS_PRELOAD` | `false` salvo que estés seguro (semi-irreversible) |
 
 > Crea la BD `nominas` en Postgres antes de migrar.
 
@@ -96,20 +89,26 @@ python run.py            # http://localhost:5000
 
 ```text
 Sistema de nominas/
-├── run.py                  # Entry point (dev y referenciado por Gunicorn)
+├── run.py                  # Entry point; monkey-patch de gevent si SOCKETIO_ASYNC_MODE=gevent
 ├── requirements.txt
-├── create_template.py      # Genera plantilla Excel de empleados
 ├── nginx.config            # Config de Nginx
-├── gunicorn.service        # Unit de systemd
+├── gunicorn.serviceee      # Unit de systemd (se instala como nominas.service)
 ├── app/
-│   ├── __init__.py         # Factory: Flask, CORS, JWT, Talisman, Limiter, Socket.IO
-│   ├── models/             # SQLAlchemy
-│   ├── routes/             # Blueprints (api_*, auth, inventario_api, etc.)
-│   └── realtime.py         # Eventos Socket.IO
+│   ├── __init__.py         # create_app(): CORS, Talisman, Limiter, blueprints, Socket.IO
+│   ├── extensions.py       # db, limiter, mail; IP real tras Cloudflare; EncryptedString
+│   ├── realtime.py         # Socket.IO: handlers, hooks ORM, emit_to_*
+│   ├── models/             # SQLAlchemy, particionado por dominio
+│   ├── routes/             # 17 blueprints api_*, cada uno como sub-paquete con _core.py
+│   └── utils/              # seguridad, archivos, imágenes, horas, payroll
+├── templates/              # Jinja SOLO para PDFs (xhtml2pdf)
 ├── migrations/             # Alembic
 ├── uploads/                # Fotos y documentos (writeable en prod)
+├── scripts/                # Generadores de inventario de docs y utilidades
+├── docs/                   # Documentación (ver Referencias)
 └── tests/
 ```
+
+Detalle completo en [`docs/ARQUITECTURA.md`](./docs/ARQUITECTURA.md).
 
 ---
 
@@ -119,20 +118,24 @@ Cadena: **Cloudflare Tunnel → Nginx (127.0.0.1:80) → Gunicorn (127.0.0.1:800
 
 ### Gunicorn
 
+El unit instalado en prod se llama **`nominas.service`** (el archivo del repo
+es `gunicorn.serviceee`):
+
 ```bash
-sudo cp gunicorn.service /etc/systemd/system/gunicorn.service
+sudo cp gunicorn.serviceee /etc/systemd/system/nominas.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now gunicorn
-sudo systemctl status gunicorn
+sudo systemctl enable --now nominas
+sudo systemctl status nominas
 ```
 
 Resumen del unit (ver archivo para comentarios completos):
 
-- **4 workers × 6 threads (gthread)** → ~24 conexiones simultáneas. Eventlet incompatible con psycopg3 (ver `docs/MIGRACION_EVENTLET_A_GEVENT.md`).
+- **4 workers gevent (`GeventWebSocketWorker`) × 1000 conexiones**: WebSocket real (upgrade HTTP→WS). gthread no implementa el upgrade y eventlet es incompatible con psycopg3 (ver `docs/MIGRACION_EVENTLET_A_GEVENT.md` y `docs/DEPLOY_GEVENT.md`).
+- **`SOCKETIO_ASYNC_MODE=gevent`** en el unit: activa el `monkey.patch_all()` al inicio de `run.py` y el modo gevent de Flask-SocketIO.
 - **`--max-requests 1000` + jitter**: recicla workers para evitar leaks de pandas/openpyxl/xhtml2pdf.
 - **`--forwarded-allow-ips=127.0.0.1`**: solo confía en `X-Forwarded-*` desde nginx local — cierra spoofing de `CF-Connecting-IP`.
 - **`--access-logformat`** custom: imprime `X-Real-IP` (no `127.0.0.1`) + tiempo de request.
-- **Hardening systemd**: `ProtectSystem=strict`, `NoNewPrivileges`, `CapabilityBoundingSet=` (drop all), `MemoryDenyWriteExecute=yes`.
+- **Hardening systemd**: `ProtectSystem=strict`, `NoNewPrivileges`, `CapabilityBoundingSet=` (drop all), `MemoryDenyWriteExecute=yes` (si gunicorn no arranca tras tocar gevent, ver el comentario de esa línea en el unit).
 
 ### Nginx
 
@@ -173,9 +176,12 @@ USE_X_ACCEL_REDIRECT=true
 
 ```bash
 curl https://api.tu-dominio.com/health                          # {"status":"ok"}
-sudo journalctl -u gunicorn -n 20 --no-pager                    # IPs reales, no 127.0.0.1
+sudo journalctl -u nominas -n 20 --no-pager                     # IPs reales, no 127.0.0.1
 sudo tail -n 20 /var/log/nginx/skilled_api.access.log           # upstream=127.0.0.1:8000 request_time=...
 ```
+
+> **Cloudflare Tunnel**: usar `protocol: http2` en `/etc/cloudflared/config.yml` —
+> con QUIC los WebSockets de Socket.IO se degradan (ver `docs/WEBSOCKETS_Y_DEPLOY.md`).
 
 Login end-to-end desde el dominio Vercel: DevTools → Network → la respuesta de `/api/auth/login` debe incluir `Set-Cookie: skilled_rt=...; SameSite=None; Secure`.
 
@@ -183,7 +189,7 @@ Login end-to-end desde el dominio Vercel: DevTools → Network → la respuesta 
 
 ## Módulo de Inventario
 
-Backend Flask bajo `/api/v1/` (`app/routes/inventario_api.py`). Frontend en `plantilla-frontend/src/pages/inventario/`.
+Backend Flask bajo `/api/v1/`: paquetes `app/routes/inventario_api/` (materiales) y `app/routes/herramientas_api/` (herramientas). Frontend en `plantilla-frontend/src/pages/inventario/`. Referencia completa de endpoints en [`docs/API_REFERENCE.md`](./docs/API_REFERENCE.md).
 
 ### Endpoints clave
 
@@ -207,7 +213,7 @@ Backend Flask bajo `/api/v1/` (`app/routes/inventario_api.py`). Frontend en `pla
 
 ## Sistema de Notificaciones
 
-Panel en sidebar para `admin` / `super_admin`. Polling cada 45 s (o push vía Socket.IO).
+Panel en sidebar para `admin` / `super_admin`. Push en tiempo real vía Socket.IO (evento `notif:new`, emitido post-commit por hook ORM), con polling como fallback.
 
 Tipos:
 
@@ -215,17 +221,17 @@ Tipos:
 |---|---|
 | `REPORTE_CERRADO` | Al cerrar un reporte de horas |
 | `PRENOMINA_CERRADA` | Al aprobar/cerrar una prenómina |
-| `ACTUALIZACION` | Entradas nuevas en el `CHANGELOG` de `app/routes/notificaciones.py` |
+| `ACTUALIZACION` | Entradas nuevas en el `CHANGELOG` de `app/routes/api_notificaciones/_core.py` |
 
 **Limpieza automática**: notificaciones leídas se eliminan a los 30 días en cada `GET /resumen` (sin cron externo). Edita `DIAS_EXPIRACION` para cambiar.
 
-La tabla `notificaciones` se autocrea en el arranque (`inspect().has_table()`); no requiere `flask db upgrade`.
+Las tablas `notificaciones`, `totp_backup_codes` y `trabajador_notas` se autocrean en el arranque (`inspect().has_table()`); no requieren `flask db upgrade`.
 
 ---
 
 ## Seguridad
 
-Estado actual tras la auditoría del 2026-05-23 (4 críticas + 7 altas cerradas en código). Ver [`SEGURIDAD.md`](./SEGURIDAD.md) para el detalle completo.
+Estado actual tras la auditoría del 2026-05-23 (4 críticas + 7 altas cerradas en código). Ver [`docs/SEGURIDAD.md`](./docs/SEGURIDAD.md) para el detalle completo.
 
 ### Autenticación
 
@@ -254,7 +260,7 @@ Estado actual tras la auditoría del 2026-05-23 (4 críticas + 7 altas cerradas 
 - Rate-limit Nginx (`api_general` 30/s, `api_auth` 30/min) + Flask-Limiter (por user/IP en Redis).
 - Gunicorn `--forwarded-allow-ips=127.0.0.1` cierra spoofing de `CF-Connecting-IP`.
 - `.env` con `chown root:sistemanominas` + `chmod 640` (no legible por otros users del host).
-- Hardening systemd completo en `gunicorn.service` (ProtectKernel*, RestrictAddressFamilies, CapabilityBoundingSet vacío, MemoryDenyWriteExecute).
+- Hardening systemd completo en `gunicorn.serviceee` / `nominas.service` (ProtectKernel*, RestrictAddressFamilies, CapabilityBoundingSet vacío, MemoryDenyWriteExecute).
 
 ### Pendientes operativos (no automatizables desde el repo)
 
@@ -282,29 +288,43 @@ Estado actual tras la auditoría del 2026-05-23 (4 críticas + 7 altas cerradas 
 ## Comandos Útiles
 
 ```bash
-# Recrear plantilla Excel de empleados
-python create_template.py
-
 # Migraciones
 flask db migrate -m "descripción"
 flask db upgrade
 flask db current
 
-# Tests (algunos legacy — ver memoria del proyecto antes de correrlos)
+# Tests (suite completa en verde; correrla tras cualquier cambio)
 pytest tests/
+
+# Regenerar inventarios para la documentación (rutas y modelos)
+python scripts/gen_api_inventory.py
+python scripts/gen_models_inventory.py
 ```
+
+> Las plantillas Excel (empleados y productos) ya no se generan con un script:
+> se descargan de `GET /api/trabajadores/plantilla-importar` y
+> `GET /api/v1/productos/plantilla-importar`.
 
 ---
 
 ## Referencias
 
-- Archivos de despliegue: [`nginx.config`](./nginx.config), [`gunicorn.service`](./gunicorn.service)
-- Seguridad detallada: [`SEGURIDAD.md`](./SEGURIDAD.md)
+- Archivos de despliegue: [`nginx.config`](./nginx.config), [`gunicorn.serviceee`](./gunicorn.serviceee) (se instala como `nominas.service`)
+- Seguridad detallada: [`docs/SEGURIDAD.md`](./docs/SEGURIDAD.md)
 - Frontend: repo `plantilla-frontend/` (deploy en Vercel)
 - Docs adicionales en [`docs/`](./docs/):
-  - `WEBSOCKETS_Y_DEPLOY.md` — setup de Socket.IO y consideraciones
-  - `MIGRACION_EVENTLET_A_GEVENT.md` — por qué gthread y no eventlet
+  - `ARQUITECTURA.md` — mapa del código: factory, blueprints, realtime, utils
+  - `API_REFERENCE.md` — referencia completa de los 216 endpoints
+  - `MODELOS_BD.md` — todas las tablas, columnas y relaciones
+  - `WEBSOCKETS_Y_DEPLOY.md` — setup de Socket.IO y consideraciones (incluye fix de Cloudflare QUIC)
+  - `DEPLOY_GEVENT.md` — despliegue con gevent + GeventWebSocketWorker
+  - `MIGRACION_EVENTLET_A_GEVENT.md` — por qué gevent y no eventlet
   - `MIGRACION_USERESOURCE_REALTIME.md` — migración del módulo realtime
+  - `FIX_WEBSOCKET_TOKEN_EXPIRADO.md` / `FIX_WEBSOCKET_RECONEXION_MATUTINA.md` — fixes de reconexión WS
+  - `MANUAL_USO_PRENOMINA_PRESTAMOS_INBURSA.md` — manual funcional de prenómina/préstamos/ajustes
+  - `REFACTOR_ARCHIVOS_GRANDES.md` — plan/estado del refactor a sub-paquetes
+  - `NOTAS_TRABAJADOR.md` — notas internas ("chatter") en la ficha del trabajador
+  - `ORDENAMIENTO_LISTADOS.md` — orden por columna (`sort`/`dir`) en trabajadores y préstamos
 
 ---
 

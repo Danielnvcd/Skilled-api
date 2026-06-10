@@ -45,6 +45,8 @@ def listar():
     per_page = min(request.args.get('per_page', 20, type=int), 10000)
     q = (request.args.get('q') or '').strip()
     estado = (request.args.get('estado') or 'activos').lower()  # activos|bajas|todos
+    sort = (request.args.get('sort') or 'nombre').lower()
+    direccion = (request.args.get('dir') or 'asc').lower()
 
     if estado == 'bajas':
         if not is_admin():
@@ -73,7 +75,25 @@ def listar():
             Trabajador.rfc.ilike(like),
         ))
 
-    pagination = query.order_by(func.lower(Trabajador.nombre)).paginate(
+    # Orden por columna con whitelist — un `sort` fuera de la lista cae al
+    # default (nombre) en vez de 400, así un link viejo con un campo renombrado
+    # sigue funcionando. Desempate estable por nombre+id para que la paginación
+    # no duplique/omita filas cuando la columna ordenada tiene valores repetidos.
+    sortables = {
+        'nombre': func.lower(Trabajador.nombre),
+        'no_empleado': Trabajador.no_empleado,
+        'area': func.lower(Trabajador.area),
+        'puesto': func.lower(Trabajador.puesto),
+        'tipo_nomina': func.lower(Trabajador.tipo_nomina),
+        'salario': Trabajador.salario_real_pactado_x_sem,
+        'ingreso': Trabajador.fecha_ingreso,
+        'baja': Trabajador.fecha_baja,
+    }
+    col = sortables.get(sort, sortables['nombre'])
+    orden = col.desc() if direccion == 'desc' else col.asc()
+    pagination = query.order_by(
+        orden.nullslast(), func.lower(Trabajador.nombre), Trabajador.id,
+    ).paginate(
         page=page, per_page=per_page, error_out=False,
     )
     return jsonify({

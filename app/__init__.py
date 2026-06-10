@@ -341,6 +341,9 @@ def create_app():
         if not _sqla_inspect(db.engine).has_table('totp_backup_codes'):
             from app.models import TwoFactorBackupCode
             TwoFactorBackupCode.__table__.create(db.engine)
+        if not _sqla_inspect(db.engine).has_table('trabajador_notas'):
+            from app.models import NotaTrabajador
+            NotaTrabajador.__table__.create(db.engine)
 
     app.wsgi_app = ProxyFix(
         app.wsgi_app,

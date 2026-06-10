@@ -42,6 +42,7 @@ from app.models.auth import (
 from app.models.trabajador import (
     CredencialPlanta,
     DocumentoTrabajador,
+    NotaTrabajador,
     Trabajador,
 )
 
@@ -133,7 +134,7 @@ __all__ = [
     # auth
     'User', 'RefreshToken', 'TwoFactorBackupCode', 'AuditLog',
     # trabajador
-    'Trabajador', 'CredencialPlanta', 'DocumentoTrabajador',
+    'Trabajador', 'CredencialPlanta', 'DocumentoTrabajador', 'NotaTrabajador',
     # proyecto
     'Proyecto', 'proyecto_trabajador',
     # horas

@@ -109,6 +109,33 @@ class CredencialPlanta(db.Model):
         }
 
 
+class NotaTrabajador(db.Model):
+    """Nota interna sobre un trabajador (el "chatter" de la ficha).
+
+    Texto libre escrito por admin/coordinador: acuerdos verbales, incidencias
+    informales, contexto que no cabe en campos estructurados. Se crea/borra
+    vía /api/trabajadores/<id>/notas y se pushea por Socket.IO (nota:changed).
+    """
+    __tablename__ = "trabajador_notas"
+    id = db.Column(db.Integer, primary_key=True)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    texto = db.Column(db.String(2000), nullable=False)
+    created_at = db.Column(db.DateTime, default=_now_utc, index=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'trabajador_id': self.trabajador_id,
+            'user_id': self.user_id,
+            'autor': getattr(self.user, 'full_name', None) or getattr(self.user, 'username', None),
+            'texto': self.texto,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class DocumentoTrabajador(db.Model):
     __tablename__ = "documentos_trabajador"
     id = db.Column(db.Integer, primary_key=True)
