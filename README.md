@@ -18,7 +18,8 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 ## Características Principales
 
 - **Empleados**: alta, baja, edición; campos laborales, personales, médicos y financieros con whitelist por rol. Notas internas tipo "chatter" en la ficha (ver `docs/NOTAS_TRABAJADOR.md`).
-- **Listados ordenables**: trabajadores y préstamos aceptan `?sort=<campo>&dir=asc|desc` con whitelist de columnas (ver `docs/ORDENAMIENTO_LISTADOS.md`).
+- **Listados ordenables**: trabajadores, préstamos y proyectos aceptan `?sort=<campo>&dir=asc|desc` con whitelist de columnas (ver `docs/ORDENAMIENTO_LISTADOS.md`).
+- **Proyectos M:N**: un trabajador puede estar en varios proyectos; expediente y credenciales derivan la relación SOLO de proyectos activos (ver `docs/PROYECTOS_DERIVACION_M2M.md`).
 - **Carga masiva**: import/export de plantillas `.xlsx`.
 - **Reportes**: PDF (recibos, constancias) y Excel (totales por proyecto, histórico).
 - **Inventario**: productos, almacenes y estantes con QR; movimientos con lock anti-concurrencia; flujo de solicitudes `PENDIENTE → APROBADA/RECHAZADA/ENTREGADA`; PDF de solicitudes; tomas físicas con ajustes automáticos; etiquetas Avery y órdenes de compra express.
@@ -324,7 +325,8 @@ python scripts/gen_models_inventory.py
   - `MANUAL_USO_PRENOMINA_PRESTAMOS_INBURSA.md` — manual funcional de prenómina/préstamos/ajustes
   - `REFACTOR_ARCHIVOS_GRANDES.md` — plan/estado del refactor a sub-paquetes
   - `NOTAS_TRABAJADOR.md` — notas internas ("chatter") en la ficha del trabajador
-  - `ORDENAMIENTO_LISTADOS.md` — orden por columna (`sort`/`dir`) en trabajadores y préstamos
+  - `ORDENAMIENTO_LISTADOS.md` — orden por columna (`sort`/`dir`) en trabajadores, préstamos y proyectos
+  - `PROYECTOS_DERIVACION_M2M.md` — relación M:N proyectos↔trabajadores y campos derivados del expediente
 
 ---
 

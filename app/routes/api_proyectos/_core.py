@@ -4,6 +4,7 @@ Define el blueprint, serializers de proyecto/coordinador/trabajador-pickable y
 los helpers de validación que comparten lectura y escritura.
 """
 from flask import Blueprint, jsonify
+from sqlalchemy.orm import joinedload
 
 from app.models import Proyecto, Trabajador, User
 
@@ -17,13 +18,19 @@ bp = Blueprint('api_proyectos', __name__, url_prefix='/api/proyectos')
 _VALID_COORD_ROLES = {'coordinador', 'admin', 'super_admin'}
 
 
-def _coord_initials(username: str) -> str:
-    return (username or '')[:2].upper()
+def _coord_initials(nombre: str) -> str:
+    return (nombre or '')[:2].upper()
 
 
-def _proyecto_row(p: Proyecto) -> dict:
-    """Resumen para la tabla principal."""
+def _proyecto_row(p: Proyecto, participantes_count: int | None = None) -> dict:
+    """Resumen para la tabla principal.
+
+    `participantes_count` viene de la subquery de conteo del listado (evita
+    cargar las filas de participantes solo para contarlas); si no se pasa,
+    cae al len() de la relación.
+    """
     coord = p.coordinador
+    display = (coord.full_name or coord.username) if coord else None
     return {
         'id': p.id,
         'numero_proyecto': p.numero_proyecto,
@@ -32,9 +39,16 @@ def _proyecto_row(p: Proyecto) -> dict:
         'coordinador': {
             'id': coord.id,
             'username': coord.username,
-            'initials': _coord_initials(coord.username),
+            'full_name': display,
+            'initials': _coord_initials(display),
+            # Para <UserAvatar/> del SPA: filename actual (sirve de cache
+            # buster) — la imagen se descarga de /api/auth/users/<id>/foto.
+            'profile_pic': coord.profile_pic,
         } if coord else None,
-        'participantes_count': len(p.participantes),
+        'participantes_count': (
+            participantes_count if participantes_count is not None
+            else len(p.participantes)
+        ),
         'created_at': p.created_at.isoformat() if p.created_at else None,
     }
 
@@ -93,8 +107,35 @@ def _validar_coordinador(coord_id):
     return sup, None
 
 
-def _sync_trabajador_from_proyecto(t: Trabajador, p: Proyecto, coord_name: str | None):
-    t.no_proyecto = p.numero_proyecto
-    t.ubicacion_actual = p.nombre
-    if coord_name:
-        t.coord_a_cargo = coord_name
+def recalcular_campos_proyecto(t: Trabajador) -> None:
+    """Deriva `no_proyecto` / `ubicacion_actual` / `coord_a_cargo` del trabajador
+    a partir de sus proyectos ACTIVOS (relación M:N `proyecto_trabajador`).
+
+    Regla de negocio: un trabajador puede estar en varios proyectos a la vez
+    (y un coordinador llevar varios). En el expediente/credenciales solo deben
+    figurar los proyectos activos donde sigue asignado — si el proyecto se
+    desactiva o lo sacan de la lista, la relación desaparece de estos campos.
+
+    Los tres son columnas legacy de ancho fijo (ver TRABAJADOR_LENGTHS); con
+    varios proyectos se unen con ', ' y se truncan al ancho de la columna.
+    Llamar SIEMPRE después de un flush (la query lee la tabla asociativa).
+    """
+    activos = (
+        t.proyectos
+        .options(joinedload(Proyecto.coordinador))
+        .filter_by(activo=True)
+        .order_by(Proyecto.numero_proyecto)
+        .all()
+    )
+    numeros = [p.numero_proyecto for p in activos]
+    nombres = [p.nombre for p in activos if p.nombre]
+    coords = []
+    for p in activos:
+        if p.coordinador:
+            n = p.coordinador.full_name or p.coordinador.username
+            if n and n not in coords:
+                coords.append(n)
+
+    t.no_proyecto = (', '.join(numeros)[:100] or None)
+    t.ubicacion_actual = (', '.join(nombres)[:150] or None)
+    t.coord_a_cargo = (', '.join(coords)[:150] or None)

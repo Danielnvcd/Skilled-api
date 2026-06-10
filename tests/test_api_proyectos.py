@@ -6,9 +6,7 @@ Cobertura:
   - GET  /meta           opciones para el modal (coordinadores + trabajadores)
   - GET  /<id>           detalle (coord solo el propio)
   - POST /               crear (admin)
-  - PUT  /<id>           actualizar (admin) — incluye sincronización del
-                         campo `no_proyecto`/`ubicacion_actual` en el Trabajador
-                         cuando entra o sale de la lista de participantes
+  - PUT  /<id>           actualizar (admin)
 
 Reglas no obvias:
   - Solo admin/super_admin/coordinador pueden listar; coord ve solo los suyos.
@@ -17,9 +15,11 @@ Reglas no obvias:
     ser coordinador.
   - Detalle: coord viendo proyecto ajeno → 403 (no 404; no leak existencia).
   - Crear/Actualizar: campos obligatorios `numero_proyecto`+`nombre`;
-    `numero_proyecto` único.
-  - Update: si un trabajador deja la lista de participantes, sus campos
-    `no_proyecto`/`ubicacion_actual` se limpian.
+    `numero_proyecto` único (carrera cubierta con IntegrityError → 409).
+  - Derivación: `no_proyecto`/`ubicacion_actual`/`coord_a_cargo` del
+    Trabajador se RECALCULAN desde sus proyectos ACTIVOS en cada mutación
+    (M:N — varios proyectos se unen con ', '). Salir del proyecto o que el
+    proyecto se desactive elimina la relación de esos campos.
 """
 import pytest
 from werkzeug.security import generate_password_hash
@@ -53,6 +53,14 @@ def coord(db):
 def coord_b(db):
     u = User(username='proy_coord_b', password_hash=generate_password_hash('Pass123!'),
               role='coordinador')
+    db.session.add(u); db.session.commit()
+    return u
+
+
+@pytest.fixture
+def superadmin(db):
+    u = User(username='proy_super', password_hash=generate_password_hash('Pass123!'),
+              role='super_admin')
     db.session.add(u); db.session.commit()
     return u
 
@@ -228,6 +236,42 @@ class TestListar:
         codigos = {p['numero_proyecto'] for p in r.get_json()['items']}
         assert codigos == {'PRY-100'}
 
+    def test_paginacion(self, client, admin, db):
+        for i in range(3):
+            db.session.add(Proyecto(numero_proyecto=f'PG-{i}', nombre=f'P{i}', activo=True))
+        db.session.commit()
+        r = client.get('/api/proyectos?page=1&per_page=2', headers=_hdr(admin))
+        body = r.get_json()
+        assert len(body['items']) == 2
+        assert body['total'] == 3
+        assert body['pages'] == 2
+        assert body['has_next'] is True
+
+    def test_sort_participantes_desc(self, client, admin, proyecto_coord, db):
+        vacio = Proyecto(numero_proyecto='PRY-VAC', nombre='Sin gente', activo=True)
+        db.session.add(vacio); db.session.commit()
+        r = client.get('/api/proyectos?sort=participantes&dir=desc', headers=_hdr(admin))
+        items = r.get_json()['items']
+        assert items[0]['numero_proyecto'] == 'PRY-100'
+        assert items[0]['participantes_count'] == 1
+        assert items[-1]['participantes_count'] == 0
+
+    def test_sort_invalido_cae_a_default(self, client, admin, proyecto_coord):
+        r = client.get('/api/proyectos?sort=drop_table&dir=desc', headers=_hdr(admin))
+        assert r.status_code == 200
+        assert r.get_json()['total'] == 1
+
+    def test_row_incluye_full_name_del_coordinador(
+        self, client, admin, coord, proyecto_coord, db,
+    ):
+        coord.full_name = 'Carlos Coordinador'
+        db.session.commit()
+        r = client.get('/api/proyectos', headers=_hdr(admin))
+        row = next(p for p in r.get_json()['items'] if p['numero_proyecto'] == 'PRY-100')
+        assert row['coordinador']['full_name'] == 'Carlos Coordinador'
+        # El SPA arma el avatar con id + profile_pic (UserAvatar)
+        assert 'profile_pic' in row['coordinador']
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 4. META
@@ -249,6 +293,12 @@ class TestMeta:
     def test_coordinador_403(self, client, coord):
         r = client.get('/api/proyectos/meta', headers=_hdr(coord))
         assert r.status_code == 403
+
+    def test_incluye_super_admin_como_coordinador(self, client, admin, superadmin):
+        # _VALID_COORD_ROLES acepta super_admin; el selector debe listarlo.
+        r = client.get('/api/proyectos/meta', headers=_hdr(admin))
+        usernames = {c['username'] for c in r.get_json()['coordinadores']}
+        assert superadmin.username in usernames
 
     def test_trabajador_no_disponible_si_sin_salario(
         self, client, admin, trab_sin_salario,
@@ -443,3 +493,112 @@ class TestActualizar:
         db.session.refresh(trab_otro)
         assert trab_otro.no_proyecto == 'PRY-100'
         assert trab_otro.ubicacion_actual == proyecto_coord.nombre
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 8. DERIVACIÓN M:N (expediente/credenciales reflejan SOLO proyectos activos)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestDerivacion:
+
+    def _put(self, client, admin, p, **overrides):
+        payload = {
+            'numero_proyecto': p.numero_proyecto,
+            'nombre': p.nombre,
+            'activo': p.activo,
+            'coordinador_id': p.coordinador_id,
+            'participantes_ids': [t.id for t in p.participantes],
+        }
+        payload.update(overrides)
+        return client.put(f'/api/proyectos/{p.id}', headers=_hdr(admin), json=payload)
+
+    def test_trabajador_en_dos_proyectos_une_con_coma(
+        self, client, admin, proyecto_coord, trab_ok, db,
+    ):
+        r = client.post('/api/proyectos', headers=_hdr(admin), json={
+            'numero_proyecto': 'AAA-001', 'nombre': 'Obra segunda',
+            'participantes_ids': [trab_ok.id],
+        })
+        assert r.status_code == 201
+        db.session.refresh(trab_ok)
+        # Orden alfabético por numero_proyecto
+        assert trab_ok.no_proyecto == 'AAA-001, PRY-100'
+        assert 'Obra segunda' in trab_ok.ubicacion_actual
+        assert 'Obra coord' in trab_ok.ubicacion_actual
+
+    def test_salir_de_un_proyecto_conserva_el_otro(
+        self, client, admin, proyecto_coord, trab_ok, db,
+    ):
+        client.post('/api/proyectos', headers=_hdr(admin), json={
+            'numero_proyecto': 'AAA-001', 'nombre': 'Obra segunda',
+            'participantes_ids': [trab_ok.id],
+        })
+        # Lo sacan de PRY-100; debe conservar SOLO AAA-001
+        r = self._put(client, admin, proyecto_coord, participantes_ids=[])
+        assert r.status_code == 200
+        db.session.refresh(trab_ok)
+        assert trab_ok.no_proyecto == 'AAA-001'
+        assert trab_ok.ubicacion_actual == 'Obra segunda'
+
+    def test_desactivar_proyecto_suelta_la_relacion(
+        self, client, admin, proyecto_coord, trab_ok, db,
+    ):
+        r = self._put(client, admin, proyecto_coord, activo=False)
+        assert r.status_code == 200
+        db.session.refresh(trab_ok)
+        assert trab_ok.no_proyecto is None
+        assert trab_ok.ubicacion_actual is None
+        assert trab_ok.coord_a_cargo is None
+
+    def test_reactivar_proyecto_restaura_la_relacion(
+        self, client, admin, proyecto_coord, trab_ok, db,
+    ):
+        self._put(client, admin, proyecto_coord, activo=False)
+        r = self._put(client, admin, proyecto_coord, activo=True)
+        assert r.status_code == 200
+        db.session.refresh(trab_ok)
+        assert trab_ok.no_proyecto == 'PRY-100'
+
+    def test_credenciales_no_muestran_proyecto_inactivo(
+        self, client, admin, proyecto_coord, trab_ok, db,
+    ):
+        self._put(client, admin, proyecto_coord, activo=False)
+        r = client.get('/api/trabajadores/credenciales-lista', headers=_hdr(admin))
+        fila = next(x for x in r.get_json()['items'] if x['no_empleado'] == trab_ok.no_empleado)
+        assert fila['proyectos_activos'] == ''
+        assert fila['coord_a_cargo'] == ''  # sin fallback al string legacy
+
+    def test_coord_a_cargo_se_llena_y_se_limpia(
+        self, client, admin, coord, proyecto_coord, trab_ok, db,
+    ):
+        # Tocar el proyecto rellena coord_a_cargo desde el coordinador actual
+        r = self._put(client, admin, proyecto_coord)
+        assert r.status_code == 200
+        db.session.refresh(trab_ok)
+        assert trab_ok.coord_a_cargo == coord.username
+
+        # Quitar el coordinador del proyecto lo limpia (antes quedaba pegado)
+        r = self._put(client, admin, proyecto_coord, coordinador_id=None)
+        assert r.status_code == 200
+        db.session.refresh(trab_ok)
+        assert trab_ok.coord_a_cargo is None
+
+    def test_participante_inexistente_devuelve_warning(
+        self, client, admin, trab_ok,
+    ):
+        r = client.post('/api/proyectos', headers=_hdr(admin), json={
+            'numero_proyecto': 'WRN-001', 'nombre': 'Con warning',
+            'participantes_ids': [trab_ok.id, 999999],
+        })
+        assert r.status_code == 201
+        body = r.get_json()
+        assert body['participantes_ids'] == [trab_ok.id]
+        assert len(body['warnings']) == 1
+        assert '999999' in body['warnings'][0]
+
+    def test_participantes_ids_malformado_400(self, client, admin):
+        r = client.post('/api/proyectos', headers=_hdr(admin), json={
+            'numero_proyecto': 'BAD-001', 'nombre': 'X',
+            'participantes_ids': ['abc'],
+        })
+        assert r.status_code == 400
