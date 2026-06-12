@@ -7,8 +7,8 @@ from sqlalchemy import case, extract, func, or_
 
 from app.extensions import db
 from app.models import (
-    AuditLog, CredencialPlanta, DocumentoTrabajador,
-    Proyecto, Trabajador, User, proyecto_trabajador,
+    AuditLog, CredencialPlanta, DocumentoTrabajador, Prenomina,
+    Proyecto, ReporteSemanal, Trabajador, User, proyecto_trabajador,
 )
 from app.routes._api_helpers import require_admin
 from app.routes.api_auth import jwt_required
@@ -159,6 +159,31 @@ def dashboard():
         })
     docs_por_vencer.sort(key=lambda x: (not x['vencido'], x['fecha']))
 
+    # Semana de prenómina accionable: la más antigua con reportes cerrados cuya
+    # prenómina aún no fue APROBADA. La nómina se procesa cronológicamente, así
+    # que el deep-link del Dashboard apunta a la semana más vieja sin cerrar.
+    # Misma regla de prioridad de estados que /prenomina/semanas
+    # (APROBADO > ABIERTA > PENDIENTE) — una semana puede tener varias filas
+    # Prenomina y el estado "de la semana" es el dominante.
+    semanas_fechas = [
+        f for (f,) in db.session.query(ReporteSemanal.fecha_inicio_semana)
+        .filter(ReporteSemanal.estado.in_(['TERMINADO', 'PRENOMINA_CERRADA']))
+        .distinct().all()
+    ]
+    estados_por_fecha = {}
+    for fecha, estado in db.session.query(Prenomina.fecha_inicio, Prenomina.estado).distinct().all():
+        prev = estados_por_fecha.get(fecha)
+        if prev == 'APROBADO':
+            continue
+        if estado == 'APROBADO' or prev is None or (prev == 'PENDIENTE' and estado == 'ABIERTA'):
+            estados_por_fecha[fecha] = estado
+    prenomina_pendiente = None
+    for fecha in sorted(semanas_fechas):
+        estado = estados_por_fecha.get(fecha, 'PENDIENTE')
+        if estado != 'APROBADO':
+            prenomina_pendiente = {'fecha_str': fecha.isoformat(), 'estado': estado}
+            break
+
     return jsonify({
         'stats': {
             'total_trabajadores': total_trabajadores,
@@ -192,4 +217,5 @@ def dashboard():
             for log in actividad_reciente
         ],
         'docs_por_vencer': docs_por_vencer,
+        'prenomina_pendiente': prenomina_pendiente,
     })

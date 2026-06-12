@@ -5,12 +5,12 @@ capturada — existen registros legacy/importados con fecha_baja y la bandera
 aún encendida. Cumpleañeros y docs/credenciales por vencer filtran ambas
 (mismo patrón que /credenciales-lista).
 """
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from werkzeug.security import generate_password_hash
 
-from app.models import Proyecto, Trabajador, User
+from app.models import Prenomina, Proyecto, ReporteSemanal, Trabajador, User
 from app.routes.api_auth import _encode_access_token
 
 
@@ -87,6 +87,50 @@ class TestDashboard:
         body = client.get('/api/dashboard', headers=_hdr(admin)).get_json()
         valores = {x['label']: x['value'] for x in body['empleados_por_proyecto']}
         assert valores['DASH-2'] == 1 and valores['DASH-3'] == 1
+
+    def test_prenomina_pendiente_null_sin_semanas(self, client, admin):
+        body = client.get('/api/dashboard', headers=_hdr(admin)).get_json()
+        assert body['prenomina_pendiente'] is None
+
+    def test_prenomina_pendiente_semana_sin_calcular(self, client, admin, db):
+        p = Proyecto(numero_proyecto='PREN-1', nombre='Obra', activo=True)
+        db.session.add(p); db.session.commit()
+        ini = date(2026, 6, 2)
+        db.session.add(ReporteSemanal(
+            fecha_inicio_semana=ini, fecha_fin_semana=ini + timedelta(days=6),
+            proyecto_id=p.id, estado='TERMINADO',
+        ))
+        # Un reporte BORRADOR no genera semana de prenómina
+        db.session.add(ReporteSemanal(
+            fecha_inicio_semana=ini + timedelta(days=7),
+            fecha_fin_semana=ini + timedelta(days=13),
+            proyecto_id=p.id, estado='BORRADOR',
+        ))
+        db.session.commit()
+
+        body = client.get('/api/dashboard', headers=_hdr(admin)).get_json()
+        assert body['prenomina_pendiente'] == {'fecha_str': '2026-06-02', 'estado': 'PENDIENTE'}
+
+    def test_prenomina_pendiente_elige_mas_antigua_no_aprobada(self, client, admin, db):
+        p = Proyecto(numero_proyecto='PREN-2', nombre='Obra', activo=True)
+        t = _trab(db, 'PREN-T', 'Nomina', activo=True)
+        db.session.add(p); db.session.commit()
+        vieja, media, nueva = date(2026, 5, 19), date(2026, 5, 26), date(2026, 6, 2)
+        for ini, estado_rep in ((vieja, 'PRENOMINA_CERRADA'), (media, 'PRENOMINA_CERRADA'), (nueva, 'TERMINADO')):
+            db.session.add(ReporteSemanal(
+                fecha_inicio_semana=ini, fecha_fin_semana=ini + timedelta(days=6),
+                proyecto_id=p.id, estado=estado_rep,
+            ))
+        # vieja APROBADA (ya no es accionable), media ABIERTA (en edición)
+        for ini, estado_pre in ((vieja, 'APROBADO'), (media, 'ABIERTA')):
+            db.session.add(Prenomina(
+                trabajador_id=t.id, fecha_inicio=ini,
+                fecha_fin=ini + timedelta(days=6), estado=estado_pre,
+            ))
+        db.session.commit()
+
+        body = client.get('/api/dashboard', headers=_hdr(admin)).get_json()
+        assert body['prenomina_pendiente'] == {'fecha_str': '2026-05-26', 'estado': 'ABIERTA'}
 
     def test_cumpleaneros_excluye_bajas(self, client, admin, db):
         hoy = date.today()

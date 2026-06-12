@@ -57,7 +57,7 @@ def abonar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(p.trabajador_id)
         log_action(f'API: abono ${monto} al préstamo #{id}. Restante: ${p.monto_restante}')
-        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prestamo:changed', {
             'id': p.id, 'action': 'abonado',
         })
         return jsonify({
@@ -97,7 +97,7 @@ def liquidar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(p.trabajador_id)
         log_action(f'API: préstamo #{id} liquidado manualmente (saldo ${saldo})')
-        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prestamo:changed', {
             'id': p.id, 'action': 'liquidado',
         })
         return jsonify({'estado': p.estado, 'monto_restante': 0.0})

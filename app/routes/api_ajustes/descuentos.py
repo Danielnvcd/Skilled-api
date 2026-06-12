@@ -93,7 +93,7 @@ def agregar_descuento(periodo_id):
         db.session.add(desc)
         db.session.commit()
         log_action(f'API: descuento ajuste #{desc.id} agregado en periodo {periodo.nombre}')
-        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'ajuste:changed', {
             'id': periodo.id, 'descuento_id': desc.id, 'action': 'descuento_agregado',
         })
         return jsonify({
@@ -126,7 +126,7 @@ def eliminar_descuento(descuento_id):
         periodo_id = desc.periodo_id
         db.session.delete(desc)
         db.session.commit()
-        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'ajuste:changed', {
             'id': periodo_id, 'descuento_id': descuento_id, 'action': 'descuento_eliminado',
         })
         return jsonify({'ok': True})
@@ -195,7 +195,7 @@ def eliminar_descuentos_bulk():
         return jsonify({'error': 'Error al eliminar descuentos'}), 500
 
     log_action(f'API bulk-delete descuentos ajuste: {len(deleted_ids)} eliminados, ids={deleted_ids}')
-    emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+    emit_to_role(['admin', 'super_admin', 'finanzas'], 'ajuste:changed', {
         'action': 'descuentos_bulk_eliminados',
         'periodo_ids': sorted(periodo_ids),
         'descuento_ids': deleted_ids,

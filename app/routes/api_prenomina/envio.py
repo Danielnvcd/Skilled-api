@@ -246,7 +246,7 @@ def enviar_correo_bulk(fecha_str):
     # estado de DB visible en la lista de semanas, pero permite que un futuro
     # badge de "ya se enviaron recibos" reaccione sin polling.
     if enviados:
-        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prenomina:changed', {
             'fecha': fecha_str,
             'action': 'correos_enviados',
             'enviados': enviados,

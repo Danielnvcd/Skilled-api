@@ -195,7 +195,7 @@ def guardar_semana(fecha_str):
             r.estado = 'PRENOMINA_CERRADA'
         db.session.commit()
         log_action(f'API: prenómina global guardada para semana {fecha_str}')
-        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prenomina:changed', {
             'fecha': fecha_str, 'action': 'guardada',
         })
         return jsonify({'success': True, 'creadas': len(nuevas)})
@@ -359,7 +359,7 @@ def cerrar_semana(fecha_str):
 
         db.session.commit()
         log_action(f'API: prenómina cerrada para semana {fecha_str}')
-        emit_to_role(['admin', 'super_admin'], 'prenomina:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prenomina:changed', {
             'fecha': fecha_str, 'action': 'cerrada',
         })
 

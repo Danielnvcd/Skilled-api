@@ -13,15 +13,16 @@ bp = Blueprint('api_users', __name__, url_prefix='/api/users')
 _ROLE_ORDER = {
     'super_admin': 0,
     'admin': 1,
-    'coordinador': 2,
-    'inventario': 3,
-    'solicitante_material': 4,
+    'finanzas': 2,
+    'coordinador': 3,
+    'inventario': 4,
+    'solicitante_material': 5,
 }
 
 # super_admin nunca se puede crear/asignar desde este endpoint (no está en
 # _VALID_NEW_ROLES); esa cuenta solo se crea por seeding/manual.
 # Los admins pueden crear y eliminar otros admins por decisión operativa.
-_VALID_NEW_ROLES = {'admin', 'coordinador', 'inventario', 'solicitante_material'}
+_VALID_NEW_ROLES = {'admin', 'finanzas', 'coordinador', 'inventario', 'solicitante_material'}
 
 
 def _user_to_dict(u: User) -> dict:
