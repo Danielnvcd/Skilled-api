@@ -120,7 +120,7 @@ def crear_periodo():
 
         db.session.commit()
         log_action(f'API: periodo de ajuste creado: {nombre}')
-        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'ajuste:changed', {
             'id': periodo.id, 'action': 'created',
         })
         return jsonify({'id': periodo.id, 'creados': creados}), 201
@@ -207,7 +207,7 @@ def cerrar_periodo(periodo_id):
         periodo.estado = 'CERRADO'
         db.session.commit()
         log_action(f'API: periodo de ajuste cerrado: {periodo.nombre}')
-        emit_to_role(['admin', 'super_admin'], 'ajuste:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'ajuste:changed', {
             'id': periodo.id, 'action': 'cerrado',
         })
         return jsonify({'estado': periodo.estado})

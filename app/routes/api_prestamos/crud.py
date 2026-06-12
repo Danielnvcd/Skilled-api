@@ -175,7 +175,7 @@ def crear():
         db.session.commit()
         _recalcular_prenominas_abiertas(trabajador_id)
         log_action(f'API: préstamo #{prestamo.id} creado para trab #{trabajador_id} por ${monto_total}')
-        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prestamo:changed', {
             'id': prestamo.id, 'action': 'created',
         })
         return jsonify({'id': prestamo.id}), 201
@@ -232,7 +232,7 @@ def editar(id):
         db.session.commit()
         _recalcular_prenominas_abiertas(p.trabajador_id)
         log_action(f'API: préstamo #{id} modificado. Total: ${nuevo_monto:.2f}, Restante: ${p.monto_restante:.2f}')
-        emit_to_role(['admin', 'super_admin'], 'prestamo:changed', {
+        emit_to_role(['admin', 'super_admin', 'finanzas'], 'prestamo:changed', {
             'id': p.id, 'action': 'updated',
         })
         return jsonify(_prestamo_row(p))
