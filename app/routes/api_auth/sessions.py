@@ -7,15 +7,15 @@ cuando un login (con o sin 2FA) viene de un combo IP+UA nuevo.
 import hashlib as _h
 from datetime import datetime, timezone
 
-from flask import current_app, g, jsonify
+from flask import current_app, g, jsonify, request
 
 from app.extensions import db, limiter
 from app.models import RefreshToken
 from app.utils import log_action
 
-from ._core import bp
+from ._core import bp, _RT_COOKIE, _hash_token
 from .jwt_required import jwt_required
-from .tokens import _load_rt_meta
+from .tokens import _load_rt_meta, _decode_token, _revoke_jti, _clear_rt_cookie
 
 
 # ── Notificación de login desde device nuevo ────────────────────────────────
@@ -128,16 +128,45 @@ def api_list_sessions():
 @jwt_required
 @limiter.limit("20 per minute")
 def api_revoke_session(session_id: int):
-    """Revoca una sesión específica del propio usuario."""
+    """Revoca una sesión específica del propio usuario.
+
+    Si la sesión revocada es la que el usuario está usando AHORA (su mismo RT
+    cookie), también matamos el access token en curso (por jti) y limpiamos la
+    cookie, devolviendo `self: true` para que el SPA cierre sesión. Sin esto,
+    revocar la sesión propia no sacaba al usuario: el RT quedaba revocado pero el
+    JWT seguía vivo hasta su exp (~20 min)."""
     user = g._jwt_user
     tok = RefreshToken.query.filter_by(id=session_id, user_id=user.id).first()
     if not tok:
         return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    # ¿Es la sesión del request actual? Comparamos contra el RT cookie en curso.
+    is_self = False
+    raw_rt = request.cookies.get(_RT_COOKIE)
+    if raw_rt:
+        try:
+            actual = RefreshToken.query.filter_by(token_hash=_hash_token(raw_rt)).first()
+            is_self = bool(actual and actual.id == tok.id)
+        except Exception:
+            is_self = False
+
     if not tok.revoked:
         tok.revoked = True
         db.session.commit()
         log_action(f'Revocó sesión #{session_id} ({user.username})')
-    return jsonify({'ok': True})
+
+    if is_self:
+        # Mata el access token actual al instante (no esperar a su exp).
+        auth_h = request.headers.get('Authorization', '')
+        if auth_h.startswith('Bearer '):
+            payload = _decode_token(auth_h.split(' ', 1)[1].strip(), 'access')
+            if payload and payload.get('jti') and payload.get('exp'):
+                _revoke_jti(payload['jti'], int(payload['exp']))
+
+    resp = jsonify({'ok': True, 'self': is_self})
+    if is_self:
+        _clear_rt_cookie(resp)
+    return resp
 
 
 @bp.route('/sessions/all', methods=['DELETE'])
