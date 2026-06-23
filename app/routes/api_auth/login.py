@@ -444,6 +444,12 @@ def api_logout():
     if csrf_err:
         return csrf_err
 
+    # `session_closed` distingue un logout real (había token o cookie de sesión
+    # que cerrar) de un no-op anónimo. El SPA dispara logout best-effort desde
+    # bounceToLogin cuando un 401 ya mató la sesión; esos llegan sin credenciales
+    # válidas y NO deben ensuciar la bitácora con "API logout por anon".
+    session_closed = False
+
     # Revocar el JWT actual (vía jti) si el cliente lo mandó en Authorization.
     # Esto cierra el access token AL INSTANTE, sin esperar a su exp (≤20 min).
     # Sin Redis no podemos blacklistear — degradamos: el JWT queda vivo hasta
@@ -454,6 +460,7 @@ def api_logout():
         payload = _decode_token(access_tok, 'access')
         if payload and payload.get('jti') and payload.get('exp'):
             _revoke_jti(payload['jti'], int(payload['exp']))
+            session_closed = True
 
     raw_rt = request.cookies.get(_RT_COOKIE)
     if raw_rt:
@@ -466,11 +473,14 @@ def api_logout():
             except Exception:
                 db.session.rollback()
         if tok:
+            session_closed = True
             user = User.query.get(tok.user_id)
             if user:
                 g._jwt_user = user
 
-    log_action("API logout")
+    # Solo auditamos cuando de verdad cerramos algo (token revocado o RT hallado).
+    if session_closed:
+        log_action("API logout")
     resp = jsonify({'ok': True})
     _clear_rt_cookie(resp)
     return resp
