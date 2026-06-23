@@ -45,9 +45,28 @@ def get_productos():
     limit, err = _int_arg('limit', 200, 0, 1000)
     if err: return err
 
+    # Filtros server-side: con miles de productos el catálogo NO puede bajar
+    # todo y filtrar en el cliente. `categoria` (match exacto) y `q` (búsqueda
+    # en código/descripción/categoría) acotan el resultado en la DB.
+    categoria = (request.args.get('categoria') or '').strip()
+    q = (request.args.get('q') or '').strip()
+
+    query = Producto.query.filter(Producto.activo == True)
+    if categoria:
+        query = query.filter(Producto.categoria == categoria)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            Producto.codigo.ilike(like),
+            Producto.descripcion.ilike(like),
+            Producto.categoria.ilike(like),
+        ))
+
     productos = (
-        Producto.query
-        .filter(Producto.activo == True)
+        query
+        .order_by(Producto.id)  # orden determinista: sin esto, offset/limit en
+                                # Postgres devuelve filas arbitrarias y la
+                                # paginación puede saltarse/duplicar productos.
         .offset(skip)
         .limit(limit)
         .all()

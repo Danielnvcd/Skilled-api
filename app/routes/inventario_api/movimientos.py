@@ -7,6 +7,7 @@ import datetime
 from decimal import Decimal
 
 from flask import jsonify, request, current_app
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.models import (
@@ -35,7 +36,7 @@ def get_movimientos():
     limit, err = _int_arg('limit', 200, 0, 1000)
     if err: return err
 
-    q = MovimientoInventario.query
+    q = MovimientoInventario.query.options(joinedload(MovimientoInventario.producto))
     if producto_id:
         q = q.filter(MovimientoInventario.producto_id == producto_id)
     if tipo:

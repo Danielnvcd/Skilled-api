@@ -282,10 +282,16 @@ def _estante_to_dict(e: Estante) -> dict:
 
 
 def _movimiento_to_dict(m: MovimientoInventario) -> dict:
+    # Datos del producto embebidos: con miles de productos el SPA ya no puede
+    # descargar el catálogo completo solo para resolver el nombre por id.
+    prod = m.producto
     return {
         'id': m.id,
         'tipo': m.tipo,
         'producto_id': m.producto_id,
+        'producto_codigo': prod.codigo if prod else None,
+        'producto_descripcion': prod.descripcion if prod else None,
+        'producto_unidad': prod.unidad if prod else None,
         'cantidad': float(m.cantidad or 0),
         'fecha': m.fecha.isoformat() if m.fecha else None,
         'almacen_origen_id': m.almacen_origen_id,

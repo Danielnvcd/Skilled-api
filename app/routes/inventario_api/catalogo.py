@@ -58,6 +58,39 @@ def get_categorias():
     return jsonify(sorted(nombres))
 
 
+@bp.route('/categorias/resumen', methods=['GET'])
+@_require_inventario
+def get_categorias_resumen():
+    """Conteo de productos por categoría (total + cuántos bajo mínimo) para las
+    tarjetas del catálogo. Server-side: evita descargar miles de productos al
+    cliente solo para contarlos. Incluye categorías de `categorias_config` que
+    aún no tienen productos (total 0)."""
+    rows = (
+        db.session.query(
+            Producto.categoria,
+            db.func.count(Producto.id),
+            db.func.coalesce(
+                db.func.sum(
+                    db.case((Producto.stock_actual <= Producto.stock_minimo, 1), else_=0)
+                ), 0,
+            ),
+        )
+        .filter(Producto.activo == True, Producto.categoria != None, Producto.categoria != '')  # noqa: E711,E712
+        .group_by(Producto.categoria)
+        .all()
+    )
+    resumen = {
+        nombre: {'nombre': nombre, 'total': int(total or 0), 'bajo_minimo': int(bajos or 0)}
+        for nombre, total, bajos in rows
+    }
+    # Categorías registradas en config pero sin productos todavía.
+    for (nombre,) in db.session.query(CategoriaConfig.nombre).all():
+        if nombre and nombre not in resumen:
+            resumen[nombre] = {'nombre': nombre, 'total': 0, 'bajo_minimo': 0}
+
+    return jsonify(sorted(resumen.values(), key=lambda r: r['nombre'].lower()))
+
+
 # ─── CategoriaConfig (metadatos visuales por categoría) ──────────────────────
 
 def _categoria_config_to_dict(c: CategoriaConfig) -> dict:
