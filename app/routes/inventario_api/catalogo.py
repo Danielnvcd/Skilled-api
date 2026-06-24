@@ -9,6 +9,7 @@ from sqlalchemy import distinct as sql_distinct
 from app.extensions import db, limiter
 from app.models import (
     Producto, Proyecto, CategoriaConfig, StockPorAlmacen,
+    SolicitudMaterial, SolicitudMaterialDetalle,
 )
 
 from ._core import (
@@ -146,14 +147,117 @@ def upsert_categoria_config(nombre: str):
 @bp.route('/categorias-config/<string:nombre>', methods=['DELETE'])
 @_require_inventario_admin
 def delete_categoria_config(nombre: str):
-    """Elimina la fila de config (no afecta productos, solo limpia los metadatos visuales)."""
+    """Elimina una categoría.
+
+    Por defecto solo borra la fila de config (metadatos visuales) y NO afecta
+    productos. Para eliminar también todos los productos de la categoría —el
+    flujo destructivo que el SPA debe confirmar con una advertencia— pasar
+    `?con_productos=1`. En ese caso:
+      - Se hace soft-delete (activo=False) de cada producto, igual que
+        `delete_producto`, para preservar el histórico de movimientos y
+        solicitudes (no se rompe el kardex ni los folios).
+      - Se liberan las reservas pendientes de stock de esos productos para que
+        no queden unidades apartadas por solicitudes sobre un producto muerto.
+      - Se borra también la config de la categoría.
+    """
+    nombre = (nombre or '').strip()
+    con_productos = (request.args.get('con_productos') or '').lower() in ('1', 'true', 'yes')
+
     cfg = CategoriaConfig.query.filter(CategoriaConfig.nombre == nombre).first()
-    if not cfg:
-        return jsonify({'detail': 'Categoría no encontrada en config'}), 404
-    db.session.delete(cfg)
-    _audit(request.current_user, f"Categoría '{nombre}' config eliminada")
+
+    if not con_productos:
+        if not cfg:
+            return jsonify({'detail': 'Categoría no encontrada en config'}), 404
+        db.session.delete(cfg)
+        _audit(request.current_user, f"Categoría '{nombre}' config eliminada")
+        db.session.commit()
+        return Response(status=204)
+
+    # Borrado en cascada: productos + config.
+    productos = (
+        Producto.query
+        .filter(Producto.categoria == nombre, Producto.activo == True)  # noqa: E712
+        .all()
+    )
+    # Si no hay ni productos ni config, la categoría no existe.
+    if not productos and not cfg:
+        return jsonify({'detail': 'Categoría no encontrada'}), 404
+
+    # Guardia: no borrar productos que tengan entregas pendientes. Una solicitud
+    # APROBADA y no entregada apartó stock y el solicitante la espera; si
+    # desactiváramos el producto, la entrega posterior generaría una SALIDA
+    # sobre un producto muerto y dejaría la solicitud colgada. Bloqueamos con
+    # 409 y devolvemos qué solicitudes resolver primero (opción conservadora:
+    # el almacenista decide, no cancelamos pedidos ajenos automáticamente).
+    prod_ids = [p.id for p in productos]
+    if prod_ids:
+        # pendiente por línea = base − entregada, con base = aprobada (o
+        # solicitada si aún no se tocó la aprobación, caso pre-8b). Mismo
+        # criterio que `_reservas_de_solicitud`.
+        base = db.func.coalesce(
+            db.func.nullif(SolicitudMaterialDetalle.cantidad_aprobada, 0),
+            SolicitudMaterialDetalle.cantidad_solicitada,
+        )
+        pendiente = base - db.func.coalesce(SolicitudMaterialDetalle.cantidad_entregada, 0)
+        filas_bloqueo = (
+            db.session.query(
+                SolicitudMaterial.id,
+                Producto.codigo,
+                Producto.descripcion,
+            )
+            .join(SolicitudMaterialDetalle, SolicitudMaterialDetalle.solicitud_id == SolicitudMaterial.id)
+            .join(Producto, Producto.id == SolicitudMaterialDetalle.producto_id)
+            .filter(
+                SolicitudMaterial.estatus == 'APROBADA',
+                SolicitudMaterialDetalle.producto_id.in_(prod_ids),
+                pendiente > 0,
+            )
+            .distinct()
+            .all()
+        )
+        if filas_bloqueo:
+            solicitudes_ids = sorted({r.id for r in filas_bloqueo})
+            return jsonify({
+                'detail': (
+                    'No se puede eliminar la categoría: tiene productos con entregas '
+                    f'pendientes en {len(solicitudes_ids)} solicitud(es) aprobada(s). '
+                    'Entrega o rechaza esas solicitudes antes de borrar.'
+                ),
+                'codigo': 'ENTREGAS_PENDIENTES',
+                'solicitudes': [f'SOL-{sid:06d}' for sid in solicitudes_ids],
+                'productos': sorted({f'{r.codigo} — {r.descripcion}' for r in filas_bloqueo}),
+            }), 409
+
+    eliminados = 0
+    for prod in productos:
+        prod.activo = False  # Soft delete: conserva histórico (igual que delete_producto)
+        # Libera la reserva que esté apartando para que no quede stock fantasma
+        # apartado por solicitudes sobre un producto desactivado.
+        if prod.stock_reservado:
+            prod.stock_reservado = Decimal('0')
+        eliminados += 1
+
+    if cfg:
+        db.session.delete(cfg)
+
+    _audit(
+        request.current_user,
+        f"Categoría '{nombre}' eliminada con sus productos ({eliminados} desactivados)",
+    )
     db.session.commit()
-    return Response(status=204)
+
+    # Websockets-first: refresca catálogos abiertos en otras sesiones. El front
+    # invalida el namespace completo de productos con un solo emit (igual que la
+    # importación masiva) y refresca las tarjetas de categorías.
+    emit_to_role(_INV_ROLES, 'producto:changed', {
+        'action': 'bulk_delete', 'categoria': nombre, 'count': eliminados,
+    })
+
+    return jsonify({
+        'categoria': nombre,
+        'productos_eliminados': eliminados,
+        'config_eliminada': cfg is not None,
+    })
 
 
 # ─── Importar materiales desde Excel ─────────────────────────────────────────
