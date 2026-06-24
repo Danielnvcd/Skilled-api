@@ -112,6 +112,14 @@ def api_login():
 
     _clear_login_failures(username)
 
+    # Borrado lógico: una cuenta desactivada no inicia sesión, aunque la
+    # contraseña sea correcta. Se chequea DESPUÉS de validar la contraseña para
+    # no revelar el estado de la cuenta a quien no conoce las credenciales.
+    if not u.activo:
+        from app.extensions import get_real_client_ip_flask
+        log_action(f"API login rechazado: cuenta desactivada '{username[:80]}' desde IP {get_real_client_ip_flask()}")
+        return jsonify({'error': 'Tu cuenta está desactivada. Contacta al administrador.'}), 403
+
     if u.totp_secret:
         return jsonify({
             'requires2fa': True,
@@ -409,6 +417,11 @@ def api_refresh():
     user = User.query.get(user_id)
     if user is None:
         resp = jsonify({'error': 'Usuario no encontrado'})
+        _clear_rt_cookie(resp)
+        return resp, 401
+    # Borrado lógico: si la cuenta fue desactivada, no renovamos sesión.
+    if not user.activo:
+        resp = jsonify({'error': 'Cuenta desactivada'})
         _clear_rt_cookie(resp)
         return resp, 401
 

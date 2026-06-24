@@ -38,6 +38,7 @@ def _user_to_dict(u: User) -> dict:
         'contact_info': u.contact_info,
         'profile_pic': u.profile_pic,
         'totp_enabled': bool(u.totp_secret),
+        'activo': bool(u.activo),
         'last_seen': u.last_seen.isoformat() if u.last_seen else None,
         # Liga opcional a Trabajador (RRHH) — habilita asignaciones de
         # herramienta y filtros "lo mío" basados en empleado.

@@ -281,7 +281,11 @@ class TestEliminar:
         r = client.delete(f'/api/users/{coord.id}', headers=_hdr(admin))
         assert r.status_code == 200
         assert r.get_json()['ok'] is True
-        assert User.query.get(coord.id) is None
+        # Borrado lógico: el usuario NO se borra físicamente (tiene FKs en otras
+        # tablas); se desactiva para conservar su historial.
+        eliminado = User.query.get(coord.id)
+        assert eliminado is not None
+        assert eliminado.activo is False
 
     def test_no_eliminar_propia_cuenta_400(self, client, admin):
         r = client.delete(f'/api/users/{admin.id}', headers=_hdr(admin))
@@ -309,11 +313,43 @@ class TestEliminar:
         db.session.add(otro); db.session.commit()
         r = client.delete(f'/api/users/{otro.id}', headers=_hdr(super_admin))
         assert r.status_code == 200
-        assert User.query.get(otro.id) is None
+        desactivado = User.query.get(otro.id)
+        assert desactivado is not None
+        assert desactivado.activo is False
 
     def test_eliminar_inexistente_404(self, client, admin):
         r = client.delete('/api/users/99999', headers=_hdr(admin))
         assert r.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5-bis. REACTIVAR (borrado lógico reversible)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestReactivar:
+
+    def test_reactivar_usuario_desactivado(self, client, admin, coord, db):
+        # Primero desactivar
+        r = client.delete(f'/api/users/{coord.id}', headers=_hdr(admin))
+        assert r.status_code == 200
+        assert User.query.get(coord.id).activo is False
+        # Luego reactivar
+        r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(admin))
+        assert r.status_code == 200
+        assert r.get_json()['activo'] is True
+        assert User.query.get(coord.id).activo is True
+
+    def test_reactivar_cuenta_ya_activa_400(self, client, admin, coord):
+        r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(admin))
+        assert r.status_code == 400
+
+    def test_reactivar_requiere_admin_403(self, client, coord, db):
+        # Un coordinador (no admin) no puede reactivar cuentas: require_admin → 403.
+        inactivo = User(username='coord2', password_hash=generate_password_hash('Pass123!'),
+                        role='coordinador', password_version=1, activo=False)
+        db.session.add(inactivo); db.session.commit()
+        r = client.post(f'/api/users/{inactivo.id}/reactivar', headers=_hdr(coord))
+        assert r.status_code == 403
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

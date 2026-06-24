@@ -143,7 +143,9 @@ def exportar_uno(id):
             estado = 'CADUCADA' if vencida else 'VIGENTE'
             row_fill = rojo if vencida else verde
             for j, val in enumerate([cred.planta, cred.credencial_id, cad_str, estado], 1):
-                cc = ws2.cell(row=i, column=j, value=val or '')
+                # safe_excel_value: planta/credencial_id son texto del usuario y
+                # podrían empezar con '=' → fórmula al abrir en Excel.
+                cc = ws2.cell(row=i, column=j, value=safe_excel_value(val or ''))
                 cc.fill = row_fill
                 cc.font = Font(name='Calibri', color='7F1D1D' if vencida else '065F46', size=10)
                 cc.alignment = S['LEFT']; cc.border = S['BORDER']

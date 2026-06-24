@@ -166,6 +166,17 @@ class TestLogin:
         })
         assert r.status_code == 401
 
+    def test_cuenta_desactivada_403(self, client, db):
+        # Borrado lógico: con contraseña correcta pero activo=False → 403.
+        u = User(username='au_inactivo',
+                 password_hash=generate_password_hash('SuperPass1!'),
+                 role='inventario', password_version=1, activo=False)
+        db.session.add(u); db.session.commit()
+        r = client.post('/api/auth/login', json={
+            'username': 'au_inactivo', 'password': 'SuperPass1!',
+        })
+        assert r.status_code == 403
+
     def test_username_demasiado_largo_401(self, client):
         r = client.post('/api/auth/login', json={
             'username': 'x' * 200, 'password': 'SuperPass1!',

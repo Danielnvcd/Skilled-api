@@ -3,7 +3,7 @@ from flask import current_app, jsonify, request
 from werkzeug.security import generate_password_hash
 
 from app.extensions import db, limiter
-from app.models import Trabajador, User
+from app.models import RefreshToken, Trabajador, User
 from app.realtime import emit_to_role
 from app.routes._api_helpers import (
     api_transactional, current_user, is_super_admin, require_admin,
@@ -143,35 +143,91 @@ def actualizar(user_id):
 @bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required
 def eliminar(user_id):
+    """Desactiva un usuario (borrado lógico).
+
+    No se borra físicamente: un usuario con historial (movimientos, solicitudes,
+    asignaciones de herramienta, etc.) tiene FKs en muchas tablas y el DELETE
+    real violaría esas restricciones. En su lugar se marca `activo=False`,
+    se revocan sus refresh tokens y se incrementa `password_version` para
+    sacarlo de todas sus sesiones al instante. Su historial queda intacto y la
+    cuenta puede reactivarse después.
+    """
     err = require_admin('Solo admin puede administrar usuarios')
     if err:
         return err
 
     if user_id == current_user().id:
-        return jsonify({'error': 'No puedes eliminar tu propia cuenta'}), 400
+        return jsonify({'error': 'No puedes desactivar tu propia cuenta'}), 400
 
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 
     if user.username == 'admin':
-        return jsonify({'error': 'El usuario administrador no puede ser eliminado'}), 400
+        return jsonify({'error': 'El usuario administrador no puede ser desactivado'}), 400
 
     # super_admin queda protegido como última línea de recuperación: solo otro
-    # super_admin puede eliminarlo.
+    # super_admin puede desactivarlo.
     if user.role == 'super_admin' and not is_super_admin():
-        return jsonify({'error': 'Solo super_admin puede eliminar cuentas super_admin'}), 403
+        return jsonify({'error': 'Solo super_admin puede desactivar cuentas super_admin'}), 403
+
+    if not user.activo:
+        return jsonify({'error': 'La cuenta ya está desactivada'}), 400
 
     try:
-        deleted_id = user.id
-        db.session.delete(user)
+        user.activo = False
+        # Sácalo de todas sus sesiones: revoca refresh tokens y sube
+        # password_version (invalida cualquier JWT vivo en el próximo request).
+        RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
+        user.password_version = (user.password_version or 1) + 1
         db.session.commit()
-        log_action(f"Eliminó usuario '{user.username}'")
+        log_action(f"Desactivó usuario '{user.username}'")
+        # Cierra sus WebSockets activos para que deje de recibir pushes.
+        try:
+            from app.realtime import force_logout_user
+            force_logout_user(user.id)
+        except Exception as e:
+            current_app.logger.warning('force_logout_user falló al desactivar usuario: %s', e)
         emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
-            'id': deleted_id, 'action': 'deleted',
+            'id': user.id, 'action': 'deactivated',
         })
         return jsonify({'ok': True})
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error('Error eliminando usuario: %s', e)
-        return jsonify({'error': 'Error al eliminar el usuario'}), 500
+        current_app.logger.error('Error desactivando usuario: %s', e)
+        return jsonify({'error': 'Error al desactivar el usuario'}), 500
+
+
+@bp.route('/<int:user_id>/reactivar', methods=['POST'])
+@jwt_required
+@limiter.limit('20 per minute')
+def reactivar(user_id):
+    """Reactiva una cuenta previamente desactivada. El usuario deberá iniciar
+    sesión de nuevo (sus sesiones fueron revocadas al desactivarlo)."""
+    err = require_admin('Solo admin puede administrar usuarios')
+    if err:
+        return err
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    if user.activo:
+        return jsonify({'error': 'La cuenta ya está activa'}), 400
+
+    # Reactivar un super_admin requiere ser super_admin (simetría con desactivar).
+    if user.role == 'super_admin' and not is_super_admin():
+        return jsonify({'error': 'Solo super_admin puede reactivar cuentas super_admin'}), 403
+
+    try:
+        user.activo = True
+        db.session.commit()
+        log_action(f"Reactivó usuario '{user.username}'")
+        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+            'id': user.id, 'action': 'reactivated',
+        })
+        return jsonify(_user_to_dict(user))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Error reactivando usuario: %s', e)
+        return jsonify({'error': 'Error al reactivar el usuario'}), 500
