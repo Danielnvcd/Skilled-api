@@ -107,6 +107,63 @@ def listar():
     })
 
 
+@bp.route('/para-asignar', methods=['GET'])
+@jwt_required
+def para_asignar():
+    """Picker ligero de trabajadores para el módulo de Inventario/Herramientas.
+
+    El listado normal (`/`) bloquea al rol `inventario` porque expone PII del
+    padrón (salario, RFC, área…). Pero `inventario` SÍ puede crear asignaciones
+    de herramienta, y necesita elegir a quién. Este endpoint devuelve únicamente
+    lo mínimo para identificar a la persona en un <select> —id, nº de empleado y
+    nombre— sin datos sensibles, así que puede abrirse al rol inventario sin
+    contradecir el gate de PII del listado completo.
+    """
+    role = current_user().role
+    if role not in ('admin', 'super_admin', 'coordinador', 'inventario'):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    per_page = min(request.args.get('per_page', 500, type=int), 5000)
+    q = (request.args.get('q') or '').strip()
+
+    query = Trabajador.query.filter(Trabajador.activo == True, Trabajador.fecha_baja == None)  # noqa: E712
+
+    # Coordinador solo ve los trabajadores de sus proyectos activos (mismo gate
+    # que el listado completo), por si en el futuro accede a esta vista.
+    if role == 'coordinador':
+        mis_proyectos = Proyecto.query.options(selectinload(Proyecto.participantes)).filter_by(
+            activo=True, coordinador_id=current_user().id,
+        ).all()
+        ids_trabajadores = {t.id for p in mis_proyectos for t in p.participantes}
+        query = query.filter(Trabajador.id.in_(ids_trabajadores))
+
+    if q:
+        like = f'%{q}%'
+        query = query.filter(or_(
+            Trabajador.nombre.ilike(like),
+            Trabajador.nombre_apellidos.ilike(like),
+            Trabajador.no_empleado.ilike(like),
+        ))
+
+    trabajadores = (
+        query.order_by(func.lower(Trabajador.nombre), Trabajador.id)
+        .limit(per_page)
+        .all()
+    )
+    return jsonify({
+        'items': [
+            {
+                'id': t.id,
+                'no_empleado': t.no_empleado,
+                'nombre': t.nombre,
+                'nombre_apellidos': t.nombre_apellidos,
+                'nombre_completo': t.nombre_completo,
+            }
+            for t in trabajadores
+        ],
+    })
+
+
 @bp.route('/ficha-tecnica', methods=['GET'])
 @jwt_required
 def ficha_tecnica():

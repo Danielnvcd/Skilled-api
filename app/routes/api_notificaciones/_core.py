@@ -21,20 +21,7 @@ DIAS_EXPIRACION = 30
 # ─── Changelog de actualizaciones del sistema ─────────────────────────────────
 # Agrega aquí nuevas entradas cuando liberes funcionalidades.
 # La 'referencia' es una clave única que evita crear duplicados por usuario.
-CHANGELOG = [
-    {
-        'referencia': 'update_2026-04-24_importar_materiales',
-        'titulo': 'Importación masiva de materiales',
-        'mensaje': 'El catálogo ahora permite cargar materiales en lote desde Excel con corrección automática de errores en categorías.',
-        'url': '/inventario/importar',
-    },
-    {
-        'referencia': 'update_2026-04-24_notificaciones',
-        'titulo': 'Sistema de notificaciones',
-        'mensaje': 'Nuevo panel de notificaciones en tiempo real: avisos de reportes de horas cerrados y prenóminas aprobadas.',
-        'url': None,
-    },
-]
+CHANGELOG = []
 
 
 def _purgar_notificaciones_viejas(user_id):

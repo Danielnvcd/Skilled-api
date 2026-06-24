@@ -45,6 +45,10 @@ def jwt_required(fn):
         # Invalidar JWT si la contraseña cambió desde que se emitió.
         if (user.password_version or 1) != payload.get('pv', 1):
             return jsonify({'error': 'Sesión inválida, vuelve a iniciar sesión'}), 401
+        # Borrado lógico: una cuenta desactivada no puede usar la API aunque su
+        # token siga vigente. Cubre todos los endpoints `api_*` de una sola vez.
+        if not user.activo:
+            return jsonify({'error': 'Cuenta desactivada'}), 401
         # Mantener `last_seen` fresco para el indicador "en línea". Throttled
         # a 60s para no commitear en cada request. La conexión Socket.IO y su
         # handler 'heartbeat' cubren el caso de lectura pura (sin requests).

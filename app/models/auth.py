@@ -12,6 +12,11 @@ class User(db.Model):
     totp_secret = db.Column(EncryptedString(500), nullable=True)
     # Incrementado cada vez que se cambia la contraseña; invalida todas las sesiones anteriores.
     password_version = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    # Borrado lógico: un usuario con relaciones en otras tablas (movimientos,
+    # solicitudes, asignaciones…) no se puede borrar físicamente sin violar las
+    # FKs. En su lugar se desactiva: no puede iniciar sesión ni aparece en las
+    # listas activas, pero todo su historial queda intacto.
+    activo = db.Column(db.Boolean, nullable=False, default=True, server_default='1', index=True)
 
     # Profile Fields
     full_name = db.Column(db.String(150), nullable=True)
