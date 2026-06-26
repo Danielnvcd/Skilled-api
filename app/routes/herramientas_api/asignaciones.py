@@ -108,7 +108,7 @@ def list_asignaciones():
     if err: return err
 
     query = AsignacionHerramienta.query.options(
-        joinedload(AsignacionHerramienta.unidad),
+        joinedload(AsignacionHerramienta.unidad).joinedload(HerramientaUnidad.herramienta),
         joinedload(AsignacionHerramienta.trabajador),
         joinedload(AsignacionHerramienta.entregado_por),
     )
