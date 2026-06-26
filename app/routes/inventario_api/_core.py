@@ -190,7 +190,9 @@ class SolicitudDetalleCreateSchema(_BaseSchema):
 
 
 class SolicitudCreateSchema(_BaseSchema):
-    proyecto = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+    # Proyecto obligatorio: no se permiten solicitudes sin proyecto asociado.
+    proyecto = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    notas = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=2000))
     detalles = fields.List(
         fields.Nested(SolicitudDetalleCreateSchema),
         required=True,
@@ -341,6 +343,7 @@ def _solicitud_to_dict(s: SolicitudMaterial) -> dict:
         'id': s.id,
         'solicitante_id': s.solicitante_id,
         'proyecto': s.proyecto,
+        'notas': s.notas,
         'estatus': s.estatus,
         'fecha_creacion': s.fecha_creacion.isoformat() if s.fecha_creacion else None,
         'fecha_cierre': s.fecha_cierre.isoformat() if s.fecha_cierre else None,

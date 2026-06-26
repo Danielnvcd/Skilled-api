@@ -98,10 +98,12 @@ class TestCoordinadorSolicitudes:
     def test_coordinador_solo_ve_las_suyas(self, client, coord, coord_b, inv_user, producto):
         # coord crea una, coord_b crea otra
         client.post('/api/v1/solicitudes/', headers=_hdr(coord), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 1}],
         })
         client.post('/api/v1/solicitudes/', headers=_hdr(coord_b), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 2}],
         })
@@ -119,6 +121,7 @@ class TestCoordinadorSolicitudes:
 
     def test_coordinador_no_puede_aprobar(self, client, coord, inv_user, producto):
         r = client.post('/api/v1/solicitudes/', headers=_hdr(coord), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 1}],
         })
@@ -137,6 +140,7 @@ class TestCoordinadorSolicitudes:
     def test_coordinador_no_puede_entregar(self, client, coord, inv_user, producto):
         """Coordinador no puede usar el endpoint de entrega parcial."""
         r = client.post('/api/v1/solicitudes/', headers=_hdr(coord), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 2}],
         })
@@ -154,6 +158,7 @@ class TestCoordinadorSolicitudes:
 
     def test_coordinador_imprime_solo_las_suyas(self, client, coord, coord_b, producto):
         r = client.post('/api/v1/solicitudes/', headers=_hdr(coord_b), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 1}],
         })
