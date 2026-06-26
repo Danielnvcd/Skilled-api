@@ -249,6 +249,7 @@ def _asignacion_to_dict(a: AsignacionHerramienta) -> dict:
         'trabajador_nombre': a.trabajador.nombre_completo if a.trabajador else None,
         'unidad_codigo': a.unidad.codigo_interno if a.unidad else None,
         'unidad_no_serie': a.unidad.no_serie if a.unidad else None,
+        'unidad_descripcion': (a.unidad.herramienta.descripcion if (a.unidad and a.unidad.herramienta) else None),
         'solicitud_id': a.solicitud_id,
         'proyecto': a.proyecto,
         'fecha_entrega': a.fecha_entrega.isoformat() if a.fecha_entrega else None,
