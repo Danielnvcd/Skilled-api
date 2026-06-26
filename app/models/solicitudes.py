@@ -8,6 +8,8 @@ class SolicitudMaterial(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     solicitante_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     proyecto = db.Column(db.String(200), nullable=True)
+    # Observaciones generales del solicitante para el almacén (campo libre del pedido).
+    notas = db.Column(db.Text, nullable=True)
     estatus = db.Column(db.String(50), default='PENDIENTE', nullable=False, index=True)  # PENDIENTE, APROBADA, RECHAZADA, ENTREGADA
     fecha_creacion = db.Column(db.DateTime, default=_now_utc, index=True)
     fecha_cierre = db.Column(db.DateTime, nullable=True)

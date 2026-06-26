@@ -37,6 +37,36 @@ from ._core import (
 )
 
 
+# ─── Regla de decimales por unidad ────────────────────────────────────────────
+# Unidades de medida "continuas" que admiten decimales (kg, metros, litros…).
+# El resto (pieza, unidad, caja, par, rollo…) se piden en enteros. Las
+# herramientas SIEMPRE son enteras, sin importar su unidad.
+_UNIDADES_DECIMALES = {
+    'kg', 'kgs', 'kilo', 'kilos', 'kilogramo', 'kilogramos',
+    'g', 'gr', 'grs', 'gramo', 'gramos', 'mg',
+    'ton', 'tonelada', 'toneladas',
+    'l', 'lt', 'lts', 'litro', 'litros', 'ml', 'mililitro', 'mililitros',
+    'gal', 'galon', 'galones',
+    'm', 'mt', 'mts', 'metro', 'metros',
+    'cm', 'centimetro', 'centimetros', 'mm', 'milimetro', 'milimetros',
+    'km', 'kilometro', 'kilometros', 'm2', 'm3',
+    'pulgada', 'pulgadas', 'in', 'ft', 'pie', 'pies', 'yarda', 'yardas',
+    'oz', 'onza', 'onzas', 'lb', 'lbs', 'libra', 'libras',
+}
+
+
+def _unidad_permite_decimales(unidad) -> bool:
+    import unicodedata
+    u = unicodedata.normalize('NFD', str(unidad or '').strip().lower())
+    u = ''.join(c for c in u if unicodedata.category(c) != 'Mn')  # quita acentos
+    u = u.replace('²', '2').replace('³', '3').replace('.', '').replace(' ', '')
+    return u in _UNIDADES_DECIMALES
+
+
+def _es_entero(d: Decimal) -> bool:
+    return d == d.to_integral_value()
+
+
 # ─── Solicitudes (CRUD + estado) ──────────────────────────────────────────────
 
 @bp.route('/solicitudes/', methods=['POST'])
@@ -55,9 +85,14 @@ def create_solicitud():
     data, err = _parse_or_422(SolicitudCreateSchema(), request.get_json(silent=True))
     if err: return err
 
+    proyecto = (data.get('proyecto') or '').strip()
+    if not proyecto:
+        return jsonify({'detail': 'Debes seleccionar un proyecto para la solicitud'}), 422
+
     nueva = SolicitudMaterial(
         solicitante_id=user.id,
-        proyecto=data.get('proyecto'),
+        proyecto=proyecto,
+        notas=data.get('notas'),
         estatus='PENDIENTE',
     )
     db.session.add(nueva)
@@ -77,11 +112,18 @@ def create_solicitud():
             if not producto:
                 errores_detalle.append(f"Línea {idx+1}: producto_id {det['producto_id']} no existe o inactivo")
                 continue
+            cant_mat = Decimal(str(det['cantidad_solicitada']))
+            if not _unidad_permite_decimales(producto.unidad) and not _es_entero(cant_mat):
+                errores_detalle.append(
+                    f"Línea {idx+1}: '{producto.descripcion}' se pide en cantidades enteras "
+                    f"(unidad: {producto.unidad or 'pieza'})"
+                )
+                continue
             db.session.add(SolicitudMaterialDetalle(
                 solicitud_id=nueva.id,
                 tipo_item='MATERIAL',
                 producto_id=det['producto_id'],
-                cantidad_solicitada=Decimal(str(det['cantidad_solicitada'])),
+                cantidad_solicitada=cant_mat,
                 justificacion=det.get('justificacion'),
             ))
         elif tipo == 'HERRAMIENTA':
@@ -101,11 +143,15 @@ def create_solicitud():
             if fi and ff and (ff - fi).days > 365:
                 errores_detalle.append(f"Línea {idx+1}: rango de uso mayor a 365 días")
                 continue
+            cant_herr = Decimal(str(det['cantidad_solicitada']))
+            if not _es_entero(cant_herr):
+                errores_detalle.append(f"Línea {idx+1}: las herramientas se piden en cantidades enteras")
+                continue
             db.session.add(SolicitudMaterialDetalle(
                 solicitud_id=nueva.id,
                 tipo_item='HERRAMIENTA',
                 herramienta_id=det['herramienta_id'],
-                cantidad_solicitada=Decimal(str(det['cantidad_solicitada'])),
+                cantidad_solicitada=cant_herr,
                 fecha_uso_inicio=fi,
                 fecha_uso_fin=ff,
                 justificacion=det.get('justificacion'),
@@ -314,6 +360,12 @@ def patch_solicitud_detalle(sol_id: int, det_id: int):
     cant_ent = Decimal(str(det.cantidad_entregada or 0))
     cant_aprob_actual = Decimal(str(det.cantidad_aprobada or 0))
 
+    unidad_mat = det.producto.unidad if det.producto else None
+    if not _unidad_permite_decimales(unidad_mat) and not _es_entero(nueva_aprob):
+        return jsonify({
+            'detail': f'Este material se maneja en cantidades enteras (unidad: {unidad_mat or "pieza"})'
+        }), 422
+
     if nueva_aprob > cant_sol:
         return jsonify({
             'detail': f'cantidad_aprobada ({nueva_aprob}) no puede exceder cantidad_solicitada ({cant_sol})'
@@ -455,6 +507,13 @@ def entregar_solicitud(sol_id: int):
         if not det.producto_id:
             return jsonify({
                 'detail': f'Detalle #{det_id}: línea MATERIAL sin producto_id',
+            }), 422
+
+        unidad_mat = det.producto.unidad if det.producto else None
+        if not _unidad_permite_decimales(unidad_mat) and not _es_entero(delta):
+            return jsonify({
+                'detail': f'Detalle #{det_id}: este material se entrega en cantidades enteras '
+                          f'(unidad: {unidad_mat or "pieza"})',
             }), 422
 
         cant_aprob = Decimal(str(det.cantidad_aprobada or 0))
@@ -709,8 +768,13 @@ def entregar_solicitud(sol_id: int):
 
 # ─── PDF de solicitudes ──────────────────────────────────────────────────────
 
-def _render_solicitud_pdf(*, folio, fecha_str, solicitante, proyecto, notas, materiales, herramientas):
-    """Helper común: ya recibe los dicts normalizados y devuelve BytesIO con el PDF."""
+def _render_solicitud_pdf(*, folio, fecha_str, solicitante, proyecto, notas, materiales, herramientas,
+                          estatus=None, estado_label=None, mostrar_entrega=False):
+    """Helper común: ya recibe los dicts normalizados y devuelve BytesIO con el PDF.
+
+    `mostrar_entrega`/`estado_label` solo se pasan al imprimir una solicitud ya
+    guardada (muestra columnas Aprobada/Entregada/Pendiente y el estado, p. ej.
+    entrega parcial). El preview del carrito los omite (default off)."""
     try:
         from xhtml2pdf import pisa
     except ImportError:
@@ -729,6 +793,9 @@ def _render_solicitud_pdf(*, folio, fecha_str, solicitante, proyecto, notas, mat
         notas=notas,
         materiales=materiales,
         herramientas=herramientas,
+        estatus=estatus,
+        estado_label=estado_label,
+        mostrar_entrega=mostrar_entrega,
         logo_path=logo_path if os.path.exists(logo_path) else None,
     )
     buf = io.BytesIO()
@@ -763,20 +830,43 @@ def imprimir_solicitud(sol_id: int):
     if user.role not in ('solicitante_material', 'coordinador', 'inventario', 'admin', 'super_admin'):
         return jsonify({'detail': 'Forbidden'}), 403
 
+    # Las columnas Aprobada/Entregada/Pendiente solo tienen sentido una vez que la
+    # solicitud fue aprobada o entregada (en PENDIENTE/RECHAZADA aún no hay nada).
+    mostrar_entrega = sol.estatus in ('APROBADA', 'ENTREGADA')
+
+    def _q(v):
+        v = float(v or 0)
+        return int(v) if v % 1 == 0 else round(v, 2)
+
+    hay_entregas = False
+    hay_pendiente = False
     materiales, herramientas = [], []
     for d in sol.detalles:
         tipo = (d.tipo_item or 'MATERIAL').upper()
-        cantidad = float(d.cantidad_solicitada or 0)
-        cantidad = int(cantidad) if cantidad % 1 == 0 else cantidad
+        sol_c = float(d.cantidad_solicitada or 0)
+        aprob_c = float(d.cantidad_aprobada or 0)
+        ent_c = float(d.cantidad_entregada or 0)
+        baseline = aprob_c if aprob_c > 0 else sol_c
+        pend_c = max(0.0, baseline - ent_c)
+        if ent_c > 0:
+            hay_entregas = True
+        if mostrar_entrega and pend_c > 0:
+            hay_pendiente = True
+        entrega = {
+            'aprobada': _q(aprob_c),
+            'entregada': _q(ent_c),
+            'pendiente': _q(pend_c),
+        }
         if tipo == 'HERRAMIENTA':
             herramientas.append({
                 'descripcion': (d.herramienta.descripcion if d.herramienta else 'Herramienta eliminada')[:250],
                 'sku': (d.herramienta.sku if d.herramienta else '---')[:50],
-                'cantidad': cantidad,
+                'cantidad': _q(sol_c),
                 'fecha_uso_inicio': d.fecha_uso_inicio.isoformat() if d.fecha_uso_inicio else '',
                 'fecha_uso_fin': d.fecha_uso_fin.isoformat() if d.fecha_uso_fin else '',
                 'justificacion': (d.justificacion or '')[:2000],
                 'complementos': (d.complementos or '')[:500],
+                **entrega,
             })
         else:
             materiales.append({
@@ -784,8 +874,27 @@ def imprimir_solicitud(sol_id: int):
                 'codigo': (d.producto.codigo if d.producto else '---')[:50],
                 'categoria': (d.producto.categoria if d.producto else '')[:100],
                 'unidad': (d.producto.unidad if d.producto else '')[:50],
-                'cantidad': cantidad,
+                'cantidad': _q(sol_c),
+                'justificacion': (d.justificacion or '')[:2000],
+                **entrega,
             })
+
+    # Etiqueta de estado legible (incluye el caso de entrega parcial, que antes el
+    # PDF no reflejaba en absoluto).
+    if sol.estatus == 'ENTREGADA':
+        estado_label = 'ENTREGADA — surtido completo'
+    elif sol.estatus == 'APROBADA' and hay_entregas and hay_pendiente:
+        estado_label = 'ENTREGA PARCIAL — faltan piezas por surtir'
+    elif sol.estatus == 'APROBADA' and hay_entregas:
+        estado_label = 'APROBADA — entrega parcial registrada'
+    elif sol.estatus == 'APROBADA':
+        estado_label = 'APROBADA — pendiente de entrega'
+    elif sol.estatus == 'PENDIENTE':
+        estado_label = 'PENDIENTE de aprobación'
+    elif sol.estatus == 'RECHAZADA':
+        estado_label = 'RECHAZADA'
+    else:
+        estado_label = sol.estatus
 
     folio = f'SOL-{sol.id:06d}'
     fecha_str = sol.fecha_creacion.strftime('%d/%m/%Y %H:%M') if sol.fecha_creacion else ''
@@ -793,8 +902,9 @@ def imprimir_solicitud(sol_id: int):
 
     pdf = _render_solicitud_pdf(
         folio=folio, fecha_str=fecha_str, solicitante=solicitante,
-        proyecto=sol.proyecto or '', notas='',
+        proyecto=sol.proyecto or '', notas=sol.notas or '',
         materiales=materiales, herramientas=herramientas,
+        estatus=sol.estatus, estado_label=estado_label, mostrar_entrega=mostrar_entrega,
     )
     if pdf is None:
         return jsonify({'detail': 'Error al generar el PDF'}), 500
@@ -841,6 +951,7 @@ def preview_solicitud_pdf():
             'categoria': _clean(m.get('categoria'), 100),
             'unidad': _clean(m.get('unidad'), 50),
             'cantidad': cantidad if cantidad % 1 else int(cantidad),
+            'justificacion': _clean(m.get('justificacion'), 2000),
         })
 
     herramientas = []

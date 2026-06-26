@@ -371,6 +371,7 @@ def get_toma_pdf(toma_id: int):
     if status.err:
         return jsonify({'detail': 'Error generando PDF'}), 500
     buf.seek(0)
+    # El no-cache de PDFs lo aplica el after_request central (_security_headers).
     return send_file(
         buf,
         mimetype='application/pdf',

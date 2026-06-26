@@ -84,10 +84,26 @@ def producto2(db, almacen):
     return p
 
 
+@pytest.fixture
+def producto_kg(db, almacen):
+    """Material con unidad continua (kg) → admite decimales."""
+    p = Producto(
+        codigo='EP-KG', descripcion='Cable por kilo', categoria='Suministros',
+        unidad='kg', stock_actual=Decimal('100'), stock_reservado=Decimal('0'),
+        stock_minimo=0, activo=True,
+    )
+    db.session.add(p); db.session.flush()
+    db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=almacen.id,
+                                    cantidad=Decimal('100')))
+    db.session.commit()
+    return p
+
+
 def _crear_y_aprobar(client, solicitante, admin, lineas):
     """Helper: crea solicitud con `lineas` y la pasa a APROBADA.
     Devuelve el dict del response final (con detalles)."""
     r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+        'proyecto': 'Proyecto Test',
         'detalles': lineas,
     })
     assert r.status_code == 200, r.get_json()
@@ -174,6 +190,7 @@ class TestPatchDetalle:
     def test_patch_solo_aprobadas(self, client, solicitante, inv_admin, producto):
         """No se puede editar cantidad_aprobada si la solicitud no está APROBADA."""
         r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 5}],
         })
@@ -332,6 +349,7 @@ class TestEntregar:
 
     def test_solo_solicitudes_aprobadas(self, client, solicitante, inv_admin, producto, almacen):
         r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
                           'cantidad_solicitada': 5}],
         })
@@ -654,3 +672,99 @@ class TestEntregaHerramienta:
         ).first()
         assert asig.fecha_devolucion_prevista is not None
         assert asig.fecha_devolucion_prevista.day == 30
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Regla de decimales por unidad (2026-06-25)
+#   - Herramientas: SIEMPRE enteras.
+#   - Materiales: enteros si la unidad es de conteo (pza); decimales solo si la
+#     unidad es continua (kg, m, litro…).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestDecimalesPorUnidad:
+
+    # ── Crear ──────────────────────────────────────────────────────────────────
+    def test_crear_material_pza_entero_ok(self, client, solicitante, producto):
+        r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+            'proyecto': 'Proyecto Test',
+            'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
+                          'cantidad_solicitada': 3}],
+        })
+        assert r.status_code == 200, r.get_json()
+
+    def test_crear_material_pza_decimal_rechaza(self, client, solicitante, producto):
+        r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+            'proyecto': 'Proyecto Test',
+            'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id,
+                          'cantidad_solicitada': 2.5}],
+        })
+        assert r.status_code == 400, r.get_json()
+        assert 'enteras' in str(r.get_json()['detail']).lower()
+
+    def test_crear_material_kg_decimal_ok(self, client, solicitante, producto_kg):
+        r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+            'proyecto': 'Proyecto Test',
+            'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto_kg.id,
+                          'cantidad_solicitada': 2.5}],
+        })
+        assert r.status_code == 200, r.get_json()
+        assert float(r.get_json()['detalles'][0]['cantidad_solicitada']) == 2.5
+
+    def test_crear_herramienta_decimal_rechaza(self, client, solicitante,
+                                               herramienta_con_3_unidades):
+        r = client.post('/api/v1/solicitudes/', headers=_hdr(solicitante), json={
+            'proyecto': 'Proyecto Test',
+            'detalles': [{'tipo_item': 'HERRAMIENTA',
+                          'herramienta_id': herramienta_con_3_unidades.id,
+                          'cantidad_solicitada': 1.5}],
+        })
+        assert r.status_code == 400, r.get_json()
+        assert 'enteras' in str(r.get_json()['detail']).lower()
+
+    # ── Editar cantidad aprobada ─────────────────────────────────────────────────
+    def test_patch_aprobada_pza_decimal_rechaza(self, client, solicitante, inv_admin, producto):
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.patch(f'/api/v1/solicitudes/{sol["id"]}/detalles/{det_id}',
+                         headers=_hdr(inv_admin), json={'cantidad_aprobada': 4.5})
+        assert r.status_code == 422, r.get_json()
+
+    def test_patch_aprobada_kg_decimal_ok(self, client, solicitante, inv_admin, producto_kg):
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto_kg.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.patch(f'/api/v1/solicitudes/{sol["id"]}/detalles/{det_id}',
+                         headers=_hdr(inv_admin), json={'cantidad_aprobada': 4.5})
+        assert r.status_code == 200, r.get_json()
+        assert float(r.get_json()['cantidad_aprobada']) == 4.5
+
+    # ── Entregar ────────────────────────────────────────────────────────────────
+    def test_entregar_material_pza_decimal_rechaza(self, client, solicitante, inv_admin,
+                                                   producto, almacen):
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.post(f'/api/v1/solicitudes/{sol["id"]}/entregar', headers=_hdr(inv_admin), json={
+            'almacen_origen_id': almacen.id,
+            'entregas': [{'detalle_id': det_id, 'cantidad_entregada': 2.5}],
+        })
+        assert r.status_code == 422, r.get_json()
+        assert 'enteras' in r.get_json()['detail'].lower()
+
+    def test_entregar_material_kg_decimal_ok(self, client, db, solicitante, inv_admin,
+                                            producto_kg, almacen):
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto_kg.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.post(f'/api/v1/solicitudes/{sol["id"]}/entregar', headers=_hdr(inv_admin), json={
+            'almacen_origen_id': almacen.id,
+            'entregas': [{'detalle_id': det_id, 'cantidad_entregada': 2.5}],
+        })
+        assert r.status_code == 200, r.get_json()
+        assert r.get_json()['estatus'] == 'APROBADA'  # 2.5 de 10 → parcial
+        assert float(r.get_json()['detalles'][0]['cantidad_entregada']) == 2.5

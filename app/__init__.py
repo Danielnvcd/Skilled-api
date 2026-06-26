@@ -313,6 +313,18 @@ def create_app():
                 'Cache-Control', 'no-store, no-cache, must-revalidate'
             )
 
+        # Documentos generados al vuelo (PDF de actas de toma, recibos, órdenes de
+        # compra, solicitudes; reportes Excel) cambian con los datos y NO deben
+        # cachearse: el navegador/Cloudflare devolvía el archivo VIEJO al reimprimir.
+        # `send_file` pone su propio Cache-Control, así que aquí FORZAMOS (override,
+        # no setdefault) no-store. Las imágenes/QR/fotos servidas por send_file NO
+        # entran aquí — para esas conviene el caché.
+        ctype = (response.mimetype or '')
+        if ctype == 'application/pdf' or 'spreadsheetml' in ctype or ctype == 'application/vnd.ms-excel':
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+
         # NOTA: HSTS no se setea aquí — Talisman ya lo emite en producción con
         # max-age=31536000 e includeSubDomains (ver setup de Talisman arriba).
         # Duplicarlo aquí causaba dos headers idénticos y ruido en logs.

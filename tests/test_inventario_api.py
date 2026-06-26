@@ -604,10 +604,23 @@ class TestSolicitudes:
         resp = client.post('/api/v1/solicitudes/', json={'proyecto': 'X', 'detalles': []})
         assert resp.status_code == 422
 
+    def test_solicitud_sin_proyecto_rechaza(self, client, inv_solicitante, db):
+        """Proyecto es obligatorio: sin él (o vacío) debe responder 422."""
+        _login(client, inv_solicitante.id, 'solicitante_material')
+        p = self._crear_producto(db)
+        det = [{'producto_id': p.id, 'cantidad_solicitada': 5.0}]
+        # Falta la clave proyecto.
+        resp = client.post('/api/v1/solicitudes/', json={'detalles': det})
+        assert resp.status_code == 422
+        # Proyecto en blanco tampoco se acepta.
+        resp2 = client.post('/api/v1/solicitudes/', json={'proyecto': '   ', 'detalles': det})
+        assert resp2.status_code == 422
+
     def test_solicitud_cantidad_cero(self, client, inv_solicitante, db):
         _login(client, inv_solicitante.id, 'solicitante_material')
         p = self._crear_producto(db)
         resp = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 0.0}],
         })
         assert resp.status_code == 422
@@ -615,6 +628,7 @@ class TestSolicitudes:
     def test_solicitud_producto_inexistente_retorna_400(self, client, inv_solicitante):
         _login(client, inv_solicitante.id, 'solicitante_material')
         resp = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': 999999, 'cantidad_solicitada': 5.0}],
         })
         assert resp.status_code == 400
@@ -627,6 +641,7 @@ class TestSolicitudes:
         _login(client, inv_outsider.id, 'coordinador')
         p = self._crear_producto(db)
         resp = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 5.0}],
         })
         # El decorador de login del blueprint inventario_api bloquea coordinador con 403.
@@ -640,6 +655,7 @@ class TestSolicitudes:
         _login(client, inv_solicitante.id, 'solicitante_material')
         p = self._crear_producto(db)
         client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 1.0}],
         })
         resp = client.get('/api/v1/solicitudes/')
@@ -657,6 +673,7 @@ class TestSolicitudes:
         p = self._crear_producto(db)
         _login(client, inv_solicitante.id, 'solicitante_material')
         r = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 3.0}],
         })
         sol_id = r.get_json()['id']
@@ -677,6 +694,7 @@ class TestSolicitudes:
         p = self._crear_producto(db)
         _login(client, inv_solicitante.id, 'solicitante_material')
         r = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 1.0}],
         })
         sol_id = r.get_json()['id']
@@ -689,6 +707,7 @@ class TestSolicitudes:
         p = self._crear_producto(db)
         _login(client, inv_solicitante.id, 'solicitante_material')
         r = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 1.0}],
         })
         sol_id = r.get_json()['id']
@@ -699,6 +718,7 @@ class TestSolicitudes:
         p = self._crear_producto(db)
         _login(client, inv_solicitante.id, 'solicitante_material')
         r = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 1.0}],
         })
         sol_id = r.get_json()['id']

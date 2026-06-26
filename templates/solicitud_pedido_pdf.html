@@ -29,6 +29,17 @@
     .notes-label { font-size: 7pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
     .notes-text { font-size: 9pt; color: #374151; }
 
+    /* ─── Estado / entrega ───────────────────────────────────────────────── */
+    .estado-box { padding: 7px 12px; margin-bottom: 14px; font-size: 9pt; font-weight: bold;
+                  border-left: 4px solid #6B7280; background-color: #F3F4F6; color: #111827; }
+    .estado-entregada { border-left-color: #047857; background-color: #ECFDF5; color: #065F46; }
+    .estado-aprobada  { border-left-color: #B45309; background-color: #FFFBEB; color: #92400E; }
+    .estado-pendiente { border-left-color: #6B7280; background-color: #F3F4F6; color: #374151; }
+    .estado-rechazada { border-left-color: #DC2626; background-color: #FEF2F2; color: #991B1B; }
+    td.ent { color: #047857; font-weight: bold; }
+    td.pend-si { color: #B45309; font-weight: bold; }
+    td.pend-no { color: #9CA3AF; }
+
     /* ─── Sección ─────────────────────────────────────────────────────────── */
     .section-title { font-size: 9pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin: 14px 0 6px 0; }
     .section-title-tools { color: #B45309; }
@@ -122,6 +133,10 @@
     </tr>
   </table>
 
+  {% if estado_label %}
+  <div class="estado-box estado-{{ estatus|lower }}">Estado: {{ estado_label }}</div>
+  {% endif %}
+
   {% if notas %}
   <div class="notes-box">
     <div class="notes-label">Observaciones</div>
@@ -136,20 +151,33 @@
       <tr>
         <th class="center" style="width: 26px;">#</th>
         <th>Descripción</th>
-        <th style="width: 90px;">Código (SKU)</th>
-        <th style="width: 95px;">Categoría</th>
-        <th class="center" style="width: 55px;">Cant.</th>
-        <th class="center" style="width: 70px;">Unidad</th>
+        <th style="width: 80px;">Código (SKU)</th>
+        <th style="width: 80px;">Categoría</th>
+        <th class="center" style="width: 45px;">{% if mostrar_entrega %}Solic.{% else %}Cant.{% endif %}</th>
+        {% if mostrar_entrega %}
+        <th class="center" style="width: 45px;">Aprob.</th>
+        <th class="center" style="width: 48px;">Entreg.</th>
+        <th class="center" style="width: 48px;">Pend.</th>
+        {% endif %}
+        <th class="center" style="width: 60px;">Unidad</th>
       </tr>
     </thead>
     <tbody>
       {% for m in materiales %}
       <tr {% if loop.index is even %}class="row-alt"{% endif %}>
         <td class="center">{{ loop.index }}</td>
-        <td class="wrap">{{ m.descripcion }}</td>
+        <td class="wrap">
+          {{ m.descripcion }}
+          {% if m.justificacion %}<br/><span class="complemento">{{ m.justificacion }}</span>{% endif %}
+        </td>
         <td><span class="sku-pill">{{ m.codigo }}</span></td>
         <td class="muted">{{ m.categoria or '—' }}</td>
         <td class="center bold-mat">{{ m.cantidad }}</td>
+        {% if mostrar_entrega %}
+        <td class="center">{{ m.aprobada }}</td>
+        <td class="center ent">{{ m.entregada }}</td>
+        <td class="center {% if m.pendiente and m.pendiente > 0 %}pend-si{% else %}pend-no{% endif %}">{{ m.pendiente }}</td>
+        {% endif %}
         <td class="center">{{ m.unidad or '—' }}</td>
       </tr>
       {% endfor %}
@@ -164,9 +192,14 @@
       <tr>
         <th class="tools center" style="width: 26px;">#</th>
         <th class="tools">Descripción</th>
-        <th class="tools" style="width: 80px;">SKU</th>
-        <th class="tools center" style="width: 45px;">Cant.</th>
-        <th class="tools" style="width: 105px;">Uso (desde → hasta)</th>
+        <th class="tools" style="width: 70px;">SKU</th>
+        <th class="tools center" style="width: 42px;">{% if mostrar_entrega %}Solic.{% else %}Cant.{% endif %}</th>
+        {% if mostrar_entrega %}
+        <th class="tools center" style="width: 42px;">Aprob.</th>
+        <th class="tools center" style="width: 46px;">Entreg.</th>
+        <th class="tools center" style="width: 46px;">Pend.</th>
+        {% endif %}
+        <th class="tools" style="width: 95px;">Uso (desde → hasta)</th>
         <th class="tools">Justificación</th>
       </tr>
     </thead>
@@ -177,6 +210,11 @@
         <td class="wrap">{{ h.descripcion }}</td>
         <td><span class="sku-pill">{{ h.sku }}</span></td>
         <td class="center bold-tools">{{ h.cantidad }}</td>
+        {% if mostrar_entrega %}
+        <td class="center">{{ h.aprobada }}</td>
+        <td class="center ent">{{ h.entregada }}</td>
+        <td class="center {% if h.pendiente and h.pendiente > 0 %}pend-si{% else %}pend-no{% endif %}">{{ h.pendiente }}</td>
+        {% endif %}
         <td class="muted">{% if h.fecha_uso_inicio %}{{ h.fecha_uso_inicio }} → {{ h.fecha_uso_fin or '?' }}{% else %}—{% endif %}</td>
         <td class="wrap">
           {{ h.justificacion or '—' }}

@@ -244,6 +244,7 @@ class TestSolicitudes:
                          unidad='pza', stock_actual=0, stock_minimo=0)
         db.session.add(prod); db.session.commit()
         r = client.post('/api/v1/solicitudes/', headers=_hdr(sol), json={
+            'proyecto': 'Proyecto Test',
             'detalles': [{
                 'tipo_item': 'HERRAMIENTA',
                 'producto_id': prod.id,           # ← inválido
