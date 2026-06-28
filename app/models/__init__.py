@@ -17,6 +17,7 @@ consumidores.
                    StockPorAlmacen, TomaInventario(+Detalle, ESTADOS_TOMA),
                    ProductoEstante, MovimientoInventario, CategoriaConfig
   solicitudes.py   SolicitudMaterial, SolicitudMaterialDetalle
+  compras.py       SolicitudCompra, SolicitudCompraDetalle (ESTADOS_COMPRA)
   notificaciones.py Notificacion + crear_notif_admins / crear_notif_inventario
   herramientas.py  HerramientaCategoria, Herramienta, HerramientaUnidad,
                    AsignacionHerramienta, MantenimientoHerramienta,
@@ -48,6 +49,8 @@ from app.models.trabajador import (
 
 from app.models.proyecto import (
     Proyecto,
+    ProyectoMaterialPlan,
+    ProyectoPlanHistorial,
     proyecto_trabajador,
 )
 
@@ -94,6 +97,13 @@ from app.models.solicitudes import (
     SolicitudMaterialDetalle,
 )
 
+from app.models.compras import (
+    ESTADOS_COMPRA,
+    PRIORIDADES_COMPRA,
+    SolicitudCompra,
+    SolicitudCompraDetalle,
+)
+
 # notificaciones depende de auth.User → debe ir DESPUÉS de auth.
 from app.models.notificaciones import (
     Notificacion,
@@ -136,7 +146,7 @@ __all__ = [
     # trabajador
     'Trabajador', 'CredencialPlanta', 'DocumentoTrabajador', 'NotaTrabajador',
     # proyecto
-    'Proyecto', 'proyecto_trabajador',
+    'Proyecto', 'ProyectoMaterialPlan', 'ProyectoPlanHistorial', 'proyecto_trabajador',
     # horas
     'ReporteSemanal', 'RegistroDiarioHoras', 'Ausencia', 'SaldoVacaciones',
     # prenomina
@@ -152,6 +162,9 @@ __all__ = [
     'ESTADOS_TOMA',
     # solicitudes
     'SolicitudMaterial', 'SolicitudMaterialDetalle',
+    # compras
+    'SolicitudCompra', 'SolicitudCompraDetalle',
+    'ESTADOS_COMPRA', 'PRIORIDADES_COMPRA',
     # notificaciones
     'Notificacion', 'crear_notif_admins', 'crear_notif_inventario',
     # herramientas

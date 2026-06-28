@@ -115,6 +115,12 @@ def crear():
     emit_to_role(['admin', 'super_admin', 'coordinador'], 'proyecto:changed', {
         'id': nuevo.id, 'action': 'created',
     })
+    # Los participantes cambian sus campos derivados (no_proyecto, ubicación,
+    # coordinador): avisar para que la lista de empleados refresque en vivo.
+    if participantes:
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'empleado:changed', {
+            'ids': [t.id for t in participantes], 'action': 'proyecto_asignado',
+        })
     body = _proyecto_detail(nuevo)
     body['warnings'] = warnings
     return jsonify(body), 201
@@ -180,6 +186,12 @@ def actualizar(id):
     emit_to_role(['admin', 'super_admin', 'coordinador'], 'proyecto:changed', {
         'id': p.id, 'action': 'updated',
     })
+    # Todos los afectados (los que entran y los que salen) recalcularon sus
+    # campos derivados: avisar para refrescar la lista de empleados en vivo.
+    if afectados:
+        emit_to_role(['admin', 'super_admin', 'coordinador'], 'empleado:changed', {
+            'ids': list(afectados.keys()), 'action': 'proyecto_reasignado',
+        })
     body = _proyecto_detail(p)
     body['warnings'] = warnings
     return jsonify(body)

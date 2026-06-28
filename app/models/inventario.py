@@ -42,6 +42,10 @@ class Producto(db.Model):
     # `stock_disponible` (calculado abajo) es lo que sí se puede mover.
     stock_reservado = db.Column(db.Numeric(10, 2), default=0, nullable=False)
     stock_minimo = db.Column(db.Numeric(10, 2), default=0, nullable=False)
+    # Precio unitario del catálogo. Fuente única para los costos por proyecto
+    # (cantidad × precio_unitario). En vivo: cambiar el precio recalcula costos
+    # pasados (decisión de producto, sin snapshot histórico por línea).
+    precio_unitario = db.Column(db.Numeric(12, 2), default=0, nullable=False)
 
     @property
     def stock_disponible(self):

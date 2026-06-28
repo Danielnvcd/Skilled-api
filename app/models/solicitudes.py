@@ -8,6 +8,11 @@ class SolicitudMaterial(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     solicitante_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     proyecto = db.Column(db.String(200), nullable=True)
+    # FK real al proyecto (nullable por compat con solicitudes históricas que
+    # solo tienen el texto). Es la base para atribuir consumo de material por
+    # proyecto en el panel de Inventario → Proyectos. Se conserva `proyecto`
+    # (texto) para el PDF y para no romper datos viejos.
+    proyecto_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=True, index=True)
     # Observaciones generales del solicitante para el almacén (campo libre del pedido).
     notas = db.Column(db.Text, nullable=True)
     estatus = db.Column(db.String(50), default='PENDIENTE', nullable=False, index=True)  # PENDIENTE, APROBADA, RECHAZADA, ENTREGADA
@@ -15,6 +20,7 @@ class SolicitudMaterial(db.Model):
     fecha_cierre = db.Column(db.DateTime, nullable=True)
 
     solicitante = db.relationship('User', foreign_keys=[solicitante_id])
+    proyecto_ref = db.relationship('Proyecto', foreign_keys=[proyecto_id])
 
 
 class SolicitudMaterialDetalle(db.Model):

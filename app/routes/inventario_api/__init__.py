@@ -36,7 +36,9 @@ from . import productos        # noqa: F401  registra /productos/*
 from . import almacenes        # noqa: F401  registra /almacenes/* y /estantes/*
 from . import movimientos      # noqa: F401  registra /movimientos/*
 from . import solicitudes      # noqa: F401  registra /solicitudes/* y PDFs
+from . import compras          # noqa: F401  registra /solicitudes-compra/* (procura)
 from . import catalogo         # noqa: F401  registra /proyectos/, /categorias/*, importar
+from . import proyectos_materiales  # noqa: F401  registra /proyectos-materiales/*
 from . import reportes         # noqa: F401  registra /reportes/*
 from . import etiquetas        # noqa: F401  registra /etiquetas/* y /ordenes-compra/*
 from . import tomas            # noqa: F401  registra /tomas/*
