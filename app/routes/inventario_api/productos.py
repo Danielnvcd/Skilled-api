@@ -21,6 +21,24 @@ from ._core import (
     _INV_ROLES,
 )
 from app.realtime import emit_to_role
+from .solicitudes import _unidad_permite_decimales
+
+
+def _validar_stock_entero(unidad, *valores):
+    """Si la unidad es por pieza (no admite decimales), exige que los valores de
+    stock dados sean enteros. Devuelve un mensaje de error o None. Replica la
+    regla `_unidad_permite_decimales` usada en solicitudes/compras — así el
+    catálogo funciona igual que el resto del sistema."""
+    if _unidad_permite_decimales(unidad):
+        return None
+    for v in valores:
+        if v is None:
+            continue
+        d = Decimal(str(v))
+        if d != d.to_integral_value():
+            return (f"La unidad '{unidad or 'pza'}' maneja cantidades enteras: "
+                    f"el stock no puede tener decimales")
+    return None
 
 
 @bp.route('/productos/by-codigo/<string:codigo>', methods=['GET'])
@@ -162,6 +180,10 @@ def create_producto():
     if Producto.query.filter(Producto.codigo == data['codigo']).first():
         return jsonify({'detail': 'El código de producto ya existe'}), 400
 
+    err_dec = _validar_stock_entero(data['unidad'], data['stock_actual'], data['stock_minimo'])
+    if err_dec:
+        return jsonify({'detail': err_dec}), 422
+
     user = request.current_user
     stock_inicial = Decimal(str(data['stock_actual']))
     nuevo = Producto(
@@ -210,6 +232,17 @@ def update_producto(producto_id: int):
     if not prod:
         return jsonify({'detail': 'Producto no encontrado'}), 404
 
+    # Decimales según unidad: si la unidad (nueva o actual) es por pieza, el
+    # stock que se vaya a guardar debe ser entero.
+    unidad_efectiva = data['unidad'] if data.get('unidad') is not None else prod.unidad
+    err_dec = _validar_stock_entero(
+        unidad_efectiva,
+        data.get('stock_actual'),
+        data.get('stock_minimo'),
+    )
+    if err_dec:
+        return jsonify({'detail': err_dec}), 422
+
     cambios = []
     if data.get('codigo') is not None and data['codigo'] != prod.codigo:
         if Producto.query.filter(Producto.codigo == data['codigo']).first():
@@ -227,6 +260,9 @@ def update_producto(producto_id: int):
         prod.stock_actual = Decimal(str(data['stock_actual']))
     if data.get('stock_minimo') is not None:
         prod.stock_minimo = Decimal(str(data['stock_minimo']))
+    if data.get('precio_unitario') is not None:
+        cambios.append(f"precio_unitario: {prod.precio_unitario}→{data['precio_unitario']}")
+        prod.precio_unitario = Decimal(str(data['precio_unitario']))
     if data.get('proveedor_default_nombre') is not None:
         prod.proveedor_default_nombre = data['proveedor_default_nombre'] or None
     if data.get('proveedor_default_contacto') is not None:

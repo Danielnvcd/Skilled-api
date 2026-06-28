@@ -266,7 +266,7 @@ def delete_categoria_config(nombre: str):
 # variante en lowercase/sin tildes para no romper si el usuario edita los headers.
 PLANTILLA_HEADERS = [
     'Código (SKU)', 'Descripción', 'Categoría', 'Unidad',
-    'Stock Inicial', 'Stock Mínimo', 'URL Imagen (opcional)',
+    'Stock Inicial', 'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
 ]
 PLANTILLA_MAX_FILAS = 5000  # Tope para evitar DoS por archivo gigante
 
@@ -363,7 +363,7 @@ def get_plantilla_materiales():
     # Fila 2: instrucciones
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(PLANTILLA_HEADERS))
     c = ws.cell(row=2, column=1,
-        value='⚠ No alteres los encabezados de la fila 4. URL Imagen es opcional y solo acepta HTTPS o ruta /static/...png. Los duplicados de SKU se ignoran.')
+        value='⚠ No alteres los encabezados de la fila 4. Precio y URL Imagen son opcionales (URL solo HTTPS o /static/...png). Si un SKU ya existe, se ACTUALIZA con los datos de esta fila (el stock NO se toca).')
     c.font = instr_font
     c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     ws.row_dimensions[2].height = 30
@@ -379,7 +379,7 @@ def get_plantilla_materiales():
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         cell.border = border
         # Anchos diferenciados
-        widths = {1: 18, 2: 36, 3: 18, 4: 10, 5: 14, 6: 14, 7: 42}
+        widths = {1: 18, 2: 36, 3: 18, 4: 10, 5: 14, 6: 14, 7: 16, 8: 42}
         ws.column_dimensions[get_column_letter(col)].width = widths.get(col, 18)
 
     # Comentarios (tooltips) en cada header
@@ -390,7 +390,8 @@ def get_plantilla_materiales():
         4: 'Unidad de medida: Pza, Kg, Mts, Lts, Caja, Bote, etc.',
         5: 'Cantidad inicial en almacén (número >= 0)',
         6: 'Cantidad mínima antes de alertar de bajo stock (número >= 0)',
-        7: 'OPCIONAL — URL HTTPS de la imagen del producto. Ej: https://cdn.miempresa.com/tornillo.jpg',
+        7: 'Precio unitario del material (número >= 0). Se usa para los costos por proyecto.',
+        8: 'OPCIONAL — URL HTTPS de la imagen del producto. Ej: https://cdn.miempresa.com/tornillo.jpg',
     }
     for col, txt in tooltips.items():
         ws.cell(row=4, column=col).comment = Comment(txt, 'Plantilla SKILLED')
@@ -413,6 +414,7 @@ def get_plantilla_materiales():
                              error='El stock debe ser un número mayor o igual a 0.')
     num_dv.add(f'E5:E1004')
     num_dv.add(f'F5:F1004')
+    num_dv.add(f'G5:G1004')  # Precio Unitario
     ws.add_data_validation(num_dv)
 
     # Longitudes
@@ -520,7 +522,8 @@ def importar_materiales():
         }), 400
 
     user = request.current_user
-    exitosos = 0
+    exitosos = 0       # productos nuevos creados
+    actualizados = 0   # productos existentes actualizados (upsert por SKU)
     errores = []
     skus_en_archivo = set()  # detectar duplicados intra-archivo
 
@@ -597,6 +600,14 @@ def importar_materiales():
             elif stock_minimo > 1_000_000:
                 problemas.append('stock mínimo fuera de rango (máx 1M)')
 
+            precio, err_pr = _cell_number(_g(row, 'Precio Unitario'), default=0.0)
+            if err_pr:
+                problemas.append(f'precio {err_pr}')
+            elif precio < 0:
+                problemas.append('precio debe ser >= 0')
+            elif precio > 100_000_000:
+                problemas.append('precio fuera de rango (máx 100M)')
+
             # Validar URL imagen (opcional). Si viene, debe ser HTTPS o /path.png.
             imagen_final = None
             if imagen_url:
@@ -616,12 +627,7 @@ def importar_materiales():
                 continue
             skus_en_archivo.add(sku_lower)
 
-            # Duplicado contra DB
-            if Producto.query.filter(Producto.codigo == codigo).first():
-                errores.append(f'Fila {fila_excel}: SKU "{codigo}" ya existe en el catálogo')
-                continue
-
-            # Resolver categoría a prueba de tontos:
+            # Resolver categoría a prueba de tontos (sirve para alta y update):
             #  - Si ya existe una equivalente (case/acento-insensitiva), usar el
             #    nombre canónico para no romper el agrupado del dashboard.
             #  - Si es nueva, registrarla en CategoriaConfig (sin imagen) y
@@ -638,6 +644,34 @@ def importar_materiales():
                 ))
                 categorias_creadas.append(categoria_canonica)
 
+            precio_dec = Decimal(str(precio))
+            stock_min_dec = Decimal(str(stock_minimo))
+            # ¿Vinieron en blanco las celdas opcionales? En un update NO debemos
+            # pisar un precio/mínimo existente con 0 solo porque la celda quedó
+            # vacía. (En alta sí caen a 0, que es el default correcto.)
+            precio_provisto = _cell_str(_g(row, 'Precio Unitario')) != ''
+            stock_min_provisto = _cell_str(_g(row, 'Stock Mínimo')) != ''
+
+            # ── UPSERT: si el SKU ya existe, ACTUALIZAR campos provistos ──
+            # No tocamos stock_actual ni stock_por_almacen: el inventario real
+            # se mueve solo por movimientos/ajustes, nunca por reimportar la
+            # plantilla. Reactivamos si estaba soft-deleted.
+            existente = Producto.query.filter(Producto.codigo == codigo).first()
+            if existente:
+                existente.descripcion = descripcion
+                existente.categoria = categoria_canonica
+                existente.unidad = unidad
+                if precio_provisto:
+                    existente.precio_unitario = precio_dec
+                if stock_min_provisto:
+                    existente.stock_minimo = stock_min_dec
+                if imagen_final:
+                    existente.imagen_url = imagen_final
+                if not existente.activo:
+                    existente.activo = True
+                actualizados += 1
+                continue
+
             stock_inicial_dec = Decimal(str(stock_actual))
             nuevo = Producto(
                 codigo=codigo,
@@ -645,7 +679,8 @@ def importar_materiales():
                 categoria=categoria_canonica,
                 unidad=unidad,
                 stock_actual=stock_inicial_dec,
-                stock_minimo=Decimal(str(stock_minimo)),
+                stock_minimo=stock_min_dec,
+                precio_unitario=precio_dec,
                 imagen_url=imagen_final,
                 created_by_id=user.id,
             )
@@ -666,7 +701,8 @@ def importar_materiales():
             errores.append(f'Fila {fila_excel}: error inesperado — {str(e)[:80]}')
 
     try:
-        msg = f'Importación masiva: {exitosos} productos creados, {len(errores)} errores'
+        msg = (f'Importación masiva: {exitosos} creados, {actualizados} actualizados, '
+               f'{len(errores)} errores')
         if categorias_creadas:
             msg += f', {len(categorias_creadas)} categorías nuevas'
         _audit(user, msg)
@@ -679,14 +715,15 @@ def importar_materiales():
     # Refresca catálogos abiertos en otras sesiones tras la importación masiva.
     # Mandamos un solo emit aunque hayan sido N productos — el front invalida
     # el namespace completo de productos vía `useResource.invalidateOn`.
-    if exitosos > 0:
+    if exitosos > 0 or actualizados > 0:
         emit_to_role(_INV_ROLES, 'producto:changed', {
-            'action': 'bulk_import', 'count': exitosos,
+            'action': 'bulk_import', 'count': exitosos + actualizados,
         })
 
     return jsonify({
         'exitosos': exitosos,
+        'actualizados': actualizados,
         'errores': errores,
-        'total_procesadas': exitosos + len(errores),
+        'total_procesadas': exitosos + actualizados + len(errores),
         'categorias_creadas': categorias_creadas,
     })

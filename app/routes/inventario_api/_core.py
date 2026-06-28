@@ -17,7 +17,7 @@ from functools import wraps
 
 import qrcode
 from flask import Blueprint, jsonify, request, Response, abort, send_file, render_template, current_app, g
-from marshmallow import Schema, fields, validate, ValidationError, EXCLUDE
+from marshmallow import Schema, fields, validate, ValidationError, EXCLUDE, pre_load
 from sqlalchemy import distinct as sql_distinct
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -104,6 +104,18 @@ class _BaseSchema(Schema):
         # Coincide con el comportamiento por defecto de Pydantic: ignora campos extra.
         unknown = EXCLUDE
 
+    @pre_load
+    def _blank_imagen_url_to_none(self, data, **kwargs):
+        # Un `imagen_url` vacío ('') significa "sin imagen": la UI lo manda así
+        # cuando dejas el campo opcional en blanco. Sin esto, el Regexp de
+        # seguridad lo rechaza (`allow_none` solo cubre null, no ''), y editar un
+        # producto sin imagen falla con 422 como si la imagen fuera obligatoria.
+        if isinstance(data, dict):
+            v = data.get('imagen_url')
+            if isinstance(v, str) and not v.strip():
+                data = {**data, 'imagen_url': None}
+        return data
+
 
 class ProductoCreateSchema(_BaseSchema):
     codigo = fields.Str(required=True, validate=[
@@ -115,6 +127,7 @@ class ProductoCreateSchema(_BaseSchema):
     unidad = fields.Str(required=True, validate=validate.Length(min=1, max=50))
     stock_actual = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
     stock_minimo = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
+    precio_unitario = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=100_000_000))
     imagen_url = fields.Str(load_default=None, allow_none=True, validate=[
         validate.Length(max=500),
         # Anti-XSS/SSRF: solo HTTPS o path absoluto local
@@ -135,6 +148,7 @@ class ProductoUpdateSchema(_BaseSchema):
     unidad = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=50))
     stock_actual = fields.Float(load_default=None, allow_none=True, validate=validate.Range(min=0, max=1_000_000))
     stock_minimo = fields.Float(load_default=None, allow_none=True, validate=validate.Range(min=0, max=1_000_000))
+    precio_unitario = fields.Float(load_default=None, allow_none=True, validate=validate.Range(min=0, max=100_000_000))
     imagen_url = fields.Str(load_default=None, allow_none=True, validate=[
         validate.Length(max=500),
         validate.Regexp(_IMAGEN_URL_REGEX, error='imagen_url debe ser HTTPS o un path absoluto a imagen local'),
@@ -192,11 +206,14 @@ class SolicitudDetalleCreateSchema(_BaseSchema):
 class SolicitudCreateSchema(_BaseSchema):
     # Proyecto obligatorio: no se permiten solicitudes sin proyecto asociado.
     proyecto = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    # FK opcional al proyecto del sistema. El SPA la manda desde el dropdown;
+    # si viene, liga la solicitud para atribuir consumo en el panel de proyectos.
+    proyecto_id = fields.Int(load_default=None, allow_none=True)
     notas = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=2000))
     detalles = fields.List(
         fields.Nested(SolicitudDetalleCreateSchema),
         required=True,
-        validate=validate.Length(min=1, max=100),
+        validate=validate.Length(min=1, max=500),
     )
 
 
@@ -224,7 +241,7 @@ class EntregarSolicitudSchema(_BaseSchema):
     entregas = fields.List(
         fields.Nested(EntregaItemSchema),
         required=True,
-        validate=validate.Length(min=1, max=100),
+        validate=validate.Length(min=1, max=500),
     )
 
 
@@ -233,6 +250,24 @@ class CategoriaConfigUpsertSchema(_BaseSchema):
         validate.Length(max=500),
         validate.Regexp(_IMAGEN_URL_REGEX, error='imagen_url debe ser HTTPS o un path absoluto a imagen local'),
     ])
+
+
+# ─── Plan de materiales por proyecto (Inventario → Proyectos) ────────────────
+
+class ProyectoPlanLineaSchema(_BaseSchema):
+    producto_id = fields.Int(required=True)
+    cantidad_planeada = fields.Float(required=True, validate=validate.Range(min=0, max=1_000_000))
+    notas = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=500))
+
+
+class ProyectoPlanUpsertSchema(_BaseSchema):
+    # Reemplaza el plan completo del proyecto con estas líneas (upsert por
+    # producto). Una lista vacía deja el plan sin líneas.
+    lineas = fields.List(
+        fields.Nested(ProyectoPlanLineaSchema),
+        required=True,
+        validate=validate.Length(max=500),
+    )
 
 
 # ─── Serializers ──────────────────────────────────────────────────────────────
@@ -250,6 +285,7 @@ def _producto_to_dict(p: Producto) -> dict:
         'stock_reservado': reservado,         # Pausa 2-bis: apartado por solicitudes APROBADAS
         'stock_disponible': actual - reservado,  # lo que sí se puede mover
         'stock_minimo': float(p.stock_minimo or 0),
+        'precio_unitario': float(p.precio_unitario or 0),
         'imagen_url': p.imagen_url,
         # Pausa 9: proveedor default para Compras express.
         'proveedor_default_nombre': p.proveedor_default_nombre,
@@ -322,6 +358,7 @@ def _solicitud_detalle_to_dict(d: SolicitudMaterialDetalle) -> dict:
         base['item_descripcion'] = d.herramienta.descripcion if d.herramienta else 'Herramienta eliminada'
         base['item_codigo'] = d.herramienta.sku if d.herramienta else '---'
         base['item_unidad'] = d.herramienta.unidad if d.herramienta else 'pza'
+        base['imagen_url'] = None  # herramientas usan su propio sistema de media
         # Compat: claves antiguas para que el SPA siga renderizando
         base['producto_descripcion'] = base['item_descripcion']
         base['producto_codigo'] = base['item_codigo']
@@ -332,6 +369,7 @@ def _solicitud_detalle_to_dict(d: SolicitudMaterialDetalle) -> dict:
         base['item_descripcion'] = d.producto.descripcion if d.producto else 'Producto eliminado'
         base['item_codigo'] = d.producto.codigo if d.producto else '---'
         base['item_unidad'] = d.producto.unidad if d.producto else 'pza'
+        base['imagen_url'] = d.producto.imagen_url if d.producto else None
         base['producto_descripcion'] = base['item_descripcion']
         base['producto_codigo'] = base['item_codigo']
         base['producto_unidad'] = base['item_unidad']
@@ -343,6 +381,7 @@ def _solicitud_to_dict(s: SolicitudMaterial) -> dict:
         'id': s.id,
         'solicitante_id': s.solicitante_id,
         'proyecto': s.proyecto,
+        'proyecto_id': s.proyecto_id,
         'notas': s.notas,
         'estatus': s.estatus,
         'fecha_creacion': s.fecha_creacion.isoformat() if s.fecha_creacion else None,

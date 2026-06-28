@@ -89,9 +89,24 @@ def create_solicitud():
     if not proyecto:
         return jsonify({'detail': 'Debes seleccionar un proyecto para la solicitud'}), 422
 
+    # FK opcional al proyecto: si el SPA la manda, validamos que exista para
+    # poder atribuir el consumo en el panel de Inventario → Proyectos. Si no
+    # viene, intentamos resolverla por el texto (número de proyecto) para que
+    # solicitudes nuevas queden ligadas aunque el cliente sea viejo.
+    from app.models import Proyecto
+    proyecto_id = data.get('proyecto_id')
+    if proyecto_id is not None:
+        proy = Proyecto.query.filter(Proyecto.id == proyecto_id).first()
+        if not proy:
+            return jsonify({'detail': f'Proyecto #{proyecto_id} no existe'}), 422
+    else:
+        proy = Proyecto.query.filter(Proyecto.numero_proyecto == proyecto).first()
+        proyecto_id = proy.id if proy else None
+
     nueva = SolicitudMaterial(
         solicitante_id=user.id,
         proyecto=proyecto,
+        proyecto_id=proyecto_id,
         notas=data.get('notas'),
         estatus='PENDIENTE',
     )
@@ -179,7 +194,7 @@ def get_solicitudes():
     from ._core import _int_arg
     skip, err = _int_arg('skip', 0, 0, 1_000_000)
     if err: return err
-    limit, err = _int_arg('limit', 200, 0, 500)
+    limit, err = _int_arg('limit', 200, 0, 2000)
     if err: return err
 
     query = SolicitudMaterial.query
@@ -932,7 +947,7 @@ def preview_solicitud_pdf():
 
     if not materiales_raw and not herramientas_raw:
         return jsonify({'detail': 'Agrega al menos un material o herramienta'}), 422
-    if len(materiales_raw) > 200 or len(herramientas_raw) > 200:
+    if len(materiales_raw) > 500 or len(herramientas_raw) > 500:
         return jsonify({'detail': 'Demasiados ítems en una sola solicitud'}), 422
 
     # Normalizar / sanitizar (xhtml2pdf escapa automáticamente vía Jinja autoescape)
