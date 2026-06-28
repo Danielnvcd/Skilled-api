@@ -167,6 +167,26 @@ def soft_delete_herramienta(hid: int):
     return Response(status=204)
 
 
+@bp.route('/herramientas/<int:hid>/reactivar', methods=['POST'])
+@_require_inventario_admin
+def reactivar_herramienta(hid: int):
+    """Vuelve a activar una herramienta desactivada (soft-delete reversible)."""
+    h = Herramienta.query.filter(Herramienta.id == hid).first()
+    if not h:
+        return jsonify({'detail': 'Herramienta no encontrada'}), 404
+    if h.activo:
+        return jsonify({'detail': 'La herramienta ya está activa'}), 400
+
+    h.activo = True
+    _audit(request.current_user, f"Herramienta #{hid} ({h.sku}) reactivada")
+    db.session.commit()
+    db.session.refresh(h)
+    emit_to_role(_HERR_ROLES, 'herramienta:changed', {
+        'id': hid, 'action': 'reactivated',
+    })
+    return jsonify(_herramienta_to_dict(h, incluir_stats=True))
+
+
 @bp.route('/herramientas/clasificaciones', methods=['GET'])
 @_require_inventario
 def list_clasificaciones():

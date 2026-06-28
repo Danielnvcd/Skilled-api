@@ -77,12 +77,13 @@ def crear_incidencia():
 @_require_login
 def list_incidencias():
     user = request.current_user
-    if user.role not in ('solicitante_material', 'inventario', 'admin', 'super_admin'):
+    if user.role not in ('solicitante_material', 'coordinador', 'inventario', 'admin', 'super_admin'):
         return jsonify({'detail': 'Forbidden'}), 403
     estado = request.args.get('estado', type=str)
     unidad_id = request.args.get('unidad_id', type=int)
     query = IncidenciaHerramienta.query.options(joinedload(IncidenciaHerramienta.reportado_por))
-    if user.role == 'solicitante_material':
+    # Roles "solicitantes" solo ven las incidencias que ellos reportaron.
+    if user.role in ('solicitante_material', 'coordinador'):
         query = query.filter(IncidenciaHerramienta.reportado_por_id == user.id)
     if estado:
         if estado not in ESTADOS_INCIDENCIA:
