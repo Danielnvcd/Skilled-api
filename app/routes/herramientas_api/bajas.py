@@ -35,7 +35,7 @@ from ._core import (
 @_require_login
 def crear_solicitud_baja():
     user = request.current_user
-    if user.role not in ('solicitante_material', 'inventario', 'admin', 'super_admin'):
+    if user.role not in ('solicitante_material', 'coordinador', 'inventario', 'admin', 'super_admin'):
         return jsonify({'detail': 'Forbidden'}), 403
     data, err = _parse_or_422(SolicitudBajaCreateSchema(), request.get_json(silent=True))
     if err: return err
@@ -94,11 +94,12 @@ def crear_solicitud_baja():
 @_require_login
 def list_solicitudes_baja():
     user = request.current_user
-    if user.role not in ('solicitante_material', 'inventario', 'admin', 'super_admin'):
+    if user.role not in ('solicitante_material', 'coordinador', 'inventario', 'admin', 'super_admin'):
         return jsonify({'detail': 'Forbidden'}), 403
     estado = request.args.get('estado', type=str)
     query = SolicitudBajaHerramienta.query.options(joinedload(SolicitudBajaHerramienta.solicitante))
-    if user.role == 'solicitante_material':
+    # Roles "solicitantes" (sin permiso de gestión) solo ven sus propias bajas.
+    if user.role in ('solicitante_material', 'coordinador'):
         query = query.filter(SolicitudBajaHerramienta.solicitante_id == user.id)
     if estado:
         if estado not in ESTADOS_SOLICITUD_BAJA:

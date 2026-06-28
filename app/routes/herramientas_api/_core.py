@@ -202,7 +202,22 @@ def _herramienta_to_dict(h: Herramienta, *, incluir_stats=False) -> dict:
     return base
 
 
-def _unidad_to_dict(u: HerramientaUnidad, *, incluir_relacion=False) -> dict:
+# Campos administrativos/financieros/logísticos que NO deben salir hacia roles
+# "solicitantes" (coordinador): solo necesitan identificar la herramienta y pedir
+# baja. Redactamos en el backend para que no se obtengan ni llamando la API directo.
+_CAMPOS_SENSIBLES_UNIDAD = (
+    'costo_adquisicion', 'vida_util_meses', 'observaciones', 'fecha_adquisicion',
+    'complementos', 'cantidad', 'almacen_id', 'estante_id',
+    'almacen_nombre', 'estante_nombre',
+)
+
+
+def _redactar_para_rol(user) -> bool:
+    """True si al usuario hay que ocultarle los campos sensibles de la unidad."""
+    return bool(user) and getattr(user, 'role', None) == 'coordinador'
+
+
+def _unidad_to_dict(u: HerramientaUnidad, *, incluir_relacion=False, redactar=False) -> dict:
     base = {
         'id': u.id,
         'herramienta_id': u.herramienta_id,
@@ -238,6 +253,9 @@ def _unidad_to_dict(u: HerramientaUnidad, *, incluir_relacion=False) -> dict:
         base['trabajador_nombre'] = u.asignado_trabajador.nombre_completo if u.asignado_trabajador else None
         foto_principal = next((m for m in u.media if m.tipo == 'FOTO_HERRAMIENTA'), None)
         base['foto_principal_id'] = foto_principal.id if foto_principal else None
+    if redactar:
+        for campo in _CAMPOS_SENSIBLES_UNIDAD:
+            base.pop(campo, None)
     return base
 
 
@@ -404,9 +422,10 @@ def _upload_dir(unidad_id: int) -> str:
 
 
 def _puede_ver_unidad(user: User, unidad: HerramientaUnidad) -> bool:
-    """Inventario y admin ven todo. Solicitante solo ve unidades asignadas a su trabajador."""
+    """Inventario y admin ven todo. Solicitante/coordinador solo ven unidades
+    asignadas a su trabajador."""
     if user.role in ('inventario', 'admin', 'super_admin'):
         return True
-    if user.role == 'solicitante_material' and user.trabajador_id:
+    if user.role in ('solicitante_material', 'coordinador') and user.trabajador_id:
         return unidad.asignado_trabajador_id == user.trabajador_id
     return False

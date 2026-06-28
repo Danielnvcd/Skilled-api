@@ -42,10 +42,13 @@ class EtiquetasPdfSchema(_BaseSchema):
                           validate=validate.OneOf(['avery_5160', 'avery_5163']))
     tipo = fields.Str(load_default='barcode',
                        validate=validate.OneOf(['barcode', 'qr']))
+    # max=500 alineado con ETIQUETAS_MAX_TOTAL: el tope real de seguridad es el
+    # total de etiquetas (suma de cantidades), no el número de líneas. Con
+    # cantidad 1 por línea, "seleccionar todos" puede mandar hasta 500 productos.
     items = fields.List(
         fields.Nested(_EtiquetaItemSchema),
         required=True,
-        validate=validate.Length(min=1, max=200),
+        validate=validate.Length(min=1, max=500),
     )
 
 
@@ -202,7 +205,7 @@ def generar_etiquetas_pdf():
     Body:
       - formato: 'avery_5160' (default, 30/hoja) | 'avery_5163' (10/hoja).
       - tipo: 'barcode' (Code128, default) | 'qr'.
-      - items: [{producto_id, cantidad}], ≥1 línea, ≤200 líneas.
+      - items: [{producto_id, cantidad}], ≥1 línea, ≤500 líneas.
 
     Reglas:
       - Tope global: 500 etiquetas por PDF.

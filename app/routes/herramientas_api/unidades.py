@@ -33,7 +33,7 @@ from ._core import (
     bp, _HERR_ROLES,
     UnidadCreateSchema, UnidadUpdateSchema,
     _unidad_to_dict, _asignacion_to_dict, _media_to_dict, _evento_to_dict,
-    _next_codigo_interno, _puede_ver_unidad,
+    _next_codigo_interno, _puede_ver_unidad, _redactar_para_rol,
 )
 
 
@@ -43,7 +43,7 @@ from ._core import (
 @_require_login
 def list_unidades():
     user = request.current_user
-    if user.role not in ('inventario', 'admin', 'super_admin', 'solicitante_material'):
+    if user.role not in ('inventario', 'admin', 'super_admin', 'solicitante_material', 'coordinador'):
         return jsonify({'detail': 'Forbidden'}), 403
 
     skip, err = _int_arg('skip', 0, 0, 1_000_000)
@@ -66,7 +66,9 @@ def list_unidades():
         selectinload(HerramientaUnidad.media),
     )
 
-    if user.role == 'solicitante_material':
+    # Roles "solicitantes" (solicitante_material, coordinador) solo ven las
+    # unidades asignadas a su propio trabajador.
+    if user.role in ('solicitante_material', 'coordinador'):
         if not user.trabajador_id:
             return jsonify([])
         query = query.filter(HerramientaUnidad.asignado_trabajador_id == user.trabajador_id)
@@ -92,7 +94,8 @@ def list_unidades():
         ))
 
     unidades = query.order_by(HerramientaUnidad.codigo_interno).offset(skip).limit(limit).all()
-    return jsonify([_unidad_to_dict(u, incluir_relacion=True) for u in unidades])
+    redactar = _redactar_para_rol(user)
+    return jsonify([_unidad_to_dict(u, incluir_relacion=True, redactar=redactar) for u in unidades])
 
 
 @bp.route('/herramientas-unidades/<int:uid>', methods=['GET'])
@@ -112,7 +115,7 @@ def get_unidad(uid: int):
     if not _puede_ver_unidad(request.current_user, u):
         return jsonify({'detail': 'Forbidden'}), 403
 
-    data = _unidad_to_dict(u, incluir_relacion=True)
+    data = _unidad_to_dict(u, incluir_relacion=True, redactar=_redactar_para_rol(request.current_user))
     asignacion_activa = next((a for a in u.asignaciones if a.estado == 'ACTIVA'), None)
     data['asignacion_activa'] = _asignacion_to_dict(asignacion_activa) if asignacion_activa else None
     data['fotos'] = [_media_to_dict(m) for m in u.media if m.tipo == 'FOTO_HERRAMIENTA']
@@ -273,4 +276,4 @@ def validar_unidad_qr(qr_code: str):
         return jsonify({'detail': 'QR no encontrado'}), 404
     if not _puede_ver_unidad(request.current_user, u):
         return jsonify({'detail': 'Forbidden'}), 403
-    return jsonify(_unidad_to_dict(u, incluir_relacion=True))
+    return jsonify(_unidad_to_dict(u, incluir_relacion=True, redactar=_redactar_para_rol(request.current_user)))
