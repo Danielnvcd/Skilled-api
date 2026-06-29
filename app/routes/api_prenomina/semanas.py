@@ -313,25 +313,42 @@ def cerrar_semana(fecha_str):
     if not prenominas:
         return jsonify({'error': 'No hay prenóminas abiertas para cerrar'}), 400
 
+    # Batch-loads para evitar N+1: antes el loop hacía 1 query de ajustes + 1 de
+    # préstamos por trabajador (≈1000 round-trips con 500 empleados). Todas las
+    # prenóminas de la semana comparten fecha_inicio/fecha_fin, así que un IN
+    # cubre a todos y luego agrupamos en memoria.
+    trab_ids = [p.trabajador_id for p in prenominas]
+    fecha_fin_semana = prenominas[0].fecha_fin
+
+    ajustes_bulk = AjusteDescuento.query.filter(
+        AjusteDescuento.trabajador_id.in_(trab_ids),
+        AjusteDescuento.fecha_descuento >= fecha_obj,
+        AjusteDescuento.fecha_descuento <= fecha_fin_semana,
+        AjusteDescuento.cobrado == False,  # noqa: E712
+    ).all()
+    ajustes_por_trab = {}
+    for aj in ajustes_bulk:
+        ajustes_por_trab.setdefault(aj.trabajador_id, []).append(aj)
+
+    prestamos_bulk = Prestamo.query.filter(
+        Prestamo.trabajador_id.in_(trab_ids),
+        Prestamo.estado == 'ACTIVO',
+    ).all()
+    prestamos_por_trab = {}
+    for pr in prestamos_bulk:
+        prestamos_por_trab.setdefault(pr.trabajador_id, []).append(pr)
+
     try:
         for p in prenominas:
             p.estado = 'APROBADO'
 
-            # Marcar Ajustes Inbursa como cobrados (mismo criterio que el blueprint clásico)
-            ajustes = AjusteDescuento.query.filter(
-                AjusteDescuento.trabajador_id == p.trabajador_id,
-                AjusteDescuento.fecha_descuento >= p.fecha_inicio,
-                AjusteDescuento.fecha_descuento <= p.fecha_fin,
-                AjusteDescuento.cobrado == False,  # noqa: E712
-            ).all()
-            for aj in ajustes:
+            # Marcar Ajustes Inbursa como cobrados (desde el batch pre-cargado)
+            for aj in ajustes_por_trab.get(p.trabajador_id, []):
                 aj.cobrado = True
 
             # Aplicar descuentos a préstamos activos como abonos reales
             if p.descuento_prestamos and to_dec(p.descuento_prestamos) > Decimal('0'):
-                prestamos_act = Prestamo.query.filter_by(
-                    trabajador_id=p.trabajador_id, estado='ACTIVO',
-                ).all()
+                prestamos_act = prestamos_por_trab.get(p.trabajador_id, [])
                 for pr in prestamos_act:
                     descuento = to_dec(pr.descuento_semanal)
                     restante = to_dec(pr.monto_restante)

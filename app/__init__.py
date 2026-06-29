@@ -44,10 +44,23 @@ def create_app():
 
     # Pool y timeouts: solo para PostgreSQL — SQLite (tests) usa NullPool y no los necesita
     if not _db_uri.startswith('sqlite'):
+        # Tamaño de pool explícito (el default de SQLAlchemy es 5+10=15 por
+        # proceso, justo para ráfagas de concurrencia: muchos coordinadores a la
+        # vez o un kiosko RFID con varios checadores simultáneos). Con gevent
+        # cada greenlet que ejecuta una query retiene una conexión, así que el
+        # pool acota cuántas queries corren en paralelo por worker.
+        #
+        # OJO con max_connections de Postgres (default 100): el total es
+        #   workers × (pool_size + max_overflow).
+        # Con 4 workers y los defaults de abajo (10+10) = 80 conexiones, deja
+        # holgura bajo 100. Si subes estos valores, sube también max_connections
+        # en postgresql.conf o quedarás sin conexiones.
         _engine_opts = {
             'pool_pre_ping': True,  # descarta conexiones muertas antes de usarlas
             'pool_recycle': 1800,   # renueva conexiones inactivas cada 30 min
             'pool_timeout': 30,     # falla si no hay conexión libre en 30 s
+            'pool_size': int(os.environ.get('DB_POOL_SIZE', '10')),
+            'max_overflow': int(os.environ.get('DB_MAX_OVERFLOW', '10')),
         }
         if _db_uri.startswith('postgresql'):
             _engine_opts['connect_args'] = {

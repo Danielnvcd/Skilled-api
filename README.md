@@ -72,6 +72,8 @@ Las críticas:
 | `CORS_ORIGINS` | Dev: Vite (5173). Prod: dominios Vercel/custom |
 | `RT_COOKIE_SAMESITE` | `Lax` same-origin (dev); `None` cross-origin (prod) |
 | `SOCKETIO_ASYNC_MODE` | `threading` en dev (default); `gevent` SOLO en prod — gevent crashea con psycopg en Windows local |
+| `DB_POOL_SIZE` | Conexiones fijas del pool por proceso (default 10). Solo Postgres |
+| `DB_MAX_OVERFLOW` | Conexiones extra en picos (default 10). Total = `workers × (pool+overflow) ≤ max_connections` |
 | `USE_X_ACCEL_REDIRECT` | `true` solo en prod con nginx configurado |
 | `HSTS_PRELOAD` | `false` salvo que estés seguro (semi-irreversible) |
 
