@@ -15,6 +15,7 @@ import time
 from datetime import datetime as dt
 
 from flask import current_app
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
@@ -22,6 +23,42 @@ from flask import Blueprint
 
 from app.models import CredencialPlanta, Proyecto, Trabajador
 from app.routes._api_helpers import current_user, is_admin
+
+
+def apply_trabajador_filtros(query, args):
+    """Aplica búsqueda libre (`q`) y filtros avanzados (área, puesto, tipo de
+    nómina, tipo de pago, sin salario) a un query de Trabajador.
+
+    Compartido por el LISTADO y la EXPORTACIÓN para que "Exportar" baje
+    exactamente lo que el usuario está viendo filtrado, sin duplicar la lógica.
+    """
+    q = (args.get('q') or '').strip()
+    if q:
+        like = f'%{q}%'
+        query = query.filter(or_(
+            Trabajador.nombre.ilike(like),
+            Trabajador.nombre_apellidos.ilike(like),
+            Trabajador.no_empleado.ilike(like),
+            Trabajador.rfc.ilike(like),
+        ))
+    area = (args.get('area') or '').strip()
+    if area:
+        query = query.filter(Trabajador.area == area)
+    puesto = (args.get('puesto') or '').strip()
+    if puesto:
+        query = query.filter(Trabajador.puesto == puesto)
+    tipo_nomina = (args.get('tipo_nomina') or '').strip()
+    if tipo_nomina:
+        query = query.filter(Trabajador.tipo_nomina == tipo_nomina)
+    tipo_pago = (args.get('tipo_pago') or '').strip()
+    if tipo_pago:
+        query = query.filter(Trabajador.tipo_pago == tipo_pago)
+    if (args.get('sin_salario') or '').lower() in ('1', 'true', 'yes'):
+        query = query.filter(or_(
+            Trabajador.salario_real_pactado_x_sem == None,  # noqa: E711
+            Trabajador.salario_real_pactado_x_sem == 0,
+        ))
+    return query
 from app.utils import allowed_image_file
 
 

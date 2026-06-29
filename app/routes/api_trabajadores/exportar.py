@@ -17,7 +17,7 @@ from app.routes._api_helpers import current_user, is_admin
 from app.routes.api_auth import jwt_required
 from app.utils import log_action, safe_excel_value
 
-from ._core import bp, _authorized
+from ._core import bp, _authorized, apply_trabajador_filtros
 
 
 def _build_export_styles():
@@ -266,6 +266,10 @@ def exportar_todos():
         mis = Proyecto.query.filter_by(activo=True, coordinador_id=current_user().id).all()
         ids = {t.id for p in mis for t in p.participantes}
         base = base.filter(Trabajador.id.in_(ids))
+
+    # "Exportar" baja exactamente lo que el usuario ve filtrado en la lista
+    # (área, puesto, tipo nómina/pago, sin salario, búsqueda). Misma lógica.
+    base = apply_trabajador_filtros(base, request.args)
 
     trabajadores = base.order_by(func.lower(Trabajador.nombre)).all()
     S = _build_export_styles()

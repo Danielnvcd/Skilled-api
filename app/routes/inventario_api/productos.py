@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import (
     Producto, MovimientoInventario, StockPorAlmacen, Almacen,
     SolicitudMaterial, SolicitudMaterialDetalle, User,
+    SolicitudCompra, SolicitudCompraDetalle,
 )
 
 from ._core import (
@@ -80,6 +81,36 @@ def get_productos():
             Producto.categoria.ilike(like),
         ))
 
+    # Filtros avanzados (combinables con categoría/búsqueda).
+    # `stock`: 'bajo' = en o por debajo del mínimo; 'sin' = sin existencias.
+    stock_f = (request.args.get('stock') or '').strip().lower()
+    if stock_f == 'bajo':
+        query = query.filter(Producto.stock_actual <= Producto.stock_minimo)
+    elif stock_f == 'sin':
+        query = query.filter(Producto.stock_actual <= 0)
+    # `imagen`: 'con' = tiene foto cargada; 'sin' = falta foto.
+    imagen_f = (request.args.get('imagen') or '').strip().lower()
+    if imagen_f == 'con':
+        query = query.filter(Producto.imagen_url.isnot(None), Producto.imagen_url != '')
+    elif imagen_f == 'sin':
+        query = query.filter(db.or_(Producto.imagen_url.is_(None), Producto.imagen_url == ''))
+    # `unidad`: match exacto (pza, m, kg…).
+    unidad_f = (request.args.get('unidad') or '').strip()
+    if unidad_f:
+        query = query.filter(Producto.unidad == unidad_f)
+    # `compra=activa`: solo productos con una solicitud de compra en curso
+    # (PENDIENTE u ORDENADA). Mismo criterio que /solicitudes-compra/productos-activos.
+    if (request.args.get('compra') or '').strip().lower() in ('activa', '1', 'true', 'si'):
+        sub = (
+            db.session.query(SolicitudCompraDetalle.producto_id)
+            .join(SolicitudCompra, SolicitudCompra.id == SolicitudCompraDetalle.solicitud_compra_id)
+            .filter(
+                SolicitudCompraDetalle.producto_id.isnot(None),
+                SolicitudCompra.estatus.in_(['PENDIENTE', 'ORDENADA']),
+            )
+        )
+        query = query.filter(Producto.id.in_(sub))
+
     productos = (
         query
         .order_by(Producto.id)  # orden determinista: sin esto, offset/limit en
@@ -90,6 +121,20 @@ def get_productos():
         .all()
     )
     return jsonify([_producto_to_dict(p) for p in productos])
+
+
+@bp.route('/productos/unidades/', methods=['GET'])
+@_require_inventario
+def get_unidades():
+    """Unidades distintas en uso, para el select de filtro del catálogo."""
+    rows = (
+        Producto.query
+        .with_entities(Producto.unidad)
+        .filter(Producto.activo == True, Producto.unidad != None, Producto.unidad != '')  # noqa: E711,E712
+        .distinct()
+        .all()
+    )
+    return jsonify(sorted({r[0] for r in rows}, key=lambda s: s.lower()))
 
 
 @bp.route('/productos/bajo-minimo/', methods=['GET'])

@@ -579,3 +579,59 @@ class TestBulk:
             'action': 'baja', 'ids': [trab_a.id],
         })
         assert r.status_code == 403
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 9. FILTROS AVANZADOS + EXPORTACIÓN FILTRADA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFiltrosAvanzados:
+
+    @pytest.fixture
+    def trab_sin_salario(self, db):
+        t = Trabajador(
+            no_empleado='EMP-NS', nombre='Nora', nombre_apellidos='Salas',
+            activo=True, area='Almacén', puesto='Auxiliar',
+            tipo_nomina='Semanal', tipo_pago='EFECTIVO',
+            salario_real_pactado_x_sem=None,
+        )
+        db.session.add(t); db.session.commit()
+        return t
+
+    def test_filtro_tipo_nomina(self, client, admin, trab_a, trab_b):
+        # trab_a = Semanal, trab_b = Por hora
+        r = client.get('/api/trabajadores?tipo_nomina=Por hora', headers=_hdr(admin))
+        assert r.status_code == 200
+        codigos = {t['no_empleado'] for t in r.get_json()['items']}
+        assert codigos == {'EMP-B'}
+
+    def test_filtro_sin_salario(self, client, admin, trab_a, trab_b, trab_sin_salario):
+        r = client.get('/api/trabajadores?sin_salario=1', headers=_hdr(admin))
+        assert r.status_code == 200
+        codigos = {t['no_empleado'] for t in r.get_json()['items']}
+        assert codigos == {'EMP-NS'}
+
+    def test_filtros_combinados(self, client, admin, trab_a, trab_b, trab_sin_salario):
+        # Semanal + sin salario → solo EMP-NS (trab_a es Semanal pero con salario)
+        r = client.get('/api/trabajadores?tipo_nomina=Semanal&sin_salario=1', headers=_hdr(admin))
+        assert r.status_code == 200
+        codigos = {t['no_empleado'] for t in r.get_json()['items']}
+        assert codigos == {'EMP-NS'}
+
+    def test_endpoint_filtros_opciones(self, client, admin, trab_a, trab_sin_salario):
+        r = client.get('/api/trabajadores/filtros', headers=_hdr(admin))
+        assert r.status_code == 200
+        data = r.get_json()
+        assert 'Almacén' in data['areas']
+        assert 'Semanal' in data['tipos_nomina']
+        assert 'EFECTIVO' in data['tipos_pago']
+
+    def test_filtros_opciones_outsider_403(self, client, outsider):
+        r = client.get('/api/trabajadores/filtros', headers=_hdr(outsider))
+        assert r.status_code == 403
+
+    def test_export_respeta_filtros(self, client, admin, trab_a, trab_b):
+        # El export filtrado debe responder un XLSX (200) aceptando los params.
+        r = client.get('/api/trabajadores/exportar-todos?tipo_nomina=Por hora', headers=_hdr(admin))
+        assert r.status_code == 200
+        assert 'spreadsheetml' in r.headers.get('Content-Type', '')

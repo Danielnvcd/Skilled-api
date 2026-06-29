@@ -217,6 +217,69 @@ class TestProductos:
         assert resp.status_code == 200
         assert len(resp.get_json()) <= 1
 
+    # ── Filtros avanzados del catálogo ──────────────────────────────────────────
+
+    def test_filtro_stock_bajo(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        db.session.add_all([
+            Producto(codigo='SB-LOW', descripcion='Bajo', categoria='F', unidad='pza', stock_actual=2, stock_minimo=5),
+            Producto(codigo='SB-OK', descripcion='Ok', categoria='F', unidad='pza', stock_actual=50, stock_minimo=5),
+        ])
+        db.session.commit()
+        resp = client.get('/api/v1/productos/?stock=bajo')
+        assert resp.status_code == 200
+        codigos = {p['codigo'] for p in resp.get_json()}
+        assert 'SB-LOW' in codigos
+        assert 'SB-OK' not in codigos
+
+    def test_filtro_imagen_sin(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        db.session.add_all([
+            Producto(codigo='IMG-CON', descripcion='Con', categoria='F', unidad='pza',
+                     stock_actual=1, stock_minimo=0, imagen_url='http://x/y.jpg'),
+            Producto(codigo='IMG-SIN', descripcion='Sin', categoria='F', unidad='pza',
+                     stock_actual=1, stock_minimo=0),
+        ])
+        db.session.commit()
+        resp = client.get('/api/v1/productos/?imagen=sin')
+        assert resp.status_code == 200
+        codigos = {p['codigo'] for p in resp.get_json()}
+        assert 'IMG-SIN' in codigos
+        assert 'IMG-CON' not in codigos
+
+    def test_filtro_unidad_y_endpoint_unidades(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        db.session.add_all([
+            Producto(codigo='U-KG', descripcion='Kilo', categoria='F', unidad='kg', stock_actual=1, stock_minimo=0),
+            Producto(codigo='U-PZA', descripcion='Pieza', categoria='F', unidad='pza', stock_actual=1, stock_minimo=0),
+        ])
+        db.session.commit()
+        ru = client.get('/api/v1/productos/unidades/')
+        assert ru.status_code == 200
+        assert 'kg' in ru.get_json()
+        resp = client.get('/api/v1/productos/?unidad=kg')
+        assert resp.status_code == 200
+        codigos = {p['codigo'] for p in resp.get_json()}
+        assert codigos == {'U-KG'}
+
+    def test_filtro_compra_activa(self, client, inv_admin, db):
+        from app.models import SolicitudCompra, SolicitudCompraDetalle
+        _login(client, inv_admin.id, 'admin')
+        p_en = Producto(codigo='C-EN', descripcion='EnCompra', categoria='F', unidad='pza', stock_actual=1, stock_minimo=0)
+        p_no = Producto(codigo='C-NO', descripcion='SinCompra', categoria='F', unidad='pza', stock_actual=1, stock_minimo=0)
+        db.session.add_all([p_en, p_no]); db.session.flush()
+        sc = SolicitudCompra(solicitado_por_id=inv_admin.id, estatus='PENDIENTE')
+        db.session.add(sc); db.session.flush()
+        db.session.add(SolicitudCompraDetalle(
+            solicitud_compra_id=sc.id, producto_id=p_en.id, cantidad_solicitada=10,
+        ))
+        db.session.commit()
+        resp = client.get('/api/v1/productos/?compra=activa')
+        assert resp.status_code == 200
+        codigos = {p['codigo'] for p in resp.get_json()}
+        assert 'C-EN' in codigos
+        assert 'C-NO' not in codigos
+
     def test_actualizar_producto(self, client, inv_admin, db):
         _login(client, inv_admin.id, 'admin')
         p = Producto(codigo='UPD-001', descripcion='Orig', categoria='T',

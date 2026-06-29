@@ -28,7 +28,8 @@ class SolicitudMaterialDetalle(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     solicitud_id = db.Column(db.Integer, db.ForeignKey('solicitudes_material.id'), nullable=False, index=True)
     # producto_id es NULLABLE: una línea es MATERIAL (producto_id) o HERRAMIENTA (herramienta_id), XOR.
-    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=True)
+    # Indexado: la disponibilidad de un producto cuenta sus líneas de solicitud.
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=True, index=True)
     cantidad_solicitada = db.Column(db.Numeric(10, 2), nullable=False)
     cantidad_aprobada = db.Column(db.Numeric(10, 2), default=0)
     cantidad_entregada = db.Column(db.Numeric(10, 2), default=0)

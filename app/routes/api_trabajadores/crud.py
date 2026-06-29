@@ -28,6 +28,7 @@ from ._core import (
     bp,
     _authorized, _row_summary, _full_detail,
     _apply_payload, _replace_credenciales, _save_foto,
+    apply_trabajador_filtros,
 )
 
 
@@ -43,7 +44,6 @@ def listar():
 
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 10000)
-    q = (request.args.get('q') or '').strip()
     estado = (request.args.get('estado') or 'activos').lower()  # activos|bajas|todos
     sort = (request.args.get('sort') or 'nombre').lower()
     direccion = (request.args.get('dir') or 'asc').lower()
@@ -66,14 +66,9 @@ def listar():
         ids_trabajadores = {t.id for p in mis_proyectos for t in p.participantes}
         query = query.filter(Trabajador.id.in_(ids_trabajadores))
 
-    if q:
-        like = f'%{q}%'
-        query = query.filter(or_(
-            Trabajador.nombre.ilike(like),
-            Trabajador.nombre_apellidos.ilike(like),
-            Trabajador.no_empleado.ilike(like),
-            Trabajador.rfc.ilike(like),
-        ))
+    # Búsqueda libre + filtros avanzados (área, puesto, tipo nómina/pago, sin
+    # salario). Lógica compartida con la exportación vía apply_trabajador_filtros.
+    query = apply_trabajador_filtros(query, request.args)
 
     # Orden por columna con whitelist — un `sort` fuera de la lista cae al
     # default (nombre) en vez de 400, así un link viejo con un campo renombrado
@@ -104,6 +99,42 @@ def listar():
         'pages': pagination.pages,
         'has_next': pagination.has_next,
         'has_prev': pagination.has_prev,
+    })
+
+
+@bp.route('/filtros', methods=['GET'])
+@jwt_required
+def filtros():
+    """Opciones para los selects de filtro de la lista de empleados.
+
+    Devuelve los valores distintos (no vacíos) de área, puesto, tipo de nómina y
+    tipo de pago dentro del scope del rol: admin/super_admin ven todos; el
+    coordinador solo los de sus proyectos activos. Mismo gate de PII que el
+    listado — `inventario`/`solicitante_material` no entran.
+    """
+    role = current_user().role
+    if role not in ('admin', 'super_admin', 'coordinador'):
+        return jsonify({'error': 'Acceso denegado'}), 403
+
+    base = Trabajador.query
+    if role == 'coordinador':
+        mis_proyectos = Proyecto.query.options(selectinload(Proyecto.participantes)).filter_by(
+            activo=True, coordinador_id=current_user().id,
+        ).all()
+        ids_trabajadores = {t.id for p in mis_proyectos for t in p.participantes}
+        if not ids_trabajadores:
+            return jsonify({'areas': [], 'puestos': [], 'tipos_nomina': [], 'tipos_pago': []})
+        base = base.filter(Trabajador.id.in_(ids_trabajadores))
+
+    def _distinct(col):
+        rows = base.with_entities(col).filter(col != None, col != '').distinct().all()  # noqa: E711
+        return sorted({r[0] for r in rows}, key=lambda s: s.lower())
+
+    return jsonify({
+        'areas': _distinct(Trabajador.area),
+        'puestos': _distinct(Trabajador.puesto),
+        'tipos_nomina': _distinct(Trabajador.tipo_nomina),
+        'tipos_pago': _distinct(Trabajador.tipo_pago),
     })
 
 
