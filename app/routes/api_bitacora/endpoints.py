@@ -1,12 +1,11 @@
 """Endpoints: listado paginado y detalle con geolocalización de IP."""
 import ipaddress
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import jsonify, request
 from sqlalchemy import or_
 
-from app.extensions import db
 from app.models import AuditLog, User
 from app.routes._api_helpers import require_admin
 from app.routes.api_auth import jwt_required
@@ -45,7 +44,15 @@ def listar():
     if fecha_filtro:
         try:
             filter_date = datetime.strptime(fecha_filtro, '%Y-%m-%d').date()
-            query = query.filter(db.func.date(AuditLog.created_at) == filter_date)
+            # Comparación por rango [día, día+1) en vez de func.date(created_at):
+            # envolver la columna en una función la vuelve no-sargable y anula el
+            # índice de created_at. Con el rango el planner sí usa el índice.
+            inicio = datetime.combine(filter_date, datetime.min.time())
+            fin = inicio + timedelta(days=1)
+            query = query.filter(
+                AuditLog.created_at >= inicio,
+                AuditLog.created_at < fin,
+            )
         except ValueError:
             pass
 

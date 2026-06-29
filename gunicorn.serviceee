@@ -41,6 +41,14 @@ EnvironmentFile=/opt/nominas/.env
 #   shared_buffers de Postgres tras OS + Redis. NO subir workers a 6+ sin
 #   ampliar RAM a 16 GB — Postgres se queda sin cache y entra a swap.
 #
+#   CONEXIONES A POSTGRES: cada worker abre su propio pool SQLAlchemy. El total es
+#       workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW)
+#   Con 4 workers y los defaults 10+10 (ver más abajo) = 80 conexiones. El
+#   max_connections de Postgres (default 100, menos 3 superuser_reserved) deja
+#   ~17 libres para psql/backups. Esta es la SEGUNDA razón para no subir a 6
+#   workers: 6 × 20 = 120 > 100 → la app se quedaría sin conexiones. Si subes
+#   workers o el pool, sube también max_connections en postgresql.conf.
+#
 #   Trade-off de gevent vs gthread: gevent gana en concurrencia I/O (WS, REST
 #   con DB) pero un export pesado (PDF, Excel grande) bloquea el worker entero
 #   mientras dura. Si los exports empiezan a degradar latencia, considerar
@@ -66,7 +74,8 @@ EnvironmentFile=/opt/nominas/.env
 #
 # --limit-request-*: defaults son altos; los acotamos contra HTTP bomb DoS.
 #
-# Logs a stdout/stderr → journald los captura (`journalctl -u gunicorn`).
+# Logs a stdout/stderr → journald los captura. El unit desplegado se llama
+# `nominas.service`, así que se consulta con `journalctl -u nominas -f`.
 ExecStart=/opt/nominas/venv/bin/gunicorn \
     --workers 4 \
     --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
@@ -136,10 +145,11 @@ ReadWritePaths=/opt/nominas/uploads /opt/nominas/data
 
 # Limites de recursos: previenen runaway processes (memory bomb, fork bomb).
 # Valores dimensionados para Lenovo Tiny i5 6ta / 8 GB RAM con la config
-# 4 workers × 6 threads. NOFILE 8192 cubre con holgura: cada conexión HTTP/WS
-# consume 1 fd, más fds de sockets a Postgres/Redis y archivos abiertos en
-# exports. NPROC 512 deja margen para threads + procesos hijos de subprocess
-# (xhtml2pdf, pandas) sin permitir un fork-bomb.
+# 4 workers gevent × hasta 1000 greenlets c/u (NO threads — gevent es
+# concurrencia cooperativa monohilo). NOFILE 8192 cubre con holgura: cada
+# conexión HTTP/WS consume 1 fd, más fds de sockets a Postgres/Redis y archivos
+# abiertos en exports. NPROC 512 deja margen para los procesos hijos de
+# subprocess (xhtml2pdf, pandas) sin permitir un fork-bomb.
 LimitNOFILE=8192
 LimitNPROC=512
 
@@ -152,6 +162,12 @@ Environment="PIP_DISABLE_PIP_VERSION_CHECK=1"
 # en run.py (la cabecera del archivo gatea `monkey.patch_all()` con esta var).
 # En dev local sin esta variable, run.py NO parchea y socketio.run usa Werkzeug.
 Environment="SOCKETIO_ASYNC_MODE=gevent"
+
+# Pool de conexiones a Postgres (lo lee app/__init__.py). NO se declaran aquí
+# con Environment= a propósito: van en /opt/nominas/.env para poder ajustarlos
+# sin editar el unit (y porque Environment= sobreescribiría al EnvironmentFile).
+# Defaults del código si no se setean: DB_POOL_SIZE=10, DB_MAX_OVERFLOW=10.
+# Recordatorio: workers × (DB_POOL_SIZE + DB_MAX_OVERFLOW) ≤ max_connections.
 
 [Install]
 WantedBy=multi-user.target

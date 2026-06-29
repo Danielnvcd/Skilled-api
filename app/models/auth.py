@@ -73,7 +73,12 @@ class TwoFactorBackupCode(db.Model):
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user = db.Column(db.String(80))
+    # `user` se usa en el JOIN con User.username (dashboard / bitácora) y en
+    # filtros — indexarlo evita escanear toda la tabla al cruzar por usuario.
+    user = db.Column(db.String(80), index=True)
     action = db.Column(db.String(200))
     ip = db.Column(db.String(45), index=True)
-    created_at = db.Column(db.DateTime, default=_now_utc)
+    # created_at es la columna de orden por defecto (ORDER BY created_at DESC)
+    # de la bitácora y del dashboard. La tabla crece sin límite (una fila por
+    # acción), así que sin índice cada carga hacía un full sort. Indexado.
+    created_at = db.Column(db.DateTime, default=_now_utc, index=True)

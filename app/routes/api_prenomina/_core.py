@@ -7,7 +7,6 @@ de PDF de recibos.
 No registres rutas en este archivo. Las rutas viven en los submódulos por
 dominio: semanas.py, ajustes.py, envio.py.
 """
-import logging
 import os
 from datetime import datetime
 from decimal import Decimal
@@ -221,6 +220,19 @@ def calcular_preview_prenomina(fecha_obj, reportes):
     for pr in todos_prestamos:
         prestamos_por_trabajador.setdefault(pr.trabajador_id, []).append(pr)
 
+    # Batch-load: ajustes Inbursa de la semana para TODOS los trabajadores en un
+    # solo query. Antes esto era un query por trabajador dentro del loop (N+1):
+    # con 500 empleados eran 500 round-trips. La fecha de la semana es la misma
+    # para todos, así que basta un IN + rango y luego agrupar en memoria.
+    ajustes_bulk = AjusteDescuento.query.filter(
+        AjusteDescuento.trabajador_id.in_(trabajadores_ids),
+        AjusteDescuento.fecha_descuento >= fecha_obj,
+        AjusteDescuento.fecha_descuento <= fecha_fin_semana,
+    ).all()
+    ajustes_por_trabajador = {}
+    for aj in ajustes_bulk:
+        ajustes_por_trabajador.setdefault(aj.trabajador_id, []).append(aj)
+
     # Agrupar registros por trabajador (sin queries adicionales)
     registros_por_trabajador = {}
     for reg in all_registros:
@@ -274,21 +286,12 @@ def calcular_preview_prenomina(fecha_obj, reportes):
 
         # Deducciones maestras
         p.descuento_infonavit = to_dec(trabajador.infonavit)
-        # Ajuste Inbursa: sumar descuentos dinámicos del módulo de ajustes
-        # Busca descuentos cuya fecha caiga dentro de la semana de prenómina
-        ajuste_descuentos = AjusteDescuento.query.filter(
-            AjusteDescuento.trabajador_id == trabajador.id,
-            AjusteDescuento.fecha_descuento >= fecha_obj,
-            AjusteDescuento.fecha_descuento <= fecha_fin_semana
-        ).all()
-        logging.info(
-            f"Ajuste Inbursa para {trabajador.nombre_apellidos}: "
-            f"semana {fecha_obj}-{fecha_fin_semana}, "
-            f"descuentos encontrados: {len(ajuste_descuentos)}, "
-            f"montos: {[float(d.monto) for d in ajuste_descuentos]}"
-        )
+        # Ajuste Inbursa: descuentos dinámicos del módulo de ajustes cuya fecha
+        # cae dentro de la semana de prenómina (desde el batch pre-cargado, sin
+        # query por trabajador). Si no hay, cae al monto fijo del perfil.
+        ajuste_descuentos = ajustes_por_trabajador.get(t_id, [])
         if ajuste_descuentos:
-            p.ajuste_inbursa = sum(to_dec(d.monto) for d in ajuste_descuentos)
+            p.ajuste_inbursa = sum((to_dec(d.monto) for d in ajuste_descuentos), Decimal('0'))
         else:
             p.ajuste_inbursa = to_dec(trabajador.ajuste_inbursa)
 
