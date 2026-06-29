@@ -43,6 +43,27 @@ def get_movimientos():
         if len(tipo) > 20:
             return jsonify({'detail': "Parámetro 'tipo' demasiado largo"}), 422
         q = q.filter(MovimientoInventario.tipo == tipo.upper())
+
+    # Rango de fechas (YYYY-MM-DD). Server-side a propósito: el filtro client-side
+    # solo veía los últimos `limit` movimientos; con rango el usuario alcanza
+    # movimientos viejos sin levantar el tope. `hasta` es inclusivo (día completo).
+    def _parse_dia(nombre):
+        v = (request.args.get(nombre) or '').strip()
+        if not v:
+            return None
+        try:
+            return datetime.datetime.strptime(v, '%Y-%m-%d').date()
+        except ValueError:
+            return 'ERR'
+    desde = _parse_dia('desde')
+    hasta = _parse_dia('hasta')
+    if desde == 'ERR' or hasta == 'ERR':
+        return jsonify({'detail': "Fecha inválida: usa formato YYYY-MM-DD"}), 422
+    if desde:
+        q = q.filter(MovimientoInventario.fecha >= datetime.datetime.combine(desde, datetime.time.min))
+    if hasta:
+        q = q.filter(MovimientoInventario.fecha < datetime.datetime.combine(hasta, datetime.time.min) + datetime.timedelta(days=1))
+
     movs = q.order_by(MovimientoInventario.fecha.desc()).limit(limit).all()
     return jsonify([_movimiento_to_dict(m) for m in movs])
 

@@ -60,7 +60,9 @@ class SolicitudCompraDetalle(db.Model):
     # producto_id es NULLABLE: una línea puede ser un producto del catálogo
     # (producto_id) o un ítem de texto libre que aún no existe en catálogo
     # (descripcion_libre). Al menos uno de los dos debe venir (validado en app).
-    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=True)
+    # Indexado: se consulta por producto (filtro "En compra" del catálogo y los
+    # indicadores de compra activa por producto).
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=True, index=True)
     descripcion_libre = db.Column(db.String(250), nullable=True)
     unidad = db.Column(db.String(50), nullable=True)
     cantidad_solicitada = db.Column(db.Numeric(10, 2), nullable=False)
