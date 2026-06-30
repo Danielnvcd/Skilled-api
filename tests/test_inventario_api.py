@@ -480,6 +480,153 @@ class TestEstantes:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 5-bis. REJILLA DE ESTANTE + STOCK POR CELDA (Pausa 11)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestEstanteLayout:
+
+    def _setup(self, db, *, stock=100, filas=3, columnas=4):
+        a = Almacen(nombre='Alm Grid', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(a); db.session.commit()
+        e = Estante(nombre='Rack G', almacen_id=a.id, qr_code=str(uuid.uuid4()),
+                    activo=True, filas=filas, columnas=columnas)
+        p = Producto(codigo='GR-001', descripcion='Tubo', categoria='F', unidad='pza',
+                     stock_actual=stock, stock_minimo=0)
+        db.session.add_all([e, p]); db.session.commit()
+        db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=a.id, cantidad=stock))
+        db.session.commit()
+        return a, e, p
+
+    def test_crear_estante_con_rejilla(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a = Almacen(nombre='A', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(a); db.session.commit()
+        resp = client.post('/api/v1/estantes/', json={
+            'nombre': 'R1', 'almacen_id': a.id, 'filas': 2, 'columnas': 5,
+        })
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['filas'] == 2 and body['columnas'] == 5
+
+    def test_guardar_y_leer_layout(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db)
+        resp = client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 3, 'columna': 2, 'cantidad': 40}],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        lay = client.get(f'/api/v1/estantes/{e.id}/layout').get_json()
+        assert len(lay['celdas']) == 1
+        celda = lay['celdas'][0]
+        assert celda['fila'] == 3 and celda['columna'] == 2 and celda['cantidad'] == 40
+        assert lay['stock_almacen'][str(p.id)] == 100
+
+    def test_layout_rechaza_posicion_fuera_de_rejilla(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db, filas=2, columnas=2)
+        resp = client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 9, 'columna': 1, 'cantidad': 1}],
+        })
+        assert resp.status_code == 422
+
+    def test_layout_rechaza_cantidad_mayor_que_stock(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db, stock=10)
+        resp = client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 1, 'columna': 1, 'cantidad': 25}],
+        })
+        assert resp.status_code == 422
+        assert 'errores' in resp.get_json()
+
+    def test_layout_fila_sin_columna_es_invalido(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db)
+        resp = client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 1, 'columna': None, 'cantidad': 1}],
+        })
+        assert resp.status_code == 422
+
+    def test_legacy_set_productos_sigue_funcionando(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db)
+        resp = client.put(f'/api/v1/estantes/{e.id}/productos', json={'producto_ids': [p.id]})
+        assert resp.status_code == 200
+        lay = client.get(f'/api/v1/estantes/{e.id}/layout').get_json()
+        # Asignado pero sin ubicar (fila/columna NULL, cantidad 0).
+        assert len(lay['celdas']) == 1
+        assert lay['celdas'][0]['fila'] is None and lay['celdas'][0]['cantidad'] == 0
+
+    def test_scan_qr_devuelve_productos_del_rack_con_ubicacion(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db)
+        client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 2, 'columna': 3, 'cantidad': 12}],
+        })
+        resp = client.get(f'/api/v1/estantes/{e.qr_code}/inventario')
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body['productos']) == 1
+        prod = body['productos'][0]
+        assert prod['id'] == p.id
+        assert prod['ubicacion'] == {'fila': 2, 'columna': 3, 'cantidad': 12}
+
+    def test_reducir_rejilla_deja_sin_ubicar(self, client, inv_admin, db):
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db, filas=4, columnas=4)
+        client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 4, 'columna': 4, 'cantidad': 5}],
+        })
+        # Reducir a 2x2 → la posición (4,4) queda fuera y pasa a "sin ubicar".
+        resp = client.put(f'/api/v1/estantes/{e.id}', json={'filas': 2, 'columnas': 2})
+        assert resp.status_code == 200
+        lay = client.get(f'/api/v1/estantes/{e.id}/layout').get_json()
+        celda = lay['celdas'][0]
+        assert celda['fila'] is None and celda['columna'] is None
+        # No pierde la cantidad capturada.
+        assert celda['cantidad'] == 5
+
+    def test_mover_estante_de_almacen_resetea_celdas(self, client, inv_admin, db):
+        """Mover un estante a otro almacén deja sus celdas 'sin ubicar' y en 0:
+        el sub-libro de celdas es POR almacén y las unidades físicas no viajan
+        con el registro del estante (evita romper Σceldas ≤ stock en el destino)."""
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db)
+        client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 1, 'columna': 1, 'cantidad': 30}],
+        })
+        destino = Almacen(nombre='Alm Destino', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(destino); db.session.commit()
+
+        resp = client.put(f'/api/v1/estantes/{e.id}', json={'almacen_id': destino.id})
+        assert resp.status_code == 200
+
+        lay = client.get(f'/api/v1/estantes/{e.id}/layout').get_json()
+        assert lay['estante']['almacen_id'] == destino.id
+        # La colocación sigue (el producto continúa asignado al estante) pero
+        # queda sin ubicar y en 0 — sin 'sobrante' contra el almacén destino.
+        celda = lay['celdas'][0]
+        assert celda['fila'] is None and celda['columna'] is None
+        assert celda['cantidad'] == 0
+        assert lay['sobrante_por_producto'] == {}
+
+    def test_editar_estante_sin_cambiar_almacen_conserva_celdas(self, client, inv_admin, db):
+        """Re-enviar el mismo almacen_id (o editar solo el nombre) NO debe
+        resetear las celdas: el reseteo es exclusivo del cambio real de bodega."""
+        _login(client, inv_admin.id)
+        a, e, p = self._setup(db)
+        client.put(f'/api/v1/estantes/{e.id}/layout', json={
+            'posiciones': [{'producto_id': p.id, 'fila': 2, 'columna': 2, 'cantidad': 15}],
+        })
+        resp = client.put(f'/api/v1/estantes/{e.id}', json={
+            'nombre': 'Rack G renombrado', 'almacen_id': a.id,
+        })
+        assert resp.status_code == 200
+        lay = client.get(f'/api/v1/estantes/{e.id}/layout').get_json()
+        celda = lay['celdas'][0]
+        assert celda['fila'] == 2 and celda['columna'] == 2 and celda['cantidad'] == 15
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # 6. MOVIMIENTOS
 # ═══════════════════════════════════════════════════════════════════════════════
 

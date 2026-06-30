@@ -17,7 +17,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.models import (
     Producto, SolicitudMaterial, SolicitudMaterialDetalle,
-    MovimientoInventario, Almacen,
+    MovimientoInventario, Almacen, Estante, ProductoEstante,
     Trabajador, Herramienta, HerramientaUnidad, AsignacionHerramienta,
     crear_evento_herramienta,
 )
@@ -29,6 +29,7 @@ from ._core import (
     _parse_or_422,
     SolicitudCreateSchema, SolicitudUpdateEstadoSchema,
     SolicitudDetallePatchSchema, EntregarSolicitudSchema,
+    EntregaDirectaSchema,
     _solicitud_to_dict, _solicitud_detalle_to_dict,
     _audit,
     _almacen_default_id, _lock_stock, _recalcular_cache_stock,
@@ -187,6 +188,245 @@ def create_solicitud():
     return jsonify(_solicitud_to_dict(nueva))
 
 
+@bp.route('/solicitudes/entrega-directa', methods=['POST'])
+@limiter.limit(
+    "20/minute",
+    key_func=lambda: f"ip:{get_real_client_ip_flask()}",
+)
+@_require_inventario_admin
+def create_entrega_directa():
+    """Entrega directa de mostrador (solo inventario/admin).
+
+    El almacenista surte material para un proyecto en el acto, sin solicitud
+    previa del trabajador. Crea una SolicitudMaterial ya ENTREGADA + un
+    movimiento SALIDA por línea, descontando del almacén origen. El solicitante
+    real (trabajador o nombre libre) se guarda aparte del capturista, y el PDF
+    lo muestra.
+
+    Body: `{proyecto, proyecto_id?, solicitante_trabajador_id?,
+             solicitante_nombre?, almacen_origen_id?, notas?, motivo?,
+             detalles: [{producto_id, cantidad, estante_id?}]}`.
+
+    Solo MATERIAL: no maneja herramientas (esas siguen por solicitud normal).
+    No usa reservas: descuenta stock físico directo.
+    """
+    from app.models import Proyecto
+    user = request.current_user
+
+    data, err = _parse_or_422(EntregaDirectaSchema(), request.get_json(silent=True))
+    if err: return err
+
+    proyecto = (data.get('proyecto') or '').strip()
+    if not proyecto:
+        return jsonify({'detail': 'Debes seleccionar un proyecto'}), 422
+
+    # Solicitante real: trabajador del sistema o nombre libre (al menos uno).
+    trab_id = data.get('solicitante_trabajador_id')
+    nombre_libre = (data.get('solicitante_nombre') or '').strip() or None
+    trabajador = None
+    if trab_id is not None:
+        trabajador = Trabajador.query.filter(
+            Trabajador.id == trab_id,
+            Trabajador.activo == True,  # noqa: E712
+        ).first()
+        if not trabajador:
+            return jsonify({'detail': f'Trabajador #{trab_id} no existe o está inactivo'}), 422
+    if trabajador is None and not nombre_libre:
+        return jsonify({
+            'detail': 'Indica quién recibe el material: elige un trabajador o escribe un nombre.'
+        }), 422
+
+    # Resolver proyecto_id (igual que create_solicitud): explícito o por texto.
+    proyecto_id = data.get('proyecto_id')
+    if proyecto_id is not None:
+        proy = Proyecto.query.filter(Proyecto.id == proyecto_id).first()
+        if not proy:
+            return jsonify({'detail': f'Proyecto #{proyecto_id} no existe'}), 422
+    else:
+        proy = Proyecto.query.filter(Proyecto.numero_proyecto == proyecto).first()
+        proyecto_id = proy.id if proy else None
+
+    # Almacén origen (explícito o default).
+    almacen_id = data.get('almacen_origen_id') or _almacen_default_id()
+    if not almacen_id:
+        return jsonify({'detail': 'No hay bodegas registradas para descontar stock'}), 400
+    almacen = Almacen.query.filter(Almacen.id == almacen_id, Almacen.activo == True).first()  # noqa: E712
+    if not almacen:
+        return jsonify({'detail': f'Almacén #{almacen_id} no existe o está inactivo'}), 404
+
+    # Validar líneas: producto activo, regla de decimales por unidad, cantidad > 0.
+    # Sumamos por producto (una línea por producto puede repetirse) para validar
+    # y descontar stock una sola vez por producto.
+    estante_por_producto: dict[int, int] = {}
+    delta_por_producto: dict[int, Decimal] = {}
+    productos_cache: dict[int, Producto] = {}
+    errores = []
+    for idx, det in enumerate(data['detalles']):
+        pid = det['producto_id']
+        prod = productos_cache.get(pid)
+        if prod is None:
+            prod = Producto.query.filter(Producto.id == pid, Producto.activo == True).first()  # noqa: E712
+            if not prod:
+                errores.append(f"Línea {idx+1}: producto #{pid} no existe o inactivo")
+                continue
+            productos_cache[pid] = prod
+        cant = Decimal(str(det['cantidad']))
+        if cant <= 0:
+            errores.append(f"Línea {idx+1}: la cantidad debe ser mayor a 0")
+            continue
+        if not _unidad_permite_decimales(prod.unidad) and not _es_entero(cant):
+            errores.append(
+                f"Línea {idx+1}: '{prod.descripcion}' se entrega en cantidades enteras "
+                f"(unidad: {prod.unidad or 'pieza'})"
+            )
+            continue
+        delta_por_producto[pid] = delta_por_producto.get(pid, Decimal('0')) + cant
+        # Si vienen varias líneas del mismo producto con distinto estante, nos
+        # quedamos con el último indicado (best-effort para el sub-libro de celdas).
+        if det.get('estante_id'):
+            estante_por_producto[pid] = det['estante_id']
+
+    if errores:
+        return jsonify({'detail': errores}), 422
+    if not delta_por_producto:
+        return jsonify({'detail': 'Ninguna línea con cantidad mayor a 0'}), 422
+
+    motivo_base = (data.get('motivo') or '').strip() or f'Entrega directa — {proyecto}'
+
+    try:
+        # Lock determinístico (id asc) sobre Producto + StockPorAlmacen, validar
+        # stock en el almacén y descontar. Sin reservas: es entrega inmediata.
+        for pid in sorted(delta_por_producto.keys()):
+            cant_total = delta_por_producto[pid]
+            producto = (
+                Producto.query
+                .with_for_update(nowait=True)
+                .filter(Producto.id == pid)
+                .first()
+            )
+            if not producto:
+                db.session.rollback()
+                return jsonify({'detail': f'Producto #{pid} no encontrado'}), 404
+            productos_cache[pid] = producto
+
+            stock_almacen = _lock_stock(pid, almacen_id)
+            disponible = stock_almacen.cantidad or Decimal('0')
+            if disponible < cant_total:
+                db.session.rollback()
+                return jsonify({
+                    'detail': (
+                        f'Stock insuficiente en {almacen.nombre} para {producto.codigo}: '
+                        f'requiere {cant_total} {producto.unidad}, disponible {disponible}.'
+                    ),
+                }), 409
+            stock_almacen.cantidad = disponible - cant_total
+
+        # Crear la solicitud ENTREGADA + sus líneas + las SALIDAs.
+        nueva = SolicitudMaterial(
+            solicitante_id=user.id,
+            entrega_directa=True,
+            solicitante_trabajador_id=(trabajador.id if trabajador else None),
+            solicitante_nombre=(None if trabajador else nombre_libre),
+            proyecto=proyecto,
+            proyecto_id=proyecto_id,
+            notas=data.get('notas'),
+            estatus='ENTREGADA',
+            fecha_cierre=datetime.datetime.now(),
+            entregada_por_id=user.id,
+        )
+        db.session.add(nueva)
+        db.session.flush()
+
+        for pid in sorted(delta_por_producto.keys()):
+            cant_total = delta_por_producto[pid]
+            db.session.add(SolicitudMaterialDetalle(
+                solicitud_id=nueva.id,
+                tipo_item='MATERIAL',
+                producto_id=pid,
+                cantidad_solicitada=cant_total,
+                cantidad_aprobada=cant_total,
+                cantidad_entregada=cant_total,
+            ))
+            db.session.add(MovimientoInventario(
+                tipo='SALIDA',
+                producto_id=pid,
+                cantidad=cant_total,
+                almacen_origen_id=almacen_id,
+                motivo=motivo_base,
+                usuario_id=user.id,
+            ))
+
+            # Descuento opcional del sub-libro de celdas (best-effort, clamp a 0).
+            est_id = estante_por_producto.get(pid)
+            if est_id:
+                est = Estante.query.filter(Estante.id == est_id).first()
+                if est and est.almacen_id == almacen_id:
+                    pe = ProductoEstante.query.filter_by(
+                        producto_id=pid, estante_id=est_id,
+                    ).first()
+                    if pe is not None:
+                        nuevo_pe = Decimal(str(pe.cantidad or 0)) - cant_total
+                        pe.cantidad = nuevo_pe if nuevo_pe > 0 else Decimal('0')
+
+            _recalcular_cache_stock(productos_cache[pid])
+
+        quien = trabajador.nombre_completo if trabajador else nombre_libre
+        _audit(
+            user,
+            f"Entrega directa #{nueva.id} → {quien} — proyecto: {proyecto} "
+            f"({len(delta_por_producto)} productos, almacén #{almacen_id})",
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        if 'could not obtain lock' in str(exc).lower():
+            return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
+        raise
+
+    db.session.refresh(nueva)
+    _ = list(nueva.detalles)
+    emit_to_role(_SOL_ROLES, 'solicitud:changed', {
+        'id': nueva.id, 'action': 'entrega_directa',
+    })
+    emit_to_role(_INV_ROLES, 'movimiento:changed', {
+        'origen': 'entrega_directa', 'solicitud_id': nueva.id,
+    })
+    return jsonify(_solicitud_to_dict(nueva))
+
+
+@bp.route('/trabajadores-busqueda', methods=['GET'])
+@_require_inventario_admin
+def buscar_trabajadores_inventario():
+    """Typeahead de trabajadores activos para la entrega directa (solo
+    inventario/admin). Endpoint propio del módulo para no depender del scope
+    de rol del módulo de Trabajadores. Devuelve id + nombre + nº empleado.
+
+    Query params: q (texto), limit (1..50, default 20)."""
+    from ._core import _int_arg
+    q = (request.args.get('q') or '').strip()
+    limit, err = _int_arg('limit', 20, 1, 50)
+    if err: return err
+
+    query = Trabajador.query.filter(Trabajador.activo == True)  # noqa: E712
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(
+            Trabajador.nombre.ilike(like),
+            Trabajador.nombre_apellidos.ilike(like),
+            Trabajador.no_empleado.ilike(like),
+        ))
+    trabajadores = query.order_by(Trabajador.nombre.asc()).limit(limit).all()
+    return jsonify([
+        {
+            'id': t.id,
+            'nombre_completo': t.nombre_completo,
+            'no_empleado': t.no_empleado,
+            'puesto': t.puesto,
+        }
+        for t in trabajadores
+    ])
+
+
 @bp.route('/solicitudes/', methods=['GET'])
 @_require_login
 def get_solicitudes():
@@ -217,6 +457,66 @@ def get_solicitudes():
         .all()
     )
     return jsonify([_solicitud_to_dict(s) for s in solicitudes])
+
+
+@bp.route('/solicitudes/<int:sol_id>/ubicaciones', methods=['GET'])
+@_require_inventario_admin
+def solicitud_ubicaciones(sol_id: int):
+    """Dónde está cada material de la solicitud, para surtir más rápido (Pausa 11).
+
+    Por cada línea MATERIAL devuelve sus colocaciones (almacén → estante →
+    fila/columna → cantidad en la celda), ordenadas para recorrer el almacén.
+    Solo lectura: no toca stock ni reservas.
+    """
+    sol = (
+        SolicitudMaterial.query
+        .options(selectinload(SolicitudMaterial.detalles))
+        .filter(SolicitudMaterial.id == sol_id)
+        .first()
+    )
+    if not sol:
+        return jsonify({'detail': 'Solicitud no encontrada'}), 404
+
+    pids = sorted({
+        d.producto_id for d in (sol.detalles or [])
+        if (d.tipo_item or 'MATERIAL').upper() == 'MATERIAL' and d.producto_id
+    })
+
+    por_producto: dict[str, dict] = {}
+    if pids:
+        filas = (
+            db.session.query(ProductoEstante, Estante, Almacen, Producto)
+            .join(Estante, Estante.id == ProductoEstante.estante_id)
+            .join(Almacen, Almacen.id == Estante.almacen_id)
+            .join(Producto, Producto.id == ProductoEstante.producto_id)
+            .filter(
+                ProductoEstante.producto_id.in_(pids),
+                Estante.activo == True,  # noqa: E712
+            )
+            .order_by(Almacen.nombre.asc(), Estante.nombre.asc(),
+                      ProductoEstante.fila.asc(), ProductoEstante.columna.asc())
+            .all()
+        )
+        for pe, est, alm, prod in filas:
+            entry = por_producto.setdefault(str(pe.producto_id), {
+                'producto': {
+                    'id': prod.id, 'codigo': prod.codigo,
+                    'descripcion': prod.descripcion, 'unidad': prod.unidad,
+                    'stock_actual': float(prod.stock_actual or 0),
+                },
+                'ubicaciones': [],
+            })
+            entry['ubicaciones'].append({
+                'almacen_id': alm.id,
+                'almacen_nombre': alm.nombre,
+                'estante_id': est.id,
+                'estante_nombre': est.nombre,
+                'fila': pe.fila,
+                'columna': pe.columna,
+                'cantidad': float(pe.cantidad or 0),
+            })
+
+    return jsonify({'por_producto': por_producto})
 
 
 @bp.route('/solicitudes/<int:sol_id>/estado', methods=['PATCH'])
@@ -310,6 +610,17 @@ def update_solicitud_estado(sol_id: int):
             sol.fecha_cierre = None
         else:
             sol.fecha_cierre = datetime.datetime.now()
+
+        # Trazabilidad de quién resolvió la solicitud.
+        if nuevo_estado == 'APROBADA':
+            sol.aprobada_por_id = request.current_user.id
+            sol.entregada_por_id = None
+        elif nuevo_estado == 'ENTREGADA':
+            sol.entregada_por_id = request.current_user.id
+        elif nuevo_estado in ('PENDIENTE', 'RECHAZADA'):
+            # Al reabrir o rechazar deja de estar aprobada/entregada por alguien.
+            sol.aprobada_por_id = None
+            sol.entregada_por_id = None
 
         if estado_previo != nuevo_estado:
             _audit(request.current_user, f"Solicitud #{sol_id} estatus: {estado_previo} → {nuevo_estado}")
@@ -469,6 +780,8 @@ def entregar_solicitud(sol_id: int):
         }), 409
 
     detalles_por_id = {d.id: d for d in (sol.detalles or [])}
+    # Pausa 11: de qué estante (celda) surte cada línea, si el almacenista lo eligió.
+    estante_por_detalle = {item['detalle_id']: item.get('estante_id') for item in data['entregas']}
     vistos: set[int] = set()
     # MATERIAL: (det, delta, baseline). HERRAMIENTA: (det, delta_int, baseline_int).
     entregas_material: list[tuple[SolicitudMaterialDetalle, Decimal, Decimal]] = []
@@ -685,6 +998,21 @@ def entregar_solicitud(sol_id: int):
             )
             db.session.add(mov)
 
+            # Pausa 11 — descuento opcional de la celda elegida. Best-effort:
+            # el stock autoritativo ya bajó de StockPorAlmacen arriba; aquí solo
+            # mantenemos el sub-libro de celdas al día. Clamp a 0; si el estante
+            # no pertenece al almacén de origen o no hay celda, se ignora.
+            est_id = estante_por_detalle.get(det.id)
+            if est_id:
+                est = Estante.query.filter(Estante.id == est_id).first()
+                if est and est.almacen_id == almacen_id:
+                    pe = ProductoEstante.query.filter_by(
+                        producto_id=det.producto_id, estante_id=est_id,
+                    ).first()
+                    if pe is not None:
+                        nuevo = Decimal(str(pe.cantidad or 0)) - delta
+                        pe.cantidad = nuevo if nuevo > 0 else Decimal('0')
+
         # Refrescar cache stock_actual por cada producto tocado.
         for producto in productos_locked.values():
             _recalcular_cache_stock(producto)
@@ -745,6 +1073,7 @@ def entregar_solicitud(sol_id: int):
         if completa:
             sol.estatus = 'ENTREGADA'
             sol.fecha_cierre = datetime.datetime.now()
+            sol.entregada_por_id = user.id
             # Por seguridad liberamos cualquier reserva sobrante (debería ser 0).
             restos = _reservas_de_solicitud(sol)
             if restos:
@@ -896,7 +1225,9 @@ def imprimir_solicitud(sol_id: int):
 
     # Etiqueta de estado legible (incluye el caso de entrega parcial, que antes el
     # PDF no reflejaba en absoluto).
-    if sol.estatus == 'ENTREGADA':
+    if sol.estatus == 'ENTREGADA' and sol.entrega_directa:
+        estado_label = 'ENTREGA DIRECTA — surtido en mostrador'
+    elif sol.estatus == 'ENTREGADA':
         estado_label = 'ENTREGADA — surtido completo'
     elif sol.estatus == 'APROBADA' and hay_entregas and hay_pendiente:
         estado_label = 'ENTREGA PARCIAL — faltan piezas por surtir'
@@ -913,7 +1244,9 @@ def imprimir_solicitud(sol_id: int):
 
     folio = f'SOL-{sol.id:06d}'
     fecha_str = sol.fecha_creacion.strftime('%d/%m/%Y %H:%M') if sol.fecha_creacion else ''
-    solicitante = sol.solicitante.full_name or sol.solicitante.username if sol.solicitante else '—'
+    # Nombre del solicitante REAL (trabajador / texto libre en entregas directas;
+    # el capturista en solicitudes normales).
+    solicitante = sol.solicitante_display
 
     pdf = _render_solicitud_pdf(
         folio=folio, fecha_str=fecha_str, solicitante=solicitante,

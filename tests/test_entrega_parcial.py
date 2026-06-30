@@ -17,6 +17,7 @@ from app.models import (
     User, Almacen, Producto, StockPorAlmacen, MovimientoInventario,
     SolicitudMaterial, SolicitudMaterialDetalle,
     Trabajador, Herramienta, HerramientaUnidad, AsignacionHerramienta,
+    Estante, ProductoEstante,
 )
 from app.routes.api_auth import _encode_access_token
 
@@ -128,6 +129,15 @@ class TestPatchDetalle:
         det = sol['detalles'][0]
         assert det['cantidad_aprobada'] == 10
         assert det['cantidad_entregada'] == 0
+
+    def test_aprobar_registra_quien_aprobo(self, client, solicitante, inv_admin, producto):
+        """Al aprobar se guarda quién la aceptó (aprobada_por)."""
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 10},
+        ])
+        assert sol['aprobada_por'] == (inv_admin.full_name or inv_admin.username)
+        assert sol['entregada_por'] is None
+        assert sol['entrega_directa'] is False
 
     def test_bajar_cantidad_aprobada_libera_reserva(self, client, db, solicitante, inv_admin, producto):
         sol = _crear_y_aprobar(client, solicitante, inv_admin, [
@@ -768,3 +778,185 @@ class TestDecimalesPorUnidad:
         assert r.status_code == 200, r.get_json()
         assert r.get_json()['estatus'] == 'APROBADA'  # 2.5 de 10 → parcial
         assert float(r.get_json()['detalles'][0]['cantidad_entregada']) == 2.5
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pausa 11 — ubicaciones al atender + descuento de celda al entregar
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestUbicacionesYCelda:
+
+    def _colocar(self, db, producto, almacen, fila=2, columna=3, cantidad=30):
+        """Crea un estante en `almacen` y coloca `producto` en una celda."""
+        e = Estante(nombre='Rack EP', almacen_id=almacen.id, qr_code=str(uuid.uuid4()),
+                    activo=True, filas=4, columnas=4)
+        db.session.add(e); db.session.commit()
+        db.session.add(ProductoEstante(
+            producto_id=producto.id, estante_id=e.id,
+            fila=fila, columna=columna, cantidad=Decimal(str(cantidad)),
+        ))
+        db.session.commit()
+        return e
+
+    def test_ubicaciones_devuelve_celda(self, client, db, solicitante, inv_admin, producto, almacen):
+        e = self._colocar(db, producto, almacen, fila=2, columna=3, cantidad=30)
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 5},
+        ])
+        r = client.get(f'/api/v1/solicitudes/{sol["id"]}/ubicaciones', headers=_hdr(inv_admin))
+        assert r.status_code == 200, r.get_json()
+        por_prod = r.get_json()['por_producto']
+        ubic = por_prod[str(producto.id)]['ubicaciones']
+        assert len(ubic) == 1
+        assert ubic[0]['estante_id'] == e.id
+        assert ubic[0]['fila'] == 2 and ubic[0]['columna'] == 3
+        assert ubic[0]['cantidad'] == 30
+
+    def test_entregar_con_estante_descuenta_celda(self, client, db, solicitante, inv_admin, producto, almacen):
+        e = self._colocar(db, producto, almacen, cantidad=30)
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.post(f'/api/v1/solicitudes/{sol["id"]}/entregar', headers=_hdr(inv_admin), json={
+            'almacen_origen_id': almacen.id,
+            'entregas': [{'detalle_id': det_id, 'cantidad_entregada': 10, 'estante_id': e.id}],
+        })
+        assert r.status_code == 200, r.get_json()
+        pe = ProductoEstante.query.filter_by(producto_id=producto.id, estante_id=e.id).first()
+        assert float(pe.cantidad) == 20  # 30 − 10
+        # El stock autoritativo del almacén bajó igual que en el flujo normal.
+        spa = StockPorAlmacen.query.filter_by(producto_id=producto.id, almacen_id=almacen.id).first()
+        assert float(spa.cantidad) == 90  # 100 − 10
+
+    def test_entregar_sin_estante_no_toca_celdas(self, client, db, solicitante, inv_admin, producto, almacen):
+        e = self._colocar(db, producto, almacen, cantidad=30)
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.post(f'/api/v1/solicitudes/{sol["id"]}/entregar', headers=_hdr(inv_admin), json={
+            'almacen_origen_id': almacen.id,
+            'entregas': [{'detalle_id': det_id, 'cantidad_entregada': 10}],
+        })
+        assert r.status_code == 200, r.get_json()
+        pe = ProductoEstante.query.filter_by(producto_id=producto.id, estante_id=e.id).first()
+        assert float(pe.cantidad) == 30  # sin estante_id → celda intacta
+
+    def test_entregar_celda_clamp_no_negativo(self, client, db, solicitante, inv_admin, producto, almacen):
+        # Celda con 3, se entregan 10 (hay stock de almacén de sobra) → celda clamp a 0.
+        e = self._colocar(db, producto, almacen, cantidad=3)
+        sol = _crear_y_aprobar(client, solicitante, inv_admin, [
+            {'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 10},
+        ])
+        det_id = sol['detalles'][0]['id']
+        r = client.post(f'/api/v1/solicitudes/{sol["id"]}/entregar', headers=_hdr(inv_admin), json={
+            'almacen_origen_id': almacen.id,
+            'entregas': [{'detalle_id': det_id, 'cantidad_entregada': 10, 'estante_id': e.id}],
+        })
+        assert r.status_code == 200, r.get_json()
+        pe = ProductoEstante.query.filter_by(producto_id=producto.id, estante_id=e.id).first()
+        assert float(pe.cantidad) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# POST /solicitudes/entrega-directa  (mostrador)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture
+def trabajador(db):
+    t = Trabajador(
+        no_empleado='ED-001', nombre='Juan', nombre_apellidos='Pérez López',
+        activo=True,
+    )
+    db.session.add(t); db.session.commit()
+    return t
+
+
+class TestEntregaDirecta:
+
+    def test_con_trabajador_descuenta_stock_y_queda_entregada(
+        self, client, db, inv_admin, almacen, producto, trabajador
+    ):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(inv_admin), json={
+            'proyecto': 'Obra Norte',
+            'solicitante_trabajador_id': trabajador.id,
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 15}],
+        })
+        assert r.status_code == 200, r.get_json()
+        body = r.get_json()
+        assert body['estatus'] == 'ENTREGADA'
+        assert body['entrega_directa'] is True
+        assert body['solicitante_nombre'] == 'Juan Pérez López'
+        assert body['detalles'][0]['cantidad_entregada'] == 15
+
+        # Stock descontado en la bodega y SALIDA registrada.
+        spa = StockPorAlmacen.query.filter_by(producto_id=producto.id, almacen_id=almacen.id).first()
+        assert float(spa.cantidad) == 85
+        mov = MovimientoInventario.query.filter_by(producto_id=producto.id, tipo='SALIDA').first()
+        assert mov is not None and float(mov.cantidad) == 15
+        # No usa reservas.
+        db.session.expire(producto)
+        assert float(producto.stock_reservado) == 0
+
+    def test_entrega_directa_registra_entregada_por_sin_aprobada(
+        self, client, inv_admin, almacen, producto, trabajador
+    ):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(inv_admin), json={
+            'proyecto': 'Obra Norte',
+            'solicitante_trabajador_id': trabajador.id,
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 3}],
+        })
+        assert r.status_code == 200, r.get_json()
+        body = r.get_json()
+        assert body['entregada_por'] == (inv_admin.full_name or inv_admin.username)
+        assert body['aprobada_por'] is None  # la directa no pasa por aprobación
+
+    def test_con_nombre_libre(self, client, inv_admin, almacen, producto):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(inv_admin), json={
+            'proyecto': 'Obra Sur',
+            'solicitante_nombre': 'Pedro de la Bodega',
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 5}],
+        })
+        assert r.status_code == 200, r.get_json()
+        assert r.get_json()['solicitante_nombre'] == 'Pedro de la Bodega'
+
+    def test_sin_solicitante_es_422(self, client, inv_admin, almacen, producto):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(inv_admin), json={
+            'proyecto': 'Obra Sur',
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 5}],
+        })
+        assert r.status_code == 422
+
+    def test_stock_insuficiente_es_409(self, client, inv_admin, almacen, producto):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(inv_admin), json={
+            'proyecto': 'Obra Sur',
+            'solicitante_nombre': 'Quien sea',
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 99999}],
+        })
+        assert r.status_code == 409
+
+    def test_solicitante_material_no_puede_entregar_directo_403(
+        self, client, solicitante, almacen, producto
+    ):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(solicitante), json={
+            'proyecto': 'Obra Sur',
+            'solicitante_nombre': 'Quien sea',
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 1}],
+        })
+        assert r.status_code == 403
+
+    def test_unidad_entera_rechaza_decimales_422(self, client, inv_admin, almacen, producto):
+        r = client.post('/api/v1/solicitudes/entrega-directa', headers=_hdr(inv_admin), json={
+            'proyecto': 'Obra Sur',
+            'solicitante_nombre': 'Quien sea',
+            'almacen_origen_id': almacen.id,
+            'detalles': [{'producto_id': producto.id, 'cantidad': 2.5}],  # pza no admite decimales
+        })
+        assert r.status_code == 422

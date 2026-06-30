@@ -26,6 +26,10 @@ class Estante(db.Model):
     almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=False, index=True)
     qr_code = db.Column(db.String(100), unique=True, nullable=False, index=True)
     activo = db.Column(db.Boolean, default=True)
+    # Rejilla física del estante (Pausa 11 — vista visual + stock por celda).
+    # filas=columnas=1 reproduce el comportamiento plano previo (sin rejilla).
+    filas = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    columnas = db.Column(db.Integer, nullable=False, default=1, server_default='1')
     created_at = db.Column(db.DateTime, default=_now_utc)
 
 
@@ -167,17 +171,33 @@ class TomaInventarioDetalle(db.Model):
 
 
 class ProductoEstante(db.Model):
-    """Mapping puro producto↔estante (Pausa 4 — scanner móvil).
+    """Ubicación de un producto dentro de un estante (Pausa 4 + 11).
 
-    No guarda cantidades: dice "este producto se ubica en estos estantes"
-    para que al escanear el QR del estante se vea qué hay ahí. El stock real
-    sigue viviendo en `StockPorAlmacen` (al nivel de almacén). Un mismo
-    producto puede vivir en varios estantes y un estante puede tener varios
-    productos.
+    Pausa 4: mapping producto↔estante (qué producto se guarda aquí), usado por
+    el scanner móvil.
+
+    Pausa 11 — vista visual + stock por celda:
+      - `fila`/`columna`: posición en la rejilla del estante (1-based). Ambas
+        NULL = "asignado pero sin ubicar en la rejilla".
+      - `cantidad`: unidades de este producto que físicamente están en esta
+        celda. Es un SUB-LIBRO reconciliado de `StockPorAlmacen`: la fuente de
+        verdad del stock sigue siendo `StockPorAlmacen` (a nivel almacén). El
+        invariante que mantenemos es, por (producto, almacén):
+            Σ ProductoEstante.cantidad ≤ StockPorAlmacen.cantidad
+        El resto (stock − Σceldas) es "sin ubicar". Nunca dejamos cantidad
+        negativa; si una salida manual baja el stock por debajo de Σceldas, se
+        marca el estante como "necesita reacomodo" en lugar de corromper datos.
+
+    Un mismo producto vive en a lo más una celda por estante (PK), pero puede
+    estar en varios estantes; una celda (fila, columna) puede tener varios
+    productos distintos.
     """
     __tablename__ = "producto_estante"
     producto_id = db.Column(db.Integer, db.ForeignKey('productos.id', ondelete='CASCADE'), primary_key=True)
     estante_id = db.Column(db.Integer, db.ForeignKey('estantes.id', ondelete='CASCADE'), primary_key=True)
+    fila = db.Column(db.Integer, nullable=True)
+    columna = db.Column(db.Integer, nullable=True)
+    cantidad = db.Column(db.Numeric(10, 2), nullable=False, default=0, server_default='0')
     updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
 
     producto = db.relationship('Producto', backref=db.backref('estantes_asignados', lazy='select', cascade='all, delete-orphan'))

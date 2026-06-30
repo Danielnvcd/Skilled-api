@@ -19,8 +19,47 @@ class SolicitudMaterial(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=_now_utc, index=True)
     fecha_cierre = db.Column(db.DateTime, nullable=True)
 
+    # Entrega directa de mostrador (creada por inventario que surte en el acto,
+    # sin solicitud previa del trabajador). `solicitante_id` es quien la captura
+    # (el de inventario); el "pedido por" real va en los campos de abajo:
+    #   - solicitante_trabajador_id: trabajador del sistema (si se eligió uno).
+    #   - solicitante_nombre: nombre libre (si quien recoge no está dado de alta).
+    # El PDF y los listados muestran el nombre del solicitante real, no el del
+    # capturista. Las solicitudes normales dejan estos campos en NULL/False.
+    entrega_directa = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    solicitante_nombre = db.Column(db.String(200), nullable=True)
+    solicitante_trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=True)
+
+    # Trazabilidad de quién resolvió la solicitud (se llenan en las transiciones
+    # de estado). `aprobada_por` = quién la aprobó; `entregada_por` = quién la
+    # surtió (en entregas directas es el mismo capturista). Se limpian al
+    # reabrir a PENDIENTE.
+    aprobada_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    entregada_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
     solicitante = db.relationship('User', foreign_keys=[solicitante_id])
+    solicitante_trabajador = db.relationship('Trabajador', foreign_keys=[solicitante_trabajador_id])
+    aprobada_por = db.relationship('User', foreign_keys=[aprobada_por_id])
+    entregada_por = db.relationship('User', foreign_keys=[entregada_por_id])
     proyecto_ref = db.relationship('Proyecto', foreign_keys=[proyecto_id])
+
+    @staticmethod
+    def _user_display(u):
+        if u is None:
+            return None
+        return u.full_name or u.username
+
+    @property
+    def solicitante_display(self):
+        """Nombre a mostrar como solicitante: trabajador o texto libre en
+        entregas directas; el usuario capturista en solicitudes normales."""
+        if self.solicitante_trabajador is not None:
+            return self.solicitante_trabajador.nombre_completo
+        if self.solicitante_nombre:
+            return self.solicitante_nombre
+        if self.solicitante is not None:
+            return self.solicitante.full_name or self.solicitante.username
+        return 'Desconocido'
 
 
 class SolicitudMaterialDetalle(db.Model):
