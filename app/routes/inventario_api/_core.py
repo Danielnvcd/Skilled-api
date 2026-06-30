@@ -173,12 +173,34 @@ class EstanteCreateSchema(_BaseSchema):
     nombre = fields.Str(required=True, validate=validate.Length(min=1, max=100))
     descripcion = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
     almacen_id = fields.Int(required=True)
+    # Pausa 11 — rejilla física. 1×1 = comportamiento plano previo.
+    filas = fields.Int(load_default=1, validate=validate.Range(min=1, max=50))
+    columnas = fields.Int(load_default=1, validate=validate.Range(min=1, max=50))
 
 
 class EstanteUpdateSchema(_BaseSchema):
     nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=100))
     descripcion = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
     almacen_id = fields.Int(load_default=None, allow_none=True)
+    filas = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=1, max=50))
+    columnas = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=1, max=50))
+
+
+class EstanteLayoutItemSchema(_BaseSchema):
+    """Una colocación de producto en la rejilla del estante.
+    fila/columna ambos None = asignado pero sin ubicar (no en una celda)."""
+    producto_id = fields.Int(required=True)
+    fila = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=1, max=50))
+    columna = fields.Int(load_default=None, allow_none=True, validate=validate.Range(min=1, max=50))
+    cantidad = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
+
+
+class EstanteLayoutSchema(_BaseSchema):
+    posiciones = fields.List(
+        fields.Nested(EstanteLayoutItemSchema),
+        required=True,
+        validate=validate.Length(max=500),
+    )
 
 
 class MovimientoCreateSchema(_BaseSchema):
@@ -217,6 +239,36 @@ class SolicitudCreateSchema(_BaseSchema):
     )
 
 
+class EntregaDirectaItemSchema(_BaseSchema):
+    """Una línea de material de la entrega directa (mostrador)."""
+    producto_id = fields.Int(required=True)
+    cantidad = fields.Float(required=True, validate=validate.Range(min=0.0001, max=100_000))
+    # Pausa 11 — opcional: de qué estante (celda) se surte, para descontar el
+    # sub-libro de celdas. None = no toca celdas.
+    estante_id = fields.Int(load_default=None, allow_none=True)
+
+
+class EntregaDirectaSchema(_BaseSchema):
+    """Entrega directa de mostrador: el de inventario surte material en el acto.
+
+    El solicitante real es un trabajador del sistema (solicitante_trabajador_id)
+    o un nombre libre (solicitante_nombre); al menos uno es obligatorio (se
+    valida en la vista). Genera una SolicitudMaterial ya ENTREGADA + SALIDAs.
+    """
+    proyecto = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    proyecto_id = fields.Int(load_default=None, allow_none=True)
+    solicitante_trabajador_id = fields.Int(load_default=None, allow_none=True)
+    solicitante_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+    almacen_origen_id = fields.Int(load_default=None, allow_none=True)
+    notas = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=2000))
+    motivo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
+    detalles = fields.List(
+        fields.Nested(EntregaDirectaItemSchema),
+        required=True,
+        validate=validate.Length(min=1, max=500),
+    )
+
+
 class SolicitudUpdateEstadoSchema(_BaseSchema):
     estatus = fields.Str(required=True, validate=validate.OneOf(['APROBADA', 'RECHAZADA', 'ENTREGADA', 'PENDIENTE']))
 
@@ -230,6 +282,9 @@ class SolicitudDetallePatchSchema(_BaseSchema):
 class EntregaItemSchema(_BaseSchema):
     detalle_id = fields.Int(required=True)
     cantidad_entregada = fields.Float(required=True, validate=validate.Range(min=0, max=100_000))
+    # Pausa 11 — opcional: de qué estante (celda) se surte esta línea, para
+    # descontar el sub-libro de celdas. None = no toca celdas (comportamiento previo).
+    estante_id = fields.Int(load_default=None, allow_none=True)
 
 
 class EntregarSolicitudSchema(_BaseSchema):
@@ -315,6 +370,8 @@ def _estante_to_dict(e: Estante) -> dict:
         'almacen_id': e.almacen_id,
         'qr_code': e.qr_code,
         'activo': bool(e.activo),
+        'filas': e.filas or 1,
+        'columnas': e.columnas or 1,
         'created_at': e.created_at.isoformat() if e.created_at else None,
     }
 
@@ -386,7 +443,16 @@ def _solicitud_to_dict(s: SolicitudMaterial) -> dict:
         'estatus': s.estatus,
         'fecha_creacion': s.fecha_creacion.isoformat() if s.fecha_creacion else None,
         'fecha_cierre': s.fecha_cierre.isoformat() if s.fecha_cierre else None,
-        'solicitante_nombre': s.solicitante.username if s.solicitante else 'Desconocido',
+        # Nombre del solicitante REAL (trabajador / texto libre en entregas
+        # directas; el capturista en solicitudes normales). Ver solicitante_display.
+        'solicitante_nombre': s.solicitante_display,
+        # Quién la capturó (útil para distinguir mostrador del solicitante).
+        'capturado_por': (s.solicitante.full_name or s.solicitante.username) if s.solicitante else None,
+        'entrega_directa': bool(s.entrega_directa),
+        'solicitante_trabajador_id': s.solicitante_trabajador_id,
+        # Trazabilidad de la resolución.
+        'aprobada_por': s._user_display(s.aprobada_por),
+        'entregada_por': s._user_display(s.entregada_por),
         'detalles': [_solicitud_detalle_to_dict(d) for d in s.detalles],
     }
 
@@ -536,6 +602,44 @@ def _lock_stock(producto_id: int, almacen_id: int) -> StockPorAlmacen:
         db.session.add(fila)
         db.session.flush()  # asegura que existe antes de bloquear
     return fila
+
+
+def _producto_almacen_stock(producto_ids, almacen_id: int) -> dict[int, Decimal]:
+    """Stock por almacén de varios productos: {producto_id: cantidad}.
+    Devuelve 0 para los productos sin fila en StockPorAlmacen para ese almacén.
+    Usado para validar el invariante Σceldas ≤ stock_almacen (Pausa 11)."""
+    ids = [int(p) for p in set(producto_ids)]
+    out: dict[int, Decimal] = {pid: Decimal('0') for pid in ids}
+    if not ids:
+        return out
+    rows = (
+        db.session.query(StockPorAlmacen.producto_id, StockPorAlmacen.cantidad)
+        .filter(
+            StockPorAlmacen.almacen_id == almacen_id,
+            StockPorAlmacen.producto_id.in_(ids),
+        )
+        .all()
+    )
+    for pid, cant in rows:
+        out[pid] = Decimal(str(cant or 0))
+    return out
+
+
+def _cantidad_en_celdas_almacen(producto_id: int, almacen_id: int, excluir_estante_id: int | None = None) -> Decimal:
+    """Σ ProductoEstante.cantidad de un producto en los estantes (activos) de un
+    almacén, opcionalmente excluyendo un estante (el que se está editando)."""
+    q = (
+        db.session.query(db.func.coalesce(db.func.sum(ProductoEstante.cantidad), 0))
+        .join(Estante, Estante.id == ProductoEstante.estante_id)
+        .filter(
+            ProductoEstante.producto_id == producto_id,
+            Estante.almacen_id == almacen_id,
+            Estante.activo == True,  # noqa: E712
+        )
+    )
+    if excluir_estante_id is not None:
+        q = q.filter(ProductoEstante.estante_id != excluir_estante_id)
+    return Decimal(str(q.scalar() or 0))
 
 
 def _recalcular_cache_stock(producto: Producto):
