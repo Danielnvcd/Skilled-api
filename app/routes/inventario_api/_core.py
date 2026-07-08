@@ -87,6 +87,24 @@ def _require_inventario_admin(view):
     return wrapper
 
 
+def _require_plan_materiales(view):
+    """Plan de materiales por proyecto: inventario, coordinador, admin y super_admin.
+
+    El coordinador es dueño de sus proyectos y planea sus materiales (crea/abre el
+    plan y selecciona los materiales). Guard aparte de `_require_inventario_admin`
+    a propósito: le damos al coordinador SOLO el plan de materiales por proyecto,
+    NO el resto de la escritura de inventario (movimientos, catálogo, tomas,
+    entregas, compras…)."""
+    @wraps(view)
+    @_require_login
+    def wrapper(*args, **kwargs):
+        if request.current_user.role not in ['inventario', 'coordinador', 'admin', 'super_admin']:
+            log_action(f"API 403 plan-materiales '{request.path}' (rol: {request.current_user.role})")
+            return jsonify({'detail': 'Se requiere rol de inventario, coordinador o administrador'}), 403
+        return view(*args, **kwargs)
+    return wrapper
+
+
 # ─── Marshmallow schemas ──────────────────────────────────────────────────────
 
 CODIGO_REGEX = r'^[A-Za-z0-9\-_\.\/]+$'

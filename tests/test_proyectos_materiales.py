@@ -129,33 +129,124 @@ def test_pedidos_del_proyecto(client, db, admin, almacen, proyecto, producto):
     assert r.mimetype == 'application/pdf'
 
 
-def test_proyectos_materiales_bloquea_roles_no_inventario(client, db, admin, proyecto):
-    """Seguridad: solicitante_material y coordinador NO pueden leer el panel de
-    materiales por proyecto (resumen, detalle, historial, pedidos). Evita que
-    vean planes/costos/pedidos de otros vía API directa (IDOR)."""
+def test_proyectos_materiales_acceso_por_rol(client, db, admin, almacen, proyecto, producto):
+    """Acceso y scoping por dueño del panel de materiales por proyecto:
+
+    - `solicitante_material` NO puede leerlo (evita ver planes/costos/pedidos de
+      otros vía API directa — IDOR).
+    - `coordinador` SÍ, pero SOLO en SUS proyectos (`Proyecto.coordinador_id`):
+      lee y escribe el plan de los propios y recibe 403 en los ajenos.
+    - inventario/admin ven y editan todos.
+    """
     solicitante = User(username='sol_x', password_hash=generate_password_hash('Pass123!'),
                        role='solicitante_material')
     coordinador = User(username='coord_x', password_hash=generate_password_hash('Pass123!'),
                        role='coordinador')
-    db.session.add_all([solicitante, coordinador])
+    otro_coord = User(username='coord_y', password_hash=generate_password_hash('Pass123!'),
+                      role='coordinador')
+    db.session.add_all([solicitante, coordinador, otro_coord])
     db.session.commit()
 
-    rutas = [
+    # `proyecto` (PM-001) es del coordinador; `ajeno` (PM-002) es de otro.
+    proyecto.coordinador_id = coordinador.id
+    ajeno = Proyecto(numero_proyecto='PM-002', nombre='Ajeno', activo=True,
+                     coordinador_id=otro_coord.id)
+    db.session.add(ajeno)
+    db.session.commit()
+
+    rutas_propias = [
         '/api/v1/proyectos-materiales/',
+        '/api/v1/proyectos-materiales/proyectos',
         f'/api/v1/proyectos-materiales/{proyecto.id}',
         f'/api/v1/proyectos-materiales/{proyecto.id}/historial',
         f'/api/v1/proyectos-materiales/{proyecto.id}/pedidos',
     ]
-    for u in (solicitante, coordinador):
-        _login(client, u)
-        for ruta in rutas:
-            r = client.get(ruta)
-            assert r.status_code == 403, f'{u.role} pudo acceder a {ruta}: {r.status_code}'
 
-    # El admin (rol inventario-admin) sí accede.
+    # Solicitante de material: bloqueado en todo el panel.
+    _login(client, solicitante)
+    for ruta in rutas_propias:
+        r = client.get(ruta)
+        assert r.status_code == 403, f'solicitante_material pudo acceder a {ruta}: {r.status_code}'
+
+    # Coordinador: lectura permitida en SUS rutas.
+    _login(client, coordinador)
+    for ruta in rutas_propias:
+        r = client.get(ruta)
+        assert r.status_code == 200, f'coordinador NO pudo acceder a {ruta}: {r.status_code}'
+
+    # El selector "crear/abrir plan" solo lista SUS proyectos.
+    ids_selector = {p['id'] for p in client.get('/api/v1/proyectos-materiales/proyectos').get_json()}
+    assert proyecto.id in ids_selector
+    assert ajeno.id not in ids_selector
+
+    # Coordinador puede ESCRIBIR el plan de SU proyecto (seleccionar materiales).
+    r = client.post(f'/api/v1/proyectos-materiales/{proyecto.id}/plan',
+                    json={'lineas': [{'producto_id': producto.id, 'cantidad_planeada': 5}]})
+    assert r.status_code == 200, r.get_json()
+
+    # ...pero NO puede leer ni escribir el plan de un proyecto AJENO (403).
+    assert client.get(f'/api/v1/proyectos-materiales/{ajeno.id}').status_code == 403
+    assert client.get(f'/api/v1/proyectos-materiales/{ajeno.id}/pedidos').status_code == 403
+    r = client.post(f'/api/v1/proyectos-materiales/{ajeno.id}/plan',
+                    json={'lineas': [{'producto_id': producto.id, 'cantidad_planeada': 3}]})
+    assert r.status_code == 403
+
+    # Aunque el ajeno tenga plan (lo captura el admin), no aparece en el resumen
+    # del coordinador.
     _login(client, admin)
-    r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/pedidos')
-    assert r.status_code == 200
+    client.post(f'/api/v1/proyectos-materiales/{ajeno.id}/plan',
+                json={'lineas': [{'producto_id': producto.id, 'cantidad_planeada': 9}]})
+    _login(client, coordinador)
+    ids_resumen = {p['id'] for p in client.get('/api/v1/proyectos-materiales/').get_json()}
+    assert proyecto.id in ids_resumen      # el suyo (ya tiene plan)
+    assert ajeno.id not in ids_resumen     # el ajeno NO, aunque tenga plan
+
+    # El admin (rol inventario-admin) sí accede a todo, incluido el ajeno.
+    _login(client, admin)
+    assert client.get(f'/api/v1/proyectos-materiales/{ajeno.id}/pedidos').status_code == 200
+
+
+def test_coordinador_solo_solicita_para_sus_proyectos(client, db, almacen, proyecto, producto):
+    """El coordinador solo puede crear solicitudes de material ligadas a SUS
+    proyectos. Enforcement de backend (no solo el filtro del selector del SPA):
+    intentar el proyecto de otro coordinador vía API responde 403."""
+    coordinador = User(username='coord_sol', password_hash=generate_password_hash('Pass123!'),
+                       role='coordinador')
+    otro_coord = User(username='coord_otro', password_hash=generate_password_hash('Pass123!'),
+                      role='coordinador')
+    db.session.add_all([coordinador, otro_coord])
+    db.session.commit()
+
+    proyecto.coordinador_id = coordinador.id
+    ajeno = Proyecto(numero_proyecto='PM-900', nombre='Ajeno', activo=True,
+                     coordinador_id=otro_coord.id)
+    db.session.add(ajeno)
+    db.session.commit()
+
+    def _payload(proy):
+        return {
+            'proyecto': proy.numero_proyecto,
+            'proyecto_id': proy.id,
+            'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 1}],
+        }
+
+    _login(client, coordinador)
+
+    # Su propio proyecto: OK.
+    r = client.post('/api/v1/solicitudes/', json=_payload(proyecto))
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json()['proyecto_id'] == proyecto.id
+
+    # Proyecto de otro coordinador (por id): 403.
+    r = client.post('/api/v1/solicitudes/', json=_payload(ajeno))
+    assert r.status_code == 403, r.get_json()
+
+    # Aunque intente saltarse el id y mande solo el texto del proyecto ajeno: 403.
+    r = client.post('/api/v1/solicitudes/', json={
+        'proyecto': ajeno.numero_proyecto,
+        'detalles': [{'tipo_item': 'MATERIAL', 'producto_id': producto.id, 'cantidad_solicitada': 1}],
+    })
+    assert r.status_code == 403, r.get_json()
 
 
 def test_plan_decimales_segun_unidad(client, db, admin, almacen, proyecto, producto):

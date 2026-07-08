@@ -104,6 +104,14 @@ def create_solicitud():
         proy = Proyecto.query.filter(Proyecto.numero_proyecto == proyecto).first()
         proyecto_id = proy.id if proy else None
 
+    # Scoping por dueño: un coordinador no puede ligar una solicitud al proyecto
+    # de OTRO coordinador. Refleja en backend el filtro del selector del SPA
+    # (getProyectosPlanificables) para que no se pueda saltar por API mandando el
+    # proyecto_id (o el número) de un proyecto ajeno. Texto libre sin proyecto
+    # ligado (proy=None) se permite igual que antes (no atribuye consumo a nadie).
+    if user.role == 'coordinador' and proy is not None and proy.coordinador_id != user.id:
+        return jsonify({'detail': 'Solo puedes crear solicitudes para tus propios proyectos'}), 403
+
     nueva = SolicitudMaterial(
         solicitante_id=user.id,
         proyecto=proyecto,

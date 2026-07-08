@@ -27,7 +27,7 @@ from app.realtime import emit_to_role
 
 from ._core import (
     bp,
-    _require_inventario_admin,
+    _require_plan_materiales,
     _parse_or_422, _int_arg,
     ProyectoPlanUpsertSchema,
     _audit, _INV_ROLES,
@@ -72,15 +72,56 @@ def _consumo_por_producto(proyecto_id: int) -> dict[int, Decimal]:
     return {pid: Decimal(str(cant or 0)) for pid, cant in rows}
 
 
+def _denegar_si_ajeno(proyecto: Proyecto):
+    """Scoping por dueño: el coordinador solo puede tocar SUS proyectos
+    (`Proyecto.coordinador_id`). Para inventario/admin/super_admin no aplica.
+
+    Devuelve una respuesta 403 si un coordinador intenta un proyecto ajeno, o
+    None si está permitido. 403 (no 404) es consistente con `api_proyectos`: el
+    proyecto existe pero no es suyo."""
+    user = request.current_user
+    if user.role == 'coordinador' and proyecto.coordinador_id != user.id:
+        return jsonify({'detail': 'No eres el coordinador de este proyecto'}), 403
+    return None
+
+
+def _scope_proyectos_query(query):
+    """Restringe una query de `Proyecto` al alcance del usuario: el coordinador
+    solo ve los suyos; inventario/admin/super_admin ven todos."""
+    user = request.current_user
+    if user.role == 'coordinador':
+        query = query.filter(Proyecto.coordinador_id == user.id)
+    return query
+
+
+@bp.route('/proyectos-materiales/proyectos', methods=['GET'])
+@_require_plan_materiales
+def get_proyectos_planificables():
+    """Proyectos activos que el usuario puede planear, para el selector
+    "crear/abrir plan". Coordinador: solo los suyos; inventario/admin: todos.
+
+    Endpoint aparte de `/proyectos/` (catálogo) a propósito: aquel es genérico y
+    lo comparten Pedidos/Entrega directa; este aplica el scoping por dueño."""
+    proyectos = (
+        _scope_proyectos_query(Proyecto.query.filter(Proyecto.activo == True))  # noqa: E712
+        .order_by(Proyecto.numero_proyecto)
+        .all()
+    )
+    return jsonify([
+        {'id': p.id, 'numero_proyecto': p.numero_proyecto, 'nombre': p.nombre or ''}
+        for p in proyectos
+    ])
+
+
 @bp.route('/proyectos-materiales/', methods=['GET'])
-@_require_inventario_admin
+@_require_plan_materiales
 def get_proyectos_materiales():
     """Resumen por proyecto activo: totales planeados/entregados, % consumido y
     costos. Solo cuenta proyectos con plan o con consumo (los demás se omiten
     para no llenar la lista con proyectos sin actividad de materiales)."""
+    # El coordinador solo ve el resumen de SUS proyectos; inventario/admin, todos.
     proyectos = (
-        Proyecto.query
-        .filter(Proyecto.activo == True)  # noqa: E712
+        _scope_proyectos_query(Proyecto.query.filter(Proyecto.activo == True))  # noqa: E712
         .order_by(Proyecto.numero_proyecto)
         .all()
     )
@@ -151,7 +192,7 @@ def get_proyectos_materiales():
 
 
 @bp.route('/proyectos-materiales/<int:proyecto_id>', methods=['GET'])
-@_require_inventario_admin
+@_require_plan_materiales
 def get_proyecto_materiales_detalle(proyecto_id: int):
     """Detalle por material: une las líneas planeadas con lo consumido (aunque
     un material se haya consumido sin estar en el plan). Por cada material:
@@ -159,6 +200,9 @@ def get_proyecto_materiales_detalle(proyecto_id: int):
     proyecto = Proyecto.query.filter(Proyecto.id == proyecto_id).first()
     if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
+    deneg = _denegar_si_ajeno(proyecto)
+    if deneg:
+        return deneg
 
     plan_lineas = (
         ProyectoMaterialPlan.query
@@ -246,7 +290,7 @@ def get_proyecto_materiales_detalle(proyecto_id: int):
 
 
 @bp.route('/proyectos-materiales/<int:proyecto_id>/plan', methods=['POST'])
-@_require_inventario_admin
+@_require_plan_materiales
 def upsert_proyecto_plan(proyecto_id: int):
     """Reemplaza el plan de materiales del proyecto con las líneas enviadas.
 
@@ -257,6 +301,9 @@ def upsert_proyecto_plan(proyecto_id: int):
     proyecto = Proyecto.query.filter(Proyecto.id == proyecto_id).first()
     if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
+    deneg = _denegar_si_ajeno(proyecto)
+    if deneg:
+        return deneg
 
     data, err = _parse_or_422(ProyectoPlanUpsertSchema(), request.get_json(silent=True))
     if err:
@@ -391,15 +438,19 @@ def upsert_proyecto_plan(proyecto_id: int):
 
 
 @bp.route('/proyectos-materiales/<int:proyecto_id>/historial', methods=['GET'])
-@_require_inventario_admin
+@_require_plan_materiales
 def get_proyecto_plan_historial(proyecto_id: int):
     """Bitácora de cambios del plan de materiales (más reciente primero).
 
     Cada entrada: quién, cuándo, conteos por tipo de cambio y el desglose
     estructurado (agregados/modificados/eliminados). Soporta `?limit=` (máx 100).
     """
-    if not Proyecto.query.filter(Proyecto.id == proyecto_id).first():
+    proyecto = Proyecto.query.filter(Proyecto.id == proyecto_id).first()
+    if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
+    deneg = _denegar_si_ajeno(proyecto)
+    if deneg:
+        return deneg
 
     limit, lim_err = _int_arg('limit', 50, 1, 100)
     if lim_err:
@@ -427,13 +478,17 @@ def get_proyecto_plan_historial(proyecto_id: int):
 
 
 @bp.route('/proyectos-materiales/<int:proyecto_id>/pedidos', methods=['GET'])
-@_require_inventario_admin
+@_require_plan_materiales
 def get_proyecto_pedidos(proyecto_id: int):
     """Solicitudes (pedidos) ligadas al proyecto, con toda su info (solicitante,
     estatus, fechas, detalle de items y cantidades). El PDF de cada una se
     descarga del endpoint existente `/solicitudes/<id>/pdf`."""
-    if not Proyecto.query.filter(Proyecto.id == proyecto_id).first():
+    proyecto = Proyecto.query.filter(Proyecto.id == proyecto_id).first()
+    if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
+    deneg = _denegar_si_ajeno(proyecto)
+    if deneg:
+        return deneg
 
     solicitudes = (
         SolicitudMaterial.query
@@ -450,7 +505,7 @@ def get_proyecto_pedidos(proyecto_id: int):
 
 
 @bp.route('/proyectos-materiales/<int:proyecto_id>/plan/<int:linea_id>', methods=['DELETE'])
-@_require_inventario_admin
+@_require_plan_materiales
 def delete_proyecto_plan_linea(proyecto_id: int, linea_id: int):
     """Quita una línea del plan de materiales del proyecto."""
     pl = (
@@ -463,6 +518,9 @@ def delete_proyecto_plan_linea(proyecto_id: int, linea_id: int):
     )
     if not pl:
         return jsonify({'detail': 'Línea de plan no encontrada'}), 404
+    deneg = _denegar_si_ajeno(pl.proyecto)
+    if deneg:
+        return deneg
 
     db.session.delete(pl)
     _audit(request.current_user, f"Plan proyecto #{proyecto_id}: línea #{linea_id} eliminada")
