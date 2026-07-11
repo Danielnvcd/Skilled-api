@@ -252,6 +252,13 @@ class CategoriaConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), unique=True, nullable=False, index=True)
     imagen_url = db.Column(db.String(500), nullable=True)
+    # Mismo pipeline de imágenes → R2 que Producto (ver comentario allá). La
+    # imagen de categoría con URL externa se descarga, se convierte a WebP y se
+    # sube a R2; `imagen_url` pasa a apuntar al dominio público de R2.
+    imagen_source_url = db.Column(db.String(500), nullable=True)
+    imagen_r2_key = db.Column(db.String(300), nullable=True)
+    imagen_estado = db.Column(db.String(20), nullable=True)
+    imagen_error = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=_now_utc)
     updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
