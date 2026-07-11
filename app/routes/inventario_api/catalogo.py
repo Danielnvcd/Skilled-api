@@ -101,6 +101,7 @@ def _categoria_config_to_dict(c: CategoriaConfig) -> dict:
     return {
         'nombre': c.nombre,
         'imagen_url': c.imagen_url,
+        'imagen_estado': c.imagen_estado,
         'updated_at': c.updated_at.isoformat() if c.updated_at else None,
     }
 
@@ -144,6 +145,12 @@ def upsert_categoria_config(nombre: str):
 
     db.session.commit()
     db.session.refresh(cfg)
+    # Pipeline de imágenes → R2: si la imagen de categoría es URL externa, se
+    # marca y se encola su descarga a WebP+R2 (no-op salvo producción con R2).
+    from .imagenes import marcar_para_sync, encolar_sync
+    if marcar_para_sync(cfg, cfg.imagen_url):
+        db.session.commit()
+        encolar_sync(request.current_user.id, [('categoria', cfg.id)])
     return jsonify(_categoria_config_to_dict(cfg))
 
 

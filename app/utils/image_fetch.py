@@ -11,6 +11,7 @@ nos aseguramos de:
   - Cortar por tamaño máximo mientras se descarga (no confiar en Content-Length).
   - Verificar magic-bytes: el contenido tiene que ser una imagen real.
 """
+import io
 import os
 import socket
 import ipaddress
@@ -19,12 +20,21 @@ from urllib.parse import urlparse
 
 import httpx
 import filetype
+import pillow_heif
+from PIL import Image
+
+# Registrar el opener HEIF para poder leer .size de HEIC/HEIF (idempotente;
+# images.py también lo registra — llamarlo dos veces no hace daño).
+pillow_heif.register_heif_opener()
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024   # 10 MB
 DEFAULT_TIMEOUT = 10                   # segundos
 MAX_REDIRECTS = 3
+# Anti-bomba de descompresión: tope de píxeles (ancho×alto). 50 MP ≈ 8660×5773,
+# holgado para fotos de catálogo y muy por debajo de lo que revienta la RAM.
+DEFAULT_MAX_PIXELS = 50_000_000
 
 # Formatos que Pillow (+ pillow-heif) sabe abrir para re-codificar a WebP.
 _ALLOWED_IMAGE_MIMES = {
@@ -65,6 +75,25 @@ def _validar_url(url: str):
         raise ImagenDescargaError('URL sin host')
     if not _host_is_safe(parsed.hostname):
         raise ImagenDescargaError('el host resuelve a una IP no permitida (posible SSRF)')
+
+
+def _validar_dimensiones(data: bytes, max_pixels: int):
+    """Anti-bomba de descompresión: lee SOLO el encabezado (Image.open no carga
+    los píxeles) para conocer las dimensiones y rechaza si ancho×alto supera el
+    tope, ANTES de que image_to_webp cargue la imagen completa en memoria.
+    Devuelve (ancho, alto) si es aceptable."""
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            w, h = probe.size
+    except Exception:
+        raise ImagenDescargaError('no se pudieron leer las dimensiones de la imagen')
+    if w <= 0 or h <= 0:
+        raise ImagenDescargaError('dimensiones de imagen inválidas')
+    if w * h > max_pixels:
+        raise ImagenDescargaError(
+            f'imagen demasiado grande ({w}x{h} px, máx {max_pixels} px)'
+        )
+    return w, h
 
 
 def descargar_imagen_segura(url: str, max_bytes: int = None, timeout: int = None):
@@ -115,4 +144,8 @@ def descargar_imagen_segura(url: str, max_bytes: int = None, timeout: int = None
     if kind is None or kind.mime not in _ALLOWED_IMAGE_MIMES:
         detected = kind.mime if kind else 'desconocido'
         raise ImagenDescargaError(f'el contenido no es una imagen válida ({detected})')
+
+    # Anti-bomba de descompresión: rechazar por dimensiones antes de procesar.
+    max_pixels = int(os.environ.get('IMG_MAX_PIXELS', DEFAULT_MAX_PIXELS))
+    _validar_dimensiones(data, max_pixels)
     return data, kind.mime
