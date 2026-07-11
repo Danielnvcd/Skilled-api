@@ -147,6 +147,30 @@ class TestCatalogo:
         rdel = client.delete(f'/api/v1/herramientas/{herramienta_t.id}', headers=_hdr(admin))
         assert rdel.status_code == 400
 
+    def test_listado_paginado_por_paginas(self, client, admin, db):
+        for i in range(3):
+            db.session.add(Herramienta(
+                sku=f'HRR-PG-{i}', descripcion=f'Pag {i}', clasificacion='PAG',
+                unidad='pieza', serializada=False, activo=True, created_by_id=admin.id,
+            ))
+        db.session.commit()
+
+        r1 = client.get('/api/v1/herramientas/paginado?q=HRR-PG&per_page=2&page=1', headers=_hdr(admin))
+        assert r1.status_code == 200, r1.get_json()
+        d1 = r1.get_json()
+        assert d1['total'] == 3
+        assert d1['pages'] == 2
+        assert d1['page'] == 1
+        assert len(d1['items']) == 2
+
+        r2 = client.get('/api/v1/herramientas/paginado?q=HRR-PG&per_page=2&page=2', headers=_hdr(admin))
+        d2 = r2.get_json()
+        assert len(d2['items']) == 1
+        # Sin traslape entre páginas (orden determinista por descripción + id).
+        skus1 = {h['sku'] for h in d1['items']}
+        skus2 = {h['sku'] for h in d2['items']}
+        assert skus1.isdisjoint(skus2)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CP-04..07  ASIGNACIÓN / DEVOLUCIÓN

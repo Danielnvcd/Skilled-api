@@ -143,6 +143,10 @@ class ProductoCreateSchema(_BaseSchema):
     descripcion = fields.Str(required=True, validate=validate.Length(min=1, max=250))
     categoria = fields.Str(required=True, validate=validate.Length(min=1, max=100))
     unidad = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    # Atributos de cable (obligatorios SOLO cuando la categoría es cable — se
+    # valida en la ruta, no aquí, porque depende del valor de `categoria`).
+    cable_tipo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=60))
+    cable_calibre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=40))
     stock_actual = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
     stock_minimo = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
     precio_unitario = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=100_000_000))
@@ -164,6 +168,8 @@ class ProductoUpdateSchema(_BaseSchema):
     descripcion = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=250))
     categoria = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=100))
     unidad = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=50))
+    cable_tipo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=60))
+    cable_calibre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=40))
     stock_actual = fields.Float(load_default=None, allow_none=True, validate=validate.Range(min=0, max=1_000_000))
     stock_minimo = fields.Float(load_default=None, allow_none=True, validate=validate.Range(min=0, max=1_000_000))
     precio_unitario = fields.Float(load_default=None, allow_none=True, validate=validate.Range(min=0, max=100_000_000))
@@ -354,12 +360,18 @@ def _producto_to_dict(p: Producto) -> dict:
         'descripcion': p.descripcion,
         'categoria': p.categoria,
         'unidad': p.unidad,
+        # Atributos de cable (None en productos que no son cable).
+        'cable_tipo': p.cable_tipo,
+        'cable_calibre': p.cable_calibre,
         'stock_actual': actual,
         'stock_reservado': reservado,         # Pausa 2-bis: apartado por solicitudes APROBADAS
         'stock_disponible': actual - reservado,  # lo que sí se puede mover
         'stock_minimo': float(p.stock_minimo or 0),
         'precio_unitario': float(p.precio_unitario or 0),
         'imagen_url': p.imagen_url,
+        # Estado del pipeline de imágenes → R2 (None si no aplica / R2 apagado).
+        # El SPA lo usa para mostrar un badge "procesando/error" si quiere.
+        'imagen_estado': p.imagen_estado,
         # Pausa 9: proveedor default para Compras express.
         'proveedor_default_nombre': p.proveedor_default_nombre,
         'proveedor_default_contacto': p.proveedor_default_contacto,
@@ -426,6 +438,9 @@ def _solicitud_detalle_to_dict(d: SolicitudMaterialDetalle) -> dict:
         'fecha_uso_fin': d.fecha_uso_fin.isoformat() if d.fecha_uso_fin else None,
         'justificacion': d.justificacion,
         'complementos': d.complementos,
+        # Atributos de cable: solo aplican a MATERIAL de cable (None en el resto).
+        'cable_tipo': None,
+        'cable_calibre': None,
     }
     if tipo == 'HERRAMIENTA':
         base['herramienta_id'] = d.herramienta_id
@@ -445,6 +460,9 @@ def _solicitud_detalle_to_dict(d: SolicitudMaterialDetalle) -> dict:
         base['item_codigo'] = d.producto.codigo if d.producto else '---'
         base['item_unidad'] = d.producto.unidad if d.producto else 'pza'
         base['imagen_url'] = d.producto.imagen_url if d.producto else None
+        if d.producto:
+            base['cable_tipo'] = d.producto.cable_tipo
+            base['cable_calibre'] = d.producto.cable_calibre
         base['producto_descripcion'] = base['item_descripcion']
         base['producto_codigo'] = base['item_codigo']
         base['producto_unidad'] = base['item_unidad']

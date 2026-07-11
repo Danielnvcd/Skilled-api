@@ -64,6 +64,16 @@ def _unidad_permite_decimales(unidad) -> bool:
     return u in _UNIDADES_DECIMALES
 
 
+def _es_categoria_cable(categoria) -> bool:
+    """¿La categoría del producto es de cable? Detección por texto (contiene
+    'cable', case-insensitive, sin acentos): 'Cable', 'Cables', 'Cable THHN'…
+    Debe coincidir con esCategoriaCable() del frontend (utils/cable.js)."""
+    import unicodedata
+    c = unicodedata.normalize('NFD', str(categoria or '').strip().lower())
+    c = ''.join(ch for ch in c if unicodedata.category(ch) != 'Mn')  # quita acentos
+    return 'cable' in c
+
+
 def _es_entero(d: Decimal) -> bool:
     return d == d.to_integral_value()
 
@@ -1226,6 +1236,8 @@ def imprimir_solicitud(sol_id: int):
                 'codigo': (d.producto.codigo if d.producto else '---')[:50],
                 'categoria': (d.producto.categoria if d.producto else '')[:100],
                 'unidad': (d.producto.unidad if d.producto else '')[:50],
+                'cable_tipo': (d.producto.cable_tipo if d.producto else '') or '',
+                'cable_calibre': (d.producto.cable_calibre if d.producto else '') or '',
                 'cantidad': _q(sol_c),
                 'justificacion': (d.justificacion or '')[:2000],
                 **entrega,
@@ -1306,6 +1318,8 @@ def preview_solicitud_pdf():
             'codigo': _clean(m.get('codigo'), 50),
             'categoria': _clean(m.get('categoria'), 100),
             'unidad': _clean(m.get('unidad'), 50),
+            'cable_tipo': _clean(m.get('cable_tipo'), 60),
+            'cable_calibre': _clean(m.get('cable_calibre'), 40),
             'cantidad': cantidad if cantidad % 1 else int(cantidad),
             'justificacion': _clean(m.get('justificacion'), 2000),
         })

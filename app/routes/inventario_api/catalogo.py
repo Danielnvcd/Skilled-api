@@ -22,6 +22,9 @@ from ._core import (
     _INV_ROLES,
 )
 from app.realtime import emit_to_role
+# Reglas de cable compartidas (productos ya está cargado cuando se importa este
+# módulo — ver orden en inventario_api/__init__.py).
+from .productos import _es_categoria_cable, _CABLE_UNIDAD
 
 
 # ─── Proyectos ────────────────────────────────────────────────────────────────
@@ -264,11 +267,19 @@ def delete_categoria_config(nombre: str):
 
 # Encabezados oficiales de la plantilla. El importador acepta también una
 # variante en lowercase/sin tildes para no romper si el usuario edita los headers.
+# Orden pensado para el usuario: las columnas de CABLE van JUNTO a Categoría
+# (no al final). El importador empareja por NOMBRE de columna, no por posición,
+# así que este orden se puede cambiar sin romper la importación.
 PLANTILLA_HEADERS = [
-    'Código (SKU)', 'Descripción', 'Categoría', 'Unidad',
-    'Stock Inicial', 'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
+    'Código (SKU)', 'Descripción', 'Categoría',
+    # Solo para CABLE (categoría que contenga "cable"): obligatorios en cable,
+    # se ignoran en cualquier otra categoría.
+    'Tipo (cable)', 'Tamaño mm²/AWG (cable)',
+    'Unidad', 'Stock Inicial', 'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
 ]
-PLANTILLA_MAX_FILAS = 5000  # Tope para evitar DoS por archivo gigante
+# Columnas específicas de cable (para colorearlas distinto en la plantilla).
+PLANTILLA_CABLE_COLS = {'Tipo (cable)', 'Tamaño mm²/AWG (cable)'}
+PLANTILLA_MAX_FILAS = 6000  # Tope anti-DoS; holgado para export con filas de sección
 
 
 def _norm_header(s: str) -> str:
@@ -305,6 +316,28 @@ def _norm_categoria(s: str) -> str:
     return ' '.join(s.strip().lower().split())
 
 
+def _categoria_similar(nueva: str, existentes) -> str | None:
+    """Devuelve el nombre de categoría EXISTENTE más parecido a `nueva`, o None.
+
+    Heurística: comparten raíz si el texto normalizado de una es subcadena del
+    de la otra (con guarda de longitud). Atrapa variantes accidentales como
+    'Cables' o 'Cable azul' frente a 'Cable' — para preguntarle al usuario si
+    quiere crear una nueva categoría o agregar a la existente."""
+    na = _norm_categoria(nueva)
+    if len(na) < 3:
+        return None
+    mejor = None
+    for ex in existentes:
+        ne = _norm_categoria(ex)
+        if len(ne) < 3 or ne == na:
+            continue
+        if ne in na or na in ne:
+            # Sugerir la más corta/genérica (p. ej. 'Cable' antes que 'Cable rojo').
+            if mejor is None or len(ne) < len(_norm_categoria(mejor)):
+                mejor = ex
+    return mejor
+
+
 def _cell_number(value, default=0.0):
     """Convierte celda a float. Acepta '1,234.56' (formato MX), devuelve (valor, error_str_o_None)."""
     import math
@@ -326,121 +359,251 @@ def _cell_number(value, default=0.0):
         return default, f'no es un número válido ({value!r})'
 
 
-@bp.route('/productos/plantilla-importar', methods=['GET'])
-@_require_inventario
-def get_plantilla_materiales():
-    """Genera y sirve un Excel de plantilla para carga masiva de productos.
-    Incluye instrucciones, validaciones de celda (dropdown unidad, números) y
-    columna opcional de URL de imagen."""
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
-        from openpyxl.worksheet.datavalidation import DataValidation
-        from openpyxl.comments import Comment
-    except ImportError:
-        return jsonify({'detail': 'openpyxl no instalado en el servidor'}), 500
+# Marcador de fila de sección en el export: su celda Código empieza con esto,
+# así el importador la reconoce y la salta (un SKU real nunca empieza con '#',
+# lo prohíbe CODIGO_REGEX).
+PLANTILLA_SECTION_PREFIX = '#'
+
+# Tooltips por NOMBRE de columna (independiente del orden).
+PLANTILLA_TOOLTIPS = {
+    'Código (SKU)': 'Código único del producto (SKU). Acepta letras, números, -_./',
+    'Descripción': 'Descripción corta del producto (máx 250 caracteres)',
+    'Categoría': 'Categoría (ej: Tornillería, Eléctrico, Cable). Si contiene "cable", llena Tipo y Tamaño.',
+    'Tipo (cable)': 'SOLO CABLE — Tipo de cable (THHN, THW, desnudo…). Llénalo SOLO si la Categoría es de cable; en otras categorías déjalo vacío.',
+    'Tamaño mm²/AWG (cable)': 'SOLO CABLE — Tamaño en mm²/AWG (12, 2/0, 500 kcmil…). Llénalo SOLO si la Categoría es de cable; en otras categorías déjalo vacío.',
+    'Unidad': 'Unidad de medida: Pza, Kg, Mts, Lts, Caja, Bote… (en cable se pone M sola).',
+    'Stock Inicial': 'Cantidad inicial en almacén (número >= 0). En productos EXISTENTES este valor NO cambia el stock.',
+    'Stock Mínimo': 'Cantidad mínima antes de alertar de bajo stock (número >= 0)',
+    'Precio Unitario': 'Precio unitario del material (número >= 0). Se usa para los costos por proyecto.',
+    'URL Imagen (opcional)': 'OPCIONAL — URL HTTPS de la imagen del producto. Ej: https://cdn.miempresa.com/tornillo.jpg',
+}
+
+# Anchos por NOMBRE de columna.
+PLANTILLA_WIDTHS = {
+    'Código (SKU)': 18, 'Descripción': 40, 'Categoría': 18,
+    'Tipo (cable)': 16, 'Tamaño mm²/AWG (cable)': 20, 'Unidad': 10,
+    'Stock Inicial': 13, 'Stock Mínimo': 13, 'Precio Unitario': 14,
+    'URL Imagen (opcional)': 42,
+}
+
+
+def _construir_plantilla_workbook(rows=None, instruccion=None):
+    """Construye el .xlsx de la plantilla y devuelve un BytesIO listo para
+    `send_file`.
+
+    `rows` (opcional) permite exportar el catálogo ya lleno. Cada elemento es:
+      - una lista de valores alineada a PLANTILLA_HEADERS (un producto), o
+      - un dict {'__section__': nombre, 'count': n} → fila de sección resaltada
+        (para agrupar por categoría; el importador la salta), o
+      - None → fila en blanco separadora.
+
+    Todo se referencia por NOMBRE de columna (no por letra fija), así que el
+    orden de PLANTILLA_HEADERS se puede cambiar sin tocar validaciones/anchos.
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from openpyxl.comments import Comment
+
+    rows = rows or []
+    ncols = len(PLANTILLA_HEADERS)
+    col_idx = {h: i + 1 for i, h in enumerate(PLANTILLA_HEADERS)}
+    cat_pos = col_idx['Categoría'] - 1  # índice 0-based en la fila de datos
+
+    def _letter(nombre):
+        return get_column_letter(col_idx[nombre])
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Materiales'
 
     # Estilos
-    header_fill = PatternFill(start_color='1E40AF', end_color='1E40AF', fill_type='solid')
+    header_fill = PatternFill('solid', fgColor='1E40AF')        # azul (columnas normales)
+    cable_header_fill = PatternFill('solid', fgColor='B45309')  # ámbar/cobre (columnas de cable)
+    cable_cell_fill = PatternFill('solid', fgColor='FEF3C7')    # ámbar claro (celdas de cable)
+    section_fill = PatternFill('solid', fgColor='E0E7FF')       # índigo suave (fila de sección)
     header_font = Font(bold=True, color='FFFFFF', size=11)
     title_font = Font(bold=True, color='111827', size=14)
     instr_font = Font(italic=True, color='6B7280', size=10)
+    section_font = Font(bold=True, color='3730A3', size=10)
     thin = Side(border_style='thin', color='CBD5E1')
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    data_align = Alignment(vertical='top', wrap_text=True)  # evita que el texto largo invada la celda de al lado
 
     # Fila 1: título
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(PLANTILLA_HEADERS))
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
     c = ws.cell(row=1, column=1, value='Plantilla de Importación de Materiales — SKILLED')
     c.font = title_font
     c.alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 28
 
     # Fila 2: instrucciones
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(PLANTILLA_HEADERS))
-    c = ws.cell(row=2, column=1,
-        value='⚠ No alteres los encabezados de la fila 4. Precio y URL Imagen son opcionales (URL solo HTTPS o /static/...png). Si un SKU ya existe, se ACTUALIZA con los datos de esta fila (el stock NO se toca).')
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+    c = ws.cell(row=2, column=1, value=instruccion or (
+        '⚠ No alteres los encabezados de la fila 4. Precio y URL Imagen son opcionales '
+        '(URL solo HTTPS o /static/...png). Si un SKU ya existe, se ACTUALIZA con los datos '
+        'de esta fila (el stock NO se toca). Las columnas de CABLE (en ámbar) van junto a '
+        'Categoría: llénalas SOLO si la categoría contiene "cable" — ahí la unidad se pone en '
+        'M sola. En el resto de categorías déjalas vacías.'))
     c.font = instr_font
     c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    ws.row_dimensions[2].height = 30
+    ws.row_dimensions[2].height = 34
 
     # Fila 3 vacía como separador
     ws.row_dimensions[3].height = 6
 
-    # Fila 4: encabezados oficiales
+    # Fila 4: encabezados oficiales (cable en ámbar) + tooltips + anchos
     for col, header in enumerate(PLANTILLA_HEADERS, 1):
+        es_cable_col = header in PLANTILLA_CABLE_COLS
         cell = ws.cell(row=4, column=col, value=header)
-        cell.fill = header_fill
+        cell.fill = cable_header_fill if es_cable_col else header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         cell.border = border
-        # Anchos diferenciados
-        widths = {1: 18, 2: 36, 3: 18, 4: 10, 5: 14, 6: 14, 7: 16, 8: 42}
-        ws.column_dimensions[get_column_letter(col)].width = widths.get(col, 18)
+        ws.column_dimensions[get_column_letter(col)].width = PLANTILLA_WIDTHS.get(header, 18)
+        if header in PLANTILLA_TOOLTIPS:
+            cell.comment = Comment(PLANTILLA_TOOLTIPS[header], 'Plantilla SKILLED')
 
-    # Comentarios (tooltips) en cada header
-    tooltips = {
-        1: 'Código único del producto (SKU). Acepta letras, números, -_./',
-        2: 'Descripción corta del producto (máx 250 caracteres)',
-        3: 'Categoría (ej: Tornillería, Eléctrico, Pinturas)',
-        4: 'Unidad de medida: Pza, Kg, Mts, Lts, Caja, Bote, etc.',
-        5: 'Cantidad inicial en almacén (número >= 0)',
-        6: 'Cantidad mínima antes de alertar de bajo stock (número >= 0)',
-        7: 'Precio unitario del material (número >= 0). Se usa para los costos por proyecto.',
-        8: 'OPCIONAL — URL HTTPS de la imagen del producto. Ej: https://cdn.miempresa.com/tornillo.jpg',
-    }
-    for col, txt in tooltips.items():
-        ws.cell(row=4, column=col).comment = Comment(txt, 'Plantilla SKILLED')
-
-    ws.row_dimensions[4].height = 36
+    ws.row_dimensions[4].height = 42
     ws.freeze_panes = 'A5'
 
-    # Sin filas de ejemplo: la plantilla viene vacía para que el usuario
-    # solo capture sus productos reales (no se importen los ejemplos por error).
-    # Las instrucciones en filas 1-2 + los tooltips en los headers ya muestran
-    # el formato esperado.
+    # Filas de datos / secciones (solo en exportación).
+    r = 5
+    for item in rows:
+        if item is None:
+            # Fila en blanco separadora (el importador la ignora).
+            r += 1
+            continue
+        if isinstance(item, dict) and '__section__' in item:
+            # Fila de sección: combinada, resaltada y con el marcador '#' en A
+            # para que el importador la salte.
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=ncols)
+            cell = ws.cell(row=r, column=1,
+                           value=f"{PLANTILLA_SECTION_PREFIX}  ▸  {item['__section__']}  ({item.get('count', 0)})")
+            cell.fill = section_fill
+            cell.font = section_font
+            cell.alignment = Alignment(horizontal='left', vertical='center', indent=1)
+            ws.row_dimensions[r].height = 20
+            r += 1
+            continue
+        # Producto: escribir celdas con wrap + borde; tinte ámbar en cable si aplica.
+        es_cable = _es_categoria_cable(item[cat_pos] if len(item) > cat_pos else '')
+        for col, valor in enumerate(item, 1):
+            cell = ws.cell(row=r, column=col, value=valor)
+            cell.alignment = data_align
+            cell.border = border
+            if PLANTILLA_HEADERS[col - 1] in PLANTILLA_CABLE_COLS and es_cable:
+                cell.fill = cable_cell_fill
+        r += 1
 
-    # Data validations (solo aplican a filas 5..1004 para mantener archivo ligero)
-    rango = '5:1004'
+    # Data validations (por nombre → letra). Cubrir al menos 1000 filas o todas.
+    last_row = 4 + max(1000, len(rows))
 
-    # Stock inicial y mínimo: número >= 0
     num_dv = DataValidation(type='decimal', operator='greaterThanOrEqual', formula1=0,
-                             showErrorMessage=True,
-                             errorTitle='Stock inválido',
+                             showErrorMessage=True, errorTitle='Stock inválido',
                              error='El stock debe ser un número mayor o igual a 0.')
-    num_dv.add(f'E5:E1004')
-    num_dv.add(f'F5:F1004')
-    num_dv.add(f'G5:G1004')  # Precio Unitario
+    for nombre in ('Stock Inicial', 'Stock Mínimo', 'Precio Unitario'):
+        L = _letter(nombre)
+        num_dv.add(f'{L}5:{L}{last_row}')
     ws.add_data_validation(num_dv)
 
-    # Longitudes
     desc_dv = DataValidation(type='textLength', operator='between', formula1=1, formula2=250,
-                              showErrorMessage=True,
-                              errorTitle='Descripción inválida',
+                              showErrorMessage=True, errorTitle='Descripción inválida',
                               error='Entre 1 y 250 caracteres.')
-    desc_dv.add(f'B5:B1004')
+    Ld = _letter('Descripción')
+    desc_dv.add(f'{Ld}5:{Ld}{last_row}')
     ws.add_data_validation(desc_dv)
 
     sku_dv = DataValidation(type='textLength', operator='between', formula1=1, formula2=50,
-                              showErrorMessage=True,
-                              errorTitle='SKU inválido',
+                              showErrorMessage=True, errorTitle='SKU inválido',
                               error='Entre 1 y 50 caracteres.')
-    sku_dv.add(f'A5:A1004')
+    La = _letter('Código (SKU)')
+    sku_dv.add(f'{La}5:{La}{last_row}')
     ws.add_data_validation(sku_dv)
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
+    return buf
 
+
+def _producto_export_row(p: Producto) -> list:
+    """Fila de exportación alineada a PLANTILLA_HEADERS (mismo orden)."""
+    return [
+        p.codigo or '',
+        p.descripcion or '',
+        p.categoria or '',
+        p.cable_tipo or '',
+        p.cable_calibre or '',
+        p.unidad or '',
+        float(p.stock_actual or 0),
+        float(p.stock_minimo or 0),
+        float(p.precio_unitario or 0),
+        p.imagen_url or '',
+    ]
+
+
+@bp.route('/productos/plantilla-importar', methods=['GET'])
+@_require_inventario
+def get_plantilla_materiales():
+    """Genera y sirve un Excel de plantilla VACÍA para carga masiva de productos.
+    Incluye instrucciones, validaciones de celda y tooltips en cada columna."""
+    try:
+        buf = _construir_plantilla_workbook()
+    except ImportError:
+        return jsonify({'detail': 'openpyxl no instalado en el servidor'}), 500
     return send_file(
         buf,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
         download_name='plantilla_materiales.xlsx',
+    )
+
+
+@bp.route('/productos/exportar', methods=['GET'])
+@_require_inventario_admin
+def exportar_productos():
+    """Exporta TODO el catálogo activo en el mismo formato de la plantilla, con
+    los productos ya llenados. Sirve para editar en Excel y reimportar: el
+    importador detecta y aplica SOLO los campos que cambiaron (el stock actual
+    nunca se toca al reimportar productos existentes)."""
+    from itertools import groupby
+    productos = (
+        Producto.query
+        .filter(Producto.activo == True)  # noqa: E712
+        .order_by(Producto.categoria.asc(), Producto.codigo.asc())
+        .all()
+    )
+
+    # Agrupar por categoría: fila de sección resaltada + productos, con una fila
+    # en blanco entre secciones. El importador salta secciones/blancos.
+    rows = []
+    for cat, grupo in groupby(productos, key=lambda p: p.categoria or 'Sin categoría'):
+        grupo = list(grupo)
+        if rows:
+            rows.append(None)  # separador visual entre secciones
+        rows.append({'__section__': cat, 'count': len(grupo)})
+        rows.extend(_producto_export_row(p) for p in grupo)
+
+    instruccion = (
+        '⚠ Edita los valores y vuelve a subir este archivo en "Importar". El sistema aplica '
+        'SOLO lo que cambió; las filas sin cambios se ignoran. El Stock Inicial NO modifica el '
+        'stock real de productos existentes (usa Movimientos para eso). No borres el SKU (columna A) '
+        'ni las filas de sección grises. Columnas de CABLE en ámbar: llénalas solo en productos de cable.'
+    )
+    try:
+        buf = _construir_plantilla_workbook(rows=rows, instruccion=instruccion)
+    except ImportError:
+        return jsonify({'detail': 'openpyxl no instalado en el servidor'}), 500
+
+    _audit(request.current_user, f'Exportó catálogo de materiales ({len(productos)} productos)')
+    db.session.commit()
+    return send_file(
+        buf,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='catalogo_materiales.xlsx',
     )
 
 
@@ -523,9 +686,15 @@ def importar_materiales():
 
     user = request.current_user
     exitosos = 0       # productos nuevos creados
-    actualizados = 0   # productos existentes actualizados (upsert por SKU)
+    actualizados = 0   # productos existentes con al menos un campo cambiado
+    sin_cambios = 0    # productos existentes cuya fila era idéntica (se ignoran)
+    cambios_detalle = []  # [{codigo, cambios: [str, ...]}] para el reporte al SPA
     errores = []
     skus_en_archivo = set()  # detectar duplicados intra-archivo
+    # Pipeline de imágenes → R2: ids de productos cuya imagen es URL externa y
+    # hay que descargar/convertir/subir. Se encola al final (no-op si R2 apagado).
+    from .imagenes import marcar_para_sync, encolar_sync
+    sync_ids = []
 
     codigo_re = re.compile(CODIGO_REGEX)
     imagen_re = re.compile(_IMAGEN_URL_REGEX)
@@ -559,6 +728,45 @@ def importar_materiales():
                 return row.iloc[col_idx] if col_idx < len(row) else None
         return None
 
+    # ── Confirmación de categorías nuevas parecidas a existentes ──────────────
+    # Si el usuario ya decidió qué hacer con cada categoría ambigua, llega el
+    # mapeo {nombre_en_archivo: nombre_existente}. Valor vacío/ausente = crear
+    # como nueva con ese mismo nombre.
+    import json as _json
+    mapeo_raw = request.form.get('categoria_mapeo')
+    categoria_mapeo: dict[str, str] = {}
+    if mapeo_raw:
+        try:
+            _m = _json.loads(mapeo_raw) or {}
+            categoria_mapeo = {str(k): str(v or '') for k, v in _m.items()}
+        except (ValueError, TypeError):
+            categoria_mapeo = {}
+
+    # Primer intento (sin mapeo): si hay categorías NUEVAS parecidas a alguna
+    # existente, no creamos nada — devolvemos la lista para que el SPA pregunte.
+    if not categoria_mapeo:
+        file_cats: dict[str, int] = {}
+        for _, row in data_df.iterrows():
+            cat = _cell_str(_g(row, 'Categoría'), maxlen=100)
+            cod = _cell_str(_g(row, 'Código (SKU)'), maxlen=50)
+            if not cat or cod.startswith(PLANTILLA_SECTION_PREFIX):
+                continue
+            file_cats[cat] = file_cats.get(cat, 0) + 1
+        ambiguas = []
+        for cat, n in file_cats.items():
+            if _norm_categoria(cat) in cat_canon:
+                continue  # ya existe exactamente → no preguntar
+            sug = _categoria_similar(cat, cat_canon.values())
+            if sug:
+                ambiguas.append({'nombre': cat, 'sugerencia': sug, 'productos': n})
+        if ambiguas:
+            ambiguas.sort(key=lambda a: a['nombre'].lower())
+            return jsonify({
+                'necesita_confirmacion': True,
+                'categorias_ambiguas': ambiguas,
+                'categorias_existentes': sorted(set(cat_canon.values()), key=str.lower),
+            }), 200
+
     for offset, row in data_df.iterrows():
         fila_excel = header_row_idx + offset + 2  # +1 por header + 1 porque Excel es 1-indexed
         try:
@@ -567,9 +775,23 @@ def importar_materiales():
             categoria   = _cell_str(_g(row, 'Categoría'), maxlen=100)
             unidad      = _cell_str(_g(row, 'Unidad'), maxlen=50)
             imagen_url  = _cell_str(_g(row, 'URL Imagen (opcional)'), maxlen=500)
+            cable_tipo_in    = _cell_str(_g(row, 'Tipo (cable)'), maxlen=60)
+            cable_calibre_in = _cell_str(_g(row, 'Tamaño mm²/AWG (cable)'), maxlen=40)
+
+            # Aplicar la decisión del usuario: si esta categoría del archivo se
+            # mapeó a una existente, la sustituimos antes de procesar.
+            if categoria and categoria in categoria_mapeo:
+                destino = categoria_mapeo[categoria].strip()
+                if destino:
+                    categoria = destino[:100]
 
             # Fila completamente vacía: ignorar sin reportar
             if not (codigo or descripcion or categoria or unidad):
+                continue
+
+            # Fila de sección del export (código empieza con '#'): saltar sin
+            # error. Un SKU real nunca empieza con '#' (lo prohíbe CODIGO_REGEX).
+            if codigo.startswith(PLANTILLA_SECTION_PREFIX):
                 continue
 
             problemas = []
@@ -627,6 +849,32 @@ def importar_materiales():
                 continue
             skus_en_archivo.add(sku_lower)
 
+            # Producto existente (upsert por SKU). Se resuelve aquí para poder
+            # reutilizarlo tanto en la validación de cable (heredar Tipo/Tamaño
+            # ya guardados) como en el bloque de actualización más abajo.
+            existente = Producto.query.filter(Producto.codigo == codigo).first()
+
+            # ── Cable a prueba de tontos ──────────────────────────────────────
+            # Si la categoría es de cable: Tipo y Tamaño son obligatorios (pueden
+            # heredarse de un producto ya existente) y la unidad se fuerza a 'M'.
+            # Si NO es cable: se ignoran esas columnas aunque las hayan llenado
+            # (no se guardan). Detectamos por el texto crudo de la categoría
+            # (mismo criterio, sin importar tildes/mayúsculas).
+            es_cable = _es_categoria_cable(categoria)
+            cable_tipo_final = (cable_tipo_in or '').strip() or (existente.cable_tipo if existente else None)
+            cable_calibre_final = (cable_calibre_in or '').strip() or (existente.cable_calibre if existente else None)
+            if es_cable:
+                if not cable_tipo_final or not cable_calibre_final:
+                    errores.append(
+                        f'Fila {fila_excel}: la categoría es de cable; captura Tipo y Tamaño mm²/AWG'
+                    )
+                    continue
+                unidad = _CABLE_UNIDAD  # metros, sin importar lo que traiga la celda
+            else:
+                # No es cable → no arrastrar datos de cable (foolproof).
+                cable_tipo_final = None
+                cable_calibre_final = None
+
             # Resolver categoría a prueba de tontos (sirve para alta y update):
             #  - Si ya existe una equivalente (case/acento-insensitiva), usar el
             #    nombre canónico para no romper el agrupado del dashboard.
@@ -652,24 +900,56 @@ def importar_materiales():
             precio_provisto = _cell_str(_g(row, 'Precio Unitario')) != ''
             stock_min_provisto = _cell_str(_g(row, 'Stock Mínimo')) != ''
 
-            # ── UPSERT: si el SKU ya existe, ACTUALIZAR campos provistos ──
-            # No tocamos stock_actual ni stock_por_almacen: el inventario real
-            # se mueve solo por movimientos/ajustes, nunca por reimportar la
-            # plantilla. Reactivamos si estaba soft-deleted.
-            existente = Producto.query.filter(Producto.codigo == codigo).first()
+            # ── UPSERT con DETECCIÓN DE CAMBIOS ──────────────────────────────
+            # Solo aplicamos (y reportamos) los campos que REALMENTE cambiaron;
+            # una fila idéntica a lo guardado se cuenta como "sin cambios" y no
+            # se toca. Así el flujo exportar → editar → reimportar aplica solo lo
+            # editado. NUNCA tocamos stock_actual/stock_por_almacen: el inventario
+            # real se mueve solo por movimientos/ajustes. (`existente` ya se
+            # resolvió arriba, en la validación de cable.)
             if existente:
-                existente.descripcion = descripcion
-                existente.categoria = categoria_canonica
-                existente.unidad = unidad
-                if precio_provisto:
+                cambios_fila = []
+
+                if descripcion != (existente.descripcion or ''):
+                    cambios_fila.append('descripción')
+                    existente.descripcion = descripcion
+                if categoria_canonica != (existente.categoria or ''):
+                    cambios_fila.append(f'categoría: {existente.categoria or "—"} → {categoria_canonica}')
+                    existente.categoria = categoria_canonica
+                if unidad != (existente.unidad or ''):
+                    cambios_fila.append(f'unidad: {existente.unidad or "—"} → {unidad}')
+                    existente.unidad = unidad
+                # Cable (None si dejó de ser cable).
+                if (existente.cable_tipo or None) != (cable_tipo_final or None):
+                    cambios_fila.append(f'tipo cable: {existente.cable_tipo or "—"} → {cable_tipo_final or "—"}')
+                    existente.cable_tipo = cable_tipo_final
+                if (existente.cable_calibre or None) != (cable_calibre_final or None):
+                    cambios_fila.append(f'tamaño cable: {existente.cable_calibre or "—"} → {cable_calibre_final or "—"}')
+                    existente.cable_calibre = cable_calibre_final
+                # Precio y stock mínimo: solo si la celda venía con valor.
+                if precio_provisto and Decimal(str(existente.precio_unitario or 0)) != precio_dec:
+                    cambios_fila.append(f'precio: {float(existente.precio_unitario or 0)} → {float(precio_dec)}')
                     existente.precio_unitario = precio_dec
-                if stock_min_provisto:
+                if stock_min_provisto and Decimal(str(existente.stock_minimo or 0)) != stock_min_dec:
+                    cambios_fila.append(f'stock mín: {float(existente.stock_minimo or 0)} → {float(stock_min_dec)}')
                     existente.stock_minimo = stock_min_dec
-                if imagen_final:
+                # Imagen: solo si vino una URL válida y es distinta.
+                if imagen_final and (existente.imagen_url or '') != imagen_final:
+                    cambios_fila.append('imagen')
                     existente.imagen_url = imagen_final
+                    if marcar_para_sync(existente, imagen_final):
+                        sync_ids.append(existente.id)
+                # Reactivar si estaba soft-deleted.
                 if not existente.activo:
+                    cambios_fila.append('reactivado')
                     existente.activo = True
-                actualizados += 1
+
+                if cambios_fila:
+                    actualizados += 1
+                    if len(cambios_detalle) < 500:  # cap para no inflar la respuesta
+                        cambios_detalle.append({'codigo': existente.codigo, 'cambios': cambios_fila})
+                else:
+                    sin_cambios += 1
                 continue
 
             stock_inicial_dec = Decimal(str(stock_actual))
@@ -678,6 +958,8 @@ def importar_materiales():
                 descripcion=descripcion,
                 categoria=categoria_canonica,
                 unidad=unidad,
+                cable_tipo=cable_tipo_final,
+                cable_calibre=cable_calibre_final,
                 stock_actual=stock_inicial_dec,
                 stock_minimo=stock_min_dec,
                 precio_unitario=precio_dec,
@@ -696,13 +978,16 @@ def importar_materiales():
                 ))
 
             exitosos += 1
+            # Si la imagen importada es una URL externa, encolar su sync a R2.
+            if marcar_para_sync(nuevo, imagen_final):
+                sync_ids.append(nuevo.id)
 
         except Exception as e:
             errores.append(f'Fila {fila_excel}: error inesperado — {str(e)[:80]}')
 
     try:
         msg = (f'Importación masiva: {exitosos} creados, {actualizados} actualizados, '
-               f'{len(errores)} errores')
+               f'{sin_cambios} sin cambios, {len(errores)} errores')
         if categorias_creadas:
             msg += f', {len(categorias_creadas)} categorías nuevas'
         _audit(user, msg)
@@ -720,10 +1005,21 @@ def importar_materiales():
             'action': 'bulk_import', 'count': exitosos + actualizados,
         })
 
-    return jsonify({
+    # Encolar la descarga/conversión/subida a R2 de las imágenes externas de
+    # esta importación. No-op si R2 está apagado (sync_ids queda vacío).
+    imagenes_job = encolar_sync(user.id, sync_ids) if sync_ids else None
+
+    respuesta = {
         'exitosos': exitosos,
         'actualizados': actualizados,
+        'sin_cambios': sin_cambios,
         'errores': errores,
-        'total_procesadas': exitosos + actualizados + len(errores),
+        'total_procesadas': exitosos + actualizados + sin_cambios + len(errores),
         'categorias_creadas': categorias_creadas,
-    })
+        'cambios_detalle': cambios_detalle,
+    }
+    # Clave `imagenes` solo si hay algo que sincronizar → la respuesta queda
+    # idéntica a la de antes cuando R2 está apagado (no rompe nada).
+    if sync_ids:
+        respuesta['imagenes'] = {'pendientes': len(sync_ids), 'job_id': imagenes_job}
+    return jsonify(respuesta)
