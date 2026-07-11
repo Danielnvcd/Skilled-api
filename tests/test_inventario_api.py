@@ -217,6 +217,31 @@ class TestProductos:
         assert resp.status_code == 200
         assert len(resp.get_json()) <= 1
 
+    def test_listar_paginado_por_paginas(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        # Categoría propia para aislar el conteo de otros productos del fixture.
+        for i in range(3):
+            db.session.add(Producto(codigo=f'PG-{i}', descripcion=f'P{i}', categoria='PAGINADO',
+                                    unidad='pza', stock_actual=0, stock_minimo=0))
+        db.session.commit()
+
+        r1 = client.get('/api/v1/productos/paginado?categoria=PAGINADO&per_page=2&page=1')
+        assert r1.status_code == 200
+        d1 = r1.get_json()
+        assert d1['total'] == 3
+        assert d1['pages'] == 2
+        assert d1['page'] == 1
+        assert d1['per_page'] == 2
+        assert len(d1['items']) == 2
+
+        r2 = client.get('/api/v1/productos/paginado?categoria=PAGINADO&per_page=2&page=2')
+        d2 = r2.get_json()
+        assert len(d2['items']) == 1
+        # Sin traslape entre páginas (orden determinista por id).
+        ids1 = {p['id'] for p in d1['items']}
+        ids2 = {p['id'] for p in d2['items']}
+        assert ids1.isdisjoint(ids2)
+
     # ── Filtros avanzados del catálogo ──────────────────────────────────────────
 
     def test_filtro_stock_bajo(self, client, inv_admin, db):
@@ -327,6 +352,453 @@ class TestProductos:
             'stock_actual': 0, 'stock_minimo': 2_000_000,
         })
         assert resp.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3-bis. PRODUCTOS DE CABLE — Tipo + Tamaño obligatorios y unidad forzada a M
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestProductosCable:
+
+    def test_crear_cable_sin_tipo_tamano_falla(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        resp = client.post('/api/v1/productos/', json={
+            'codigo': 'CAB-001', 'descripcion': 'Cable THHN', 'categoria': 'Cable',
+            'unidad': 'M', 'stock_actual': 100, 'stock_minimo': 10,
+        })
+        assert resp.status_code == 422
+        assert 'cable' in resp.get_json()['detail'].lower()
+
+    def test_crear_cable_completo_fuerza_unidad_m(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        # Aunque mandemos 'rollo', el backend debe forzar la unidad a 'M'.
+        resp = client.post('/api/v1/productos/', json={
+            'codigo': 'CAB-002', 'descripcion': 'Cable THHN cal 12', 'categoria': 'Cables',
+            'unidad': 'rollo', 'stock_actual': 250.5, 'stock_minimo': 20,
+            'cable_tipo': 'THHN', 'cable_calibre': '12',
+        })
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data['unidad'] == 'M'
+        assert data['cable_tipo'] == 'THHN'
+        assert data['cable_calibre'] == '12'
+        # unidad M admite decimales → el stock 250.5 se conserva.
+        assert data['stock_actual'] == 250.5
+
+    def test_crear_cable_detecta_categoria_con_acentos_y_espacios(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        resp = client.post('/api/v1/productos/', json={
+            'codigo': 'CAB-003', 'descripcion': 'Cable desnudo', 'categoria': 'Cablería Eléctrica',
+            'unidad': 'pza', 'stock_actual': 5, 'stock_minimo': 0,
+            'cable_tipo': 'Desnudo', 'cable_calibre': '2/0',
+        })
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['unidad'] == 'M'
+
+    def test_producto_normal_no_exige_cable(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        resp = client.post('/api/v1/productos/', json={
+            'codigo': 'NOCAB-001', 'descripcion': 'Tornillo', 'categoria': 'Tornillería',
+            'unidad': 'pza', 'stock_actual': 10, 'stock_minimo': 0,
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['cable_tipo'] is None
+        assert data['cable_calibre'] is None
+
+    def test_producto_normal_ignora_campos_cable(self, client, inv_admin):
+        """Un producto no-cable no debe arrastrar cable_tipo/calibre aunque el
+        cliente los mande (evita datos huérfanos)."""
+        _login(client, inv_admin.id, 'admin')
+        resp = client.post('/api/v1/productos/', json={
+            'codigo': 'NOCAB-002', 'descripcion': 'Tuerca', 'categoria': 'Tuercas',
+            'unidad': 'pza', 'stock_actual': 10, 'stock_minimo': 0,
+            'cable_tipo': 'THHN', 'cable_calibre': '12',
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()['cable_tipo'] is None
+
+    def test_update_a_cable_exige_tipo_tamano(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = Producto(codigo='UPCAB-001', descripcion='X', categoria='General',
+                     unidad='pza', stock_actual=0, stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        # Cambiar la categoría a cable sin dar Tipo/Tamaño → 422.
+        resp = client.put(f'/api/v1/productos/{p.id}', json={'categoria': 'Cable'})
+        assert resp.status_code == 422
+        # Con los datos completos → OK y unidad forzada a M.
+        resp2 = client.put(f'/api/v1/productos/{p.id}', json={
+            'categoria': 'Cable', 'cable_tipo': 'THW', 'cable_calibre': '10',
+        })
+        assert resp2.status_code == 200, resp2.get_json()
+        assert resp2.get_json()['unidad'] == 'M'
+        assert resp2.get_json()['cable_calibre'] == '10'
+
+    def test_update_parcial_de_cable_conserva_datos(self, client, inv_admin, db):
+        """Editar solo el precio de un cable NO debe borrar Tipo/Tamaño ni fallar
+        por 'faltan datos de cable'."""
+        _login(client, inv_admin.id, 'admin')
+        p = Producto(codigo='UPCAB-002', descripcion='Cable', categoria='Cable',
+                     unidad='M', cable_tipo='THHN', cable_calibre='14',
+                     stock_actual=0, stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        resp = client.put(f'/api/v1/productos/{p.id}', json={'precio_unitario': 99.5})
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        assert data['cable_tipo'] == 'THHN'
+        assert data['cable_calibre'] == '14'
+
+    def test_solicitud_detalle_incluye_datos_cable(self, client, inv_solicitante, db):
+        """El detalle de la solicitud expone cable_tipo/calibre del producto para
+        que el carrito/solicitudes/PDF puedan mostrarlos."""
+        from decimal import Decimal
+        p = Producto(codigo='CAB-SOL', descripcion='Cable THHN', categoria='Cable',
+                     unidad='M', cable_tipo='THHN', cable_calibre='12',
+                     stock_actual=Decimal('500'), stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        _login(client, inv_solicitante.id, 'solicitante_material')
+        resp = client.post('/api/v1/solicitudes/', json={
+            'proyecto': 'Cableado nave 1',
+            'detalles': [{'producto_id': p.id, 'cantidad_solicitada': 30.5}],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        det = resp.get_json()['detalles'][0]
+        assert det['cable_tipo'] == 'THHN'
+        assert det['cable_calibre'] == '12'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3-ter. IMPORTACIÓN EXCEL — columnas de cable a prueba de tontos
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _build_import_xlsx(rows):
+    """Construye un .xlsx en memoria con la fila de encabezados oficiales + las
+    filas de datos dadas (dicts con llave = nombre de columna)."""
+    import io as _io
+    from openpyxl import Workbook
+    HEADERS = [
+        'Código (SKU)', 'Descripción', 'Categoría', 'Unidad',
+        'Stock Inicial', 'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
+        'Tipo (cable)', 'Tamaño mm²/AWG (cable)',
+    ]
+    wb = Workbook()
+    ws = wb.active
+    ws.append(HEADERS)
+    for r in rows:
+        ws.append([r.get(h, '') for h in HEADERS])
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+class TestImportarCable:
+
+    def _post(self, client, rows):
+        import io as _io
+        data = {'archivo': (_io.BytesIO(_build_import_xlsx(rows)), 'materiales.xlsx')}
+        return client.post('/api/v1/productos/importar', data=data,
+                           content_type='multipart/form-data')
+
+    def test_importar_cable_nuevo_fuerza_m(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-CAB-1', 'Descripción': 'Cable THHN', 'Categoría': 'Cable',
+            'Unidad': 'rollo', 'Stock Inicial': 100, 'Stock Mínimo': 10,
+            'Tipo (cable)': 'THHN', 'Tamaño mm²/AWG (cable)': '12',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['exitosos'] == 1 and body['errores'] == []
+        p = Producto.query.filter_by(codigo='IMP-CAB-1').first()
+        assert p is not None
+        assert p.unidad == 'M'  # forzado aunque el Excel dijera "rollo"
+        assert p.cable_tipo == 'THHN' and p.cable_calibre == '12'
+
+    def test_importar_cable_sin_datos_es_error(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-CAB-2', 'Descripción': 'Cable X', 'Categoría': 'Cables',
+            'Unidad': 'M', 'Stock Inicial': 5, 'Stock Mínimo': 0,
+            # Falta Tipo y Tamaño → debe reportar error y NO crear el producto.
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['exitosos'] == 0
+        assert len(body['errores']) == 1 and 'cable' in body['errores'][0].lower()
+        assert Producto.query.filter_by(codigo='IMP-CAB-2').first() is None
+
+    def test_importar_rellena_cable_existente(self, client, inv_admin, db):
+        """Un cable ya existente sin Tipo/Tamaño se completa al reimportar."""
+        _login(client, inv_admin.id, 'admin')
+        p = Producto(codigo='IMP-CAB-3', descripcion='Cable viejo', categoria='Cable',
+                     unidad='M', cable_tipo=None, cable_calibre=None,
+                     stock_actual=0, stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-CAB-3', 'Descripción': 'Cable viejo', 'Categoría': 'Cable',
+            'Unidad': 'M', 'Stock Inicial': 0, 'Stock Mínimo': 0,
+            'Tipo (cable)': 'THW', 'Tamaño mm²/AWG (cable)': '10',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['actualizados'] == 1
+        db.session.refresh(p)
+        assert p.cable_tipo == 'THW' and p.cable_calibre == '10'
+
+    def test_importar_no_cable_ignora_columnas_cable(self, client, inv_admin, db):
+        """Llenar Tipo/Tamaño en una categoría que no es cable NO debe guardarlos."""
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-NOCAB-1', 'Descripción': 'Tornillo', 'Categoría': 'Tornillería',
+            'Unidad': 'pza', 'Stock Inicial': 10, 'Stock Mínimo': 0,
+            'Tipo (cable)': 'THHN', 'Tamaño mm²/AWG (cable)': '12',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['exitosos'] == 1
+        p = Producto.query.filter_by(codigo='IMP-NOCAB-1').first()
+        assert p.cable_tipo is None and p.cable_calibre is None
+        assert p.unidad == 'pza'  # no se fuerza a M en no-cable
+
+    def test_exportar_catalogo_trae_productos(self, client, inv_admin, db):
+        """El export debe traer los productos existentes ya llenos, con los
+        encabezados oficiales (incl. cable)."""
+        import io as _io
+        from openpyxl import load_workbook
+        from decimal import Decimal
+        db.session.add_all([
+            Producto(codigo='EXP-1', descripcion='Tornillo', categoria='Tornillería',
+                     unidad='pza', stock_actual=Decimal('10'), stock_minimo=2, precio_unitario=Decimal('3.5')),
+            Producto(codigo='EXP-CAB', descripcion='Cable', categoria='Cable', unidad='M',
+                     cable_tipo='THHN', cable_calibre='12', stock_actual=Decimal('100'), stock_minimo=0),
+        ])
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/exportar')
+        assert resp.status_code == 200
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        # Encabezados en fila 4; datos desde fila 5.
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        assert 'Tamaño mm²/AWG (cable)' in headers
+        codigos = {ws.cell(row=r, column=1).value for r in range(5, ws.max_row + 1)}
+        assert {'EXP-1', 'EXP-CAB'}.issubset(codigos)
+
+    def test_roundtrip_export_reimport_sin_cambios_falsos(self, client, inv_admin, db):
+        """Exportar el catálogo y reimportar ese MISMO archivo sin editar no debe
+        reportar ningún cambio (sin falsos positivos por formato de números)."""
+        import io as _io
+        from decimal import Decimal
+        db.session.add_all([
+            Producto(codigo='RT-1', descripcion='Tornillo', categoria='Tornillería',
+                     unidad='pza', stock_actual=Decimal('10'), stock_minimo=2, precio_unitario=Decimal('3.5')),
+            Producto(codigo='RT-2', descripcion='Cable THHN', categoria='Cable', unidad='M',
+                     cable_tipo='THHN', cable_calibre='12', stock_actual=Decimal('250.5'),
+                     stock_minimo=0, precio_unitario=Decimal('18.75')),
+            Producto(codigo='RT-3', descripcion='Bote pintura', categoria='Pinturas',
+                     unidad='Lts', stock_actual=Decimal('4'), stock_minimo=1, precio_unitario=Decimal('0')),
+        ])
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        exp = client.get('/api/v1/productos/exportar')
+        assert exp.status_code == 200
+        data = {'archivo': (_io.BytesIO(exp.data), 'catalogo_materiales.xlsx')}
+        imp = client.post('/api/v1/productos/importar', data=data,
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        body = imp.get_json()
+        assert body['exitosos'] == 0
+        assert body['actualizados'] == 0, body['cambios_detalle']
+        assert body['sin_cambios'] == 3
+
+    def test_reimport_sin_cambios(self, client, inv_admin, db):
+        """Reimportar una fila idéntica no debe actualizar: cuenta 'sin cambios'."""
+        from decimal import Decimal
+        p = Producto(codigo='DIF-0', descripcion='Tuerca', categoria='Tuercas',
+                     unidad='pza', stock_actual=Decimal('5'), stock_minimo=1, precio_unitario=Decimal('2'))
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'DIF-0', 'Descripción': 'Tuerca', 'Categoría': 'Tuercas',
+            'Unidad': 'pza', 'Stock Inicial': 5, 'Stock Mínimo': 1, 'Precio Unitario': 2,
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['actualizados'] == 0
+        assert body['sin_cambios'] == 1
+        assert body['cambios_detalle'] == []
+
+    def test_reimport_detecta_solo_el_cambio(self, client, inv_admin, db):
+        """Cambiar un solo campo → actualizados=1 y el detalle lista ese campo.
+        El stock actual NO se modifica aunque venga otro Stock Inicial."""
+        from decimal import Decimal
+        p = Producto(codigo='DIF-1', descripcion='Tuerca', categoria='Tuercas',
+                     unidad='pza', stock_actual=Decimal('5'), stock_minimo=1, precio_unitario=Decimal('2'))
+        db.session.add(p); db.session.commit()
+        pid = p.id
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'DIF-1', 'Descripción': 'Tuerca', 'Categoría': 'Tuercas',
+            'Unidad': 'pza', 'Stock Inicial': 999, 'Stock Mínimo': 1, 'Precio Unitario': 7.5,
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['actualizados'] == 1 and body['sin_cambios'] == 0
+        assert body['cambios_detalle'][0]['codigo'] == 'DIF-1'
+        assert any('precio' in c for c in body['cambios_detalle'][0]['cambios'])
+        db.session.refresh(p)
+        assert float(p.precio_unitario) == 7.5
+        assert float(p.stock_actual) == 5.0  # el stock NO cambió
+
+    def test_plantilla_incluye_columnas_cable(self, client, inv_admin):
+        """La plantilla descargable debe traer las 2 columnas de cable."""
+        import io as _io
+        from openpyxl import load_workbook
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/plantilla-importar')
+        assert resp.status_code == 200
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        assert 'Tipo (cable)' in headers
+        assert 'Tamaño mm²/AWG (cable)' in headers
+
+    def test_categoria_ambigua_pide_confirmacion(self, client, inv_admin, db):
+        """Importar 'Cable azul' cuando existe 'Cable' → pide confirmación (no crea nada)."""
+        db.session.add(Producto(codigo='EXIST-CAB', descripcion='Cable base', categoria='Cable',
+                                unidad='M', cable_tipo='THHN', cable_calibre='12',
+                                stock_actual=0, stock_minimo=0))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'CAB-AZ-1', 'Descripción': 'Cable azul THHN', 'Categoría': 'Cable azul',
+            'Unidad': 'M', 'Stock Inicial': 10, 'Stock Mínimo': 0,
+            'Tipo (cable)': 'THHN', 'Tamaño mm²/AWG (cable)': '12',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body.get('necesita_confirmacion') is True
+        amb = body['categorias_ambiguas']
+        assert any(a['nombre'] == 'Cable azul' and a['sugerencia'] == 'Cable' for a in amb)
+        assert 'Cable' in body['categorias_existentes']
+        # No se creó nada todavía.
+        assert Producto.query.filter_by(codigo='CAB-AZ-1').first() is None
+
+    def test_confirmar_mapea_a_existente(self, client, inv_admin, db):
+        """Con el mapeo 'Cable azul'→'Cable', el producto entra en 'Cable'."""
+        import io as _io
+        db.session.add(Producto(codigo='EXIST-CAB2', descripcion='Cable base', categoria='Cable',
+                                unidad='M', cable_tipo='THHN', cable_calibre='12',
+                                stock_actual=0, stock_minimo=0))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        import json as _json
+        data = {
+            'archivo': (_io.BytesIO(_build_import_xlsx([{
+                'Código (SKU)': 'CAB-AZ-2', 'Descripción': 'Cable azul THHN', 'Categoría': 'Cable azul',
+                'Unidad': 'M', 'Stock Inicial': 10, 'Stock Mínimo': 0,
+                'Tipo (cable)': 'THHN', 'Tamaño mm²/AWG (cable)': '12',
+            }])), 'materiales.xlsx'),
+            'categoria_mapeo': _json.dumps({'Cable azul': 'Cable'}),
+        }
+        resp = client.post('/api/v1/productos/importar', data=data,
+                           content_type='multipart/form-data')
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body.get('necesita_confirmacion') is not True
+        assert body['exitosos'] == 1
+        p = Producto.query.filter_by(codigo='CAB-AZ-2').first()
+        assert p is not None and p.categoria == 'Cable'  # se agregó a la existente
+
+    def test_confirmar_crear_nueva(self, client, inv_admin, db):
+        """Con el mapeo 'Cable azul'→'' (crear nueva), se crea como categoría propia."""
+        import io as _io, json as _json
+        db.session.add(Producto(codigo='EXIST-CAB3', descripcion='Cable base', categoria='Cable',
+                                unidad='M', cable_tipo='THHN', cable_calibre='12',
+                                stock_actual=0, stock_minimo=0))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        data = {
+            'archivo': (_io.BytesIO(_build_import_xlsx([{
+                'Código (SKU)': 'CAB-AZ-3', 'Descripción': 'Cable azul THHN', 'Categoría': 'Cable azul',
+                'Unidad': 'M', 'Stock Inicial': 10, 'Stock Mínimo': 0,
+                'Tipo (cable)': 'THHN', 'Tamaño mm²/AWG (cable)': '12',
+            }])), 'materiales.xlsx'),
+            'categoria_mapeo': _json.dumps({'Cable azul': ''}),
+        }
+        resp = client.post('/api/v1/productos/importar', data=data,
+                           content_type='multipart/form-data')
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['exitosos'] == 1
+        p = Producto.query.filter_by(codigo='CAB-AZ-3').first()
+        assert p is not None and p.categoria == 'Cable azul'  # categoría nueva propia
+
+    def test_columnas_cable_junto_a_categoria(self, client, inv_admin):
+        """Tipo y Tamaño deben ir INMEDIATAMENTE después de Categoría."""
+        import io as _io
+        from openpyxl import load_workbook
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/plantilla-importar')
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        i_cat = headers.index('Categoría')
+        assert headers[i_cat + 1] == 'Tipo (cable)'
+        assert headers[i_cat + 2] == 'Tamaño mm²/AWG (cable)'
+
+    def test_export_seccionado_por_categoria(self, client, inv_admin, db):
+        """El export agrupa por categoría con filas de sección (marcador '#')."""
+        import io as _io
+        from openpyxl import load_workbook
+        from decimal import Decimal
+        db.session.add_all([
+            Producto(codigo='SEC-A1', descripcion='A1', categoria='Alfa', unidad='pza',
+                     stock_actual=Decimal('1'), stock_minimo=0),
+            Producto(codigo='SEC-A2', descripcion='A2', categoria='Alfa', unidad='pza',
+                     stock_actual=Decimal('1'), stock_minimo=0),
+            Producto(codigo='SEC-B1', descripcion='B1', categoria='Beta', unidad='pza',
+                     stock_actual=Decimal('1'), stock_minimo=0),
+        ])
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/exportar')
+        assert resp.status_code == 200
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        col_a = [ws.cell(row=r, column=1).value for r in range(5, ws.max_row + 1)]
+        secciones = [v for v in col_a if isinstance(v, str) and v.startswith('#')]
+        # Al menos una sección por categoría (Alfa, Beta).
+        assert len(secciones) >= 2
+        assert any('Alfa' in s for s in secciones)
+        assert any('Beta' in s for s in secciones)
+
+    def test_import_ignora_filas_de_seccion(self, client, inv_admin, db):
+        """Una fila cuyo código empieza con '#' (sección) se salta sin error."""
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [
+            {'Código (SKU)': '#  ▸  Tornillería  (1)'},  # fila de sección
+            {'Código (SKU)': 'SEC-OK', 'Descripción': 'Tornillo', 'Categoría': 'Tornillería',
+             'Unidad': 'pza', 'Stock Inicial': 3, 'Stock Mínimo': 0},
+        ])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['exitosos'] == 1
+        assert body['errores'] == []  # la fila de sección NO es un error
+        assert Producto.query.filter_by(codigo='SEC-OK').first() is not None
+
+    def test_importar_cable_existente_sin_columnas_no_rompe(self, client, inv_admin, db):
+        """Reimportar un cable con plantilla vieja (sin columnas de cable) NO debe
+        fallar ni borrar el Tipo/Tamaño ya guardado."""
+        _login(client, inv_admin.id, 'admin')
+        p = Producto(codigo='IMP-CAB-4', descripcion='Cable', categoria='Cable',
+                     unidad='M', cable_tipo='THHN', cable_calibre='8',
+                     stock_actual=0, stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        # Fila sin las columnas de cable (se envían vacías, como plantilla vieja).
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-CAB-4', 'Descripción': 'Cable', 'Categoría': 'Cable',
+            'Unidad': 'M', 'Stock Inicial': 0, 'Stock Mínimo': 0, 'Precio Unitario': 55,
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['actualizados'] == 1
+        db.session.refresh(p)
+        assert p.cable_tipo == 'THHN' and p.cable_calibre == '8'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

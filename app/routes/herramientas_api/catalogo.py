@@ -34,18 +34,14 @@ from ._core import (
 
 # ─── Catálogo ────────────────────────────────────────────────────────────────
 
-@bp.route('/herramientas/', methods=['GET'])
-@_require_inventario
-def list_herramientas():
+def _herramientas_filtered_query():
+    """Query de Herramientas aplicando los filtros de la query string
+    (q, clasificacion, serializada, incluir_inactivas). Sin orden ni paginación
+    — lo comparten el listado por array y el paginado, sin duplicar lógica."""
     q = request.args.get('q', '', type=str).strip()
     clasif = request.args.get('clasificacion', '', type=str).strip()
     serializada = request.args.get('serializada', type=str)
     incluir_inactivas = request.args.get('incluir_inactivas', '0') == '1'
-
-    skip, err = _int_arg('skip', 0, 0, 1_000_000)
-    if err: return err
-    limit, err = _int_arg('limit', 200, 0, 1000)
-    if err: return err
 
     query = Herramienta.query
     if not incluir_inactivas:
@@ -62,13 +58,54 @@ def list_herramientas():
         query = query.filter(Herramienta.clasificacion == clasif)
     if serializada in ('true', 'false'):
         query = query.filter(Herramienta.serializada == (serializada == 'true'))
+    return query
+
+
+@bp.route('/herramientas/', methods=['GET'])
+@_require_inventario
+def list_herramientas():
+    skip, err = _int_arg('skip', 0, 0, 1_000_000)
+    if err: return err
+    limit, err = _int_arg('limit', 200, 0, 1000)
+    if err: return err
 
     herramientas = (
-        query.options(selectinload(Herramienta.unidades))
-             .order_by(Herramienta.descripcion)
-             .offset(skip).limit(limit).all()
+        _herramientas_filtered_query()
+        .options(selectinload(Herramienta.unidades))
+        .order_by(Herramienta.descripcion)
+        .offset(skip).limit(limit).all()
     )
     return jsonify([_herramienta_to_dict(h, incluir_stats=True) for h in herramientas])
+
+
+@bp.route('/herramientas/paginado', methods=['GET'])
+@_require_inventario
+def list_herramientas_paginado():
+    """Listado paginado por páginas: mismos filtros que GET /herramientas/ pero
+    devuelve `total` y `pages` para un paginador numérico. Ordena por descripción
+    + id (el id como desempate para que la paginación sea estable y no salte
+    filas entre páginas). Respuesta: { items, total, page, per_page, pages }."""
+    page, err = _int_arg('page', 1, 1, 1_000_000)
+    if err: return err
+    per_page, err = _int_arg('per_page', 50, 1, 200)
+    if err: return err
+
+    query = _herramientas_filtered_query()
+    total = query.order_by(None).count()
+    herramientas = (
+        query
+        .options(selectinload(Herramienta.unidades))
+        .order_by(Herramienta.descripcion, Herramienta.id)
+        .offset((page - 1) * per_page).limit(per_page).all()
+    )
+    pages = max(1, (total + per_page - 1) // per_page)
+    return jsonify({
+        'items': [_herramienta_to_dict(h, incluir_stats=True) for h in herramientas],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': pages,
+    })
 
 
 @bp.route('/herramientas/<int:hid>', methods=['GET'])

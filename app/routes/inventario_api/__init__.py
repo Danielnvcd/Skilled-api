@@ -33,6 +33,7 @@ from ._core import (
 # Orden: tomas depende de movimientos (_perform_movimiento), así que movimientos
 # debe importarse primero. El resto no tiene dependencias entre sí.
 from . import productos        # noqa: F401  registra /productos/*
+from . import imagenes         # noqa: F401  registra /productos/imagenes/* (pipeline R2)
 from . import almacenes        # noqa: F401  registra /almacenes/* y /estantes/*
 from . import movimientos      # noqa: F401  registra /movimientos/*
 from . import solicitudes      # noqa: F401  registra /solicitudes/* y PDFs

@@ -35,3 +35,4 @@ simple-websocket==1.1.0
 gunicorn==23.0.0
 gevent==24.11.1
 gevent-websocket==0.10.1
+boto3==1.35.99

@@ -39,6 +39,16 @@ def app():
     from cryptography.fernet import Fernet
     os.environ['TOTP_ENCRYPTION_KEY'] = Fernet.generate_key().decode()
 
+    # El pipeline de imágenes → Cloudflare R2 debe estar APAGADO en tests: nunca
+    # subir a un bucket real ni hacer llamadas de red. Vaciamos las credenciales
+    # ANTES de create_app; load_dotenv(override=False) respeta estos valores
+    # vacíos, así r2_enabled() devuelve False y marcar_para_sync es no-op (los
+    # endpoints de catálogo/import se comportan igual que sin la feature).
+    for _r2 in ('R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID',
+                'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_BASE_URL'):
+        os.environ[_r2] = ''
+    os.environ['R2_FORCE_ENABLE'] = 'false'
+
     # Resetear el singleton de Redis por si ya se conectó en otro import
     import app.extensions as _ext
     _ext._redis_client = None

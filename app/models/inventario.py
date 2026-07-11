@@ -40,6 +40,12 @@ class Producto(db.Model):
     descripcion = db.Column(db.String(250), nullable=False)
     categoria = db.Column(db.String(100), nullable=False, index=True)
     unidad = db.Column(db.String(50), nullable=False)  # pieza, caja, kg, etc.
+    # Atributos específicos de CABLE (categoría que contiene "cable"). Nullable a
+    # propósito: solo los productos de cable los usan; el resto quedan NULL sin
+    # romper nada. La obligatoriedad (cuando la categoría es cable) se aplica en
+    # la capa de aplicación — ver _es_categoria_cable / _normalizar_cable.
+    cable_tipo = db.Column(db.String(60), nullable=True)     # THHN, THW, desnudo…
+    cable_calibre = db.Column(db.String(40), nullable=True)  # "12", "2/0", "500 kcmil" (mm²/AWG)
     stock_actual = db.Column(db.Numeric(10, 2), default=0, nullable=False)
     # Pausa 2-bis: stock apartado por solicitudes APROBADAS no entregadas.
     # Se suma al APROBAR la solicitud, se resta al ENTREGAR/RECHAZAR/REABRIR.
@@ -58,6 +64,20 @@ class Producto(db.Model):
         return (self.stock_actual or Decimal('0')) - (self.stock_reservado or Decimal('0'))
 
     imagen_url = db.Column(db.String(500), nullable=True)
+    # ── Imagen en Cloudflare R2 (pipeline WebP) ──────────────────────────────
+    # `imagen_url` es la URL que se PINTA en el catálogo. Cuando el pipeline de
+    # R2 está activo (solo producción), las imágenes que llegan como URL externa
+    # se descargan, se convierten a WebP y se suben a R2; entonces `imagen_url`
+    # pasa a apuntar al dominio público de R2. Estos campos son el "libro mayor"
+    # de ese proceso — todos nullable para no romper productos existentes:
+    #   imagen_source_url: última URL externa de origen (lo que se capturó/importó)
+    #   imagen_r2_key:     object key en R2 una vez subida
+    #   imagen_estado:     None(sin imagen) | PENDIENTE | PROCESANDO | OK | ERROR
+    #   imagen_error:      último error legible (para el reporte al SPA)
+    imagen_source_url = db.Column(db.String(500), nullable=True)
+    imagen_r2_key = db.Column(db.String(300), nullable=True)
+    imagen_estado = db.Column(db.String(20), nullable=True)
+    imagen_error = db.Column(db.String(300), nullable=True)
     # Pausa 9: proveedor default para Compras express. Campos texto, no tabla
     # aparte: si más adelante crece el módulo de proveedores se migra a FK.
     proveedor_default_nombre = db.Column(db.String(150), nullable=True)

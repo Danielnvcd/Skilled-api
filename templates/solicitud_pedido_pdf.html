@@ -82,6 +82,8 @@
     }
 
     .complemento { color: #888; font-style: italic; }
+    /* Etiqueta de cable (Tipo · Tamaño) resaltada en ámbar bajo la descripción */
+    .cable-tag { color: #92400E; font-weight: bold; font-size: 8pt; }
 
     /* ─── Totales ────────────────────────────────────────────────────────── */
     .totales-box {
@@ -168,6 +170,7 @@
         <td class="center">{{ loop.index }}</td>
         <td class="wrap">
           {{ m.descripcion }}
+          {% if m.cable_tipo or m.cable_calibre %}<br/><span class="cable-tag">Cable: {{ m.cable_tipo or '—' }} · {{ m.cable_calibre or '—' }} mm²/AWG</span>{% endif %}
           {% if m.justificacion %}<br/><span class="complemento">{{ m.justificacion }}</span>{% endif %}
         </td>
         <td><span class="sku-pill">{{ m.codigo }}</span></td>

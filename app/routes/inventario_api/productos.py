@@ -22,7 +22,32 @@ from ._core import (
     _INV_ROLES,
 )
 from app.realtime import emit_to_role
-from .solicitudes import _unidad_permite_decimales
+from .solicitudes import _unidad_permite_decimales, _es_categoria_cable
+
+
+# Unidad forzada para productos de cable (se pide/consume por metros).
+_CABLE_UNIDAD = 'M'
+
+
+def _validar_normalizar_cable(categoria, unidad, cable_tipo, cable_calibre):
+    """Reglas de negocio de los productos de CABLE.
+
+    - Si la categoría es de cable: `cable_tipo` y `cable_calibre` son
+      obligatorios (no vacíos) y la unidad se FUERZA a 'M' (metros), sin
+      importar lo que venga del cliente.
+    - Si NO es cable: los campos de cable se limpian a None para no arrastrar
+      datos huérfanos al cambiar de categoría.
+
+    Devuelve (unidad_final, cable_tipo_final, cable_calibre_final, error) donde
+    `error` es un mensaje str si falta algún dato obligatorio, o None si todo ok.
+    """
+    tipo = (cable_tipo or '').strip() or None
+    calibre = (cable_calibre or '').strip() or None
+    if _es_categoria_cable(categoria):
+        if not tipo or not calibre:
+            return None, None, None, 'Los productos de cable requieren Tipo y Tamaño (mm²/AWG)'
+        return _CABLE_UNIDAD, tipo, calibre, None
+    return unidad, None, None, None
 
 
 def _validar_stock_entero(unidad, *valores):
@@ -56,17 +81,16 @@ def get_producto_por_codigo(codigo: str):
     return jsonify(_producto_to_dict(prod))
 
 
-@bp.route('/productos/', methods=['GET'])
-@_require_inventario
-def get_productos():
-    skip, err = _int_arg('skip', 0, 0, 1_000_000)
-    if err: return err
-    limit, err = _int_arg('limit', 200, 0, 1000)
-    if err: return err
+def _productos_filtered_query():
+    """Construye el query de Productos activos aplicando los filtros server-side
+    de la query string: `categoria` (match exacto), `q` (búsqueda en
+    código/descripción/categoría), `stock` (bajo/sin), `imagen` (con/sin),
+    `unidad` (match exacto) y `compra=activa` (con compra en curso).
 
-    # Filtros server-side: con miles de productos el catálogo NO puede bajar
-    # todo y filtrar en el cliente. `categoria` (match exacto) y `q` (búsqueda
-    # en código/descripción/categoría) acotan el resultado en la DB.
+    Devuelve el query SIN orden ni paginación — lo comparten el listado por
+    array (`GET /productos/`) y el paginado (`GET /productos/paginado`), así los
+    filtros se mantienen idénticos en ambos sin duplicar lógica.
+    """
     categoria = (request.args.get('categoria') or '').strip()
     q = (request.args.get('q') or '').strip()
 
@@ -110,9 +134,19 @@ def get_productos():
             )
         )
         query = query.filter(Producto.id.in_(sub))
+    return query
+
+
+@bp.route('/productos/', methods=['GET'])
+@_require_inventario
+def get_productos():
+    skip, err = _int_arg('skip', 0, 0, 1_000_000)
+    if err: return err
+    limit, err = _int_arg('limit', 200, 0, 1000)
+    if err: return err
 
     productos = (
-        query
+        _productos_filtered_query()
         .order_by(Producto.id)  # orden determinista: sin esto, offset/limit en
                                 # Postgres devuelve filas arbitrarias y la
                                 # paginación puede saltarse/duplicar productos.
@@ -121,6 +155,43 @@ def get_productos():
         .all()
     )
     return jsonify([_producto_to_dict(p) for p in productos])
+
+
+@bp.route('/productos/paginado', methods=['GET'])
+@_require_inventario
+def get_productos_paginado():
+    """Listado paginado por páginas: mismos filtros que GET /productos/ pero
+    devuelve `total` y `pages` para pintar un paginador numérico
+    (Anterior/Siguiente + Página X de Y) sin bajar todo el catálogo de golpe.
+
+    Params: `page` (1-based, def. 1) y `per_page` (def. 50, máx. 200).
+    Respuesta: { items, total, page, per_page, pages } — misma forma que el
+    resto de listados paginados del sistema (empleados, proyectos, etc.).
+    """
+    page, err = _int_arg('page', 1, 1, 1_000_000)
+    if err: return err
+    per_page, err = _int_arg('per_page', 50, 1, 200)
+    if err: return err
+
+    query = _productos_filtered_query()
+    # count() sobre el query filtrado (sin orden, para no arrastrar el ORDER BY
+    # al COUNT). Es la única query extra respecto al listado por array.
+    total = query.order_by(None).count()
+    productos = (
+        query
+        .order_by(Producto.id)
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    pages = max(1, (total + per_page - 1) // per_page)
+    return jsonify({
+        'items': [_producto_to_dict(p) for p in productos],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': pages,
+    })
 
 
 @bp.route('/productos/unidades/', methods=['GET'])
@@ -225,7 +296,14 @@ def create_producto():
     if Producto.query.filter(Producto.codigo == data['codigo']).first():
         return jsonify({'detail': 'El código de producto ya existe'}), 400
 
-    err_dec = _validar_stock_entero(data['unidad'], data['stock_actual'], data['stock_minimo'])
+    # Cable: exige Tipo + Tamaño y fuerza unidad='M'. No-cable: limpia esos campos.
+    unidad_final, cable_tipo, cable_calibre, err_cable = _validar_normalizar_cable(
+        data['categoria'], data['unidad'], data.get('cable_tipo'), data.get('cable_calibre'),
+    )
+    if err_cable:
+        return jsonify({'detail': err_cable}), 422
+
+    err_dec = _validar_stock_entero(unidad_final, data['stock_actual'], data['stock_minimo'])
     if err_dec:
         return jsonify({'detail': err_dec}), 422
 
@@ -235,7 +313,9 @@ def create_producto():
         codigo=data['codigo'],
         descripcion=data['descripcion'],
         categoria=data['categoria'],
-        unidad=data['unidad'],
+        unidad=unidad_final,
+        cable_tipo=cable_tipo,
+        cable_calibre=cable_calibre,
         stock_actual=stock_inicial,
         stock_minimo=Decimal(str(data['stock_minimo'])),
         imagen_url=data.get('imagen_url') or None,
@@ -261,6 +341,12 @@ def create_producto():
     _audit(user, f"Producto creado: {data['codigo']} — {data['descripcion']}")
     db.session.commit()
     db.session.refresh(nuevo)
+    # Pipeline de imágenes → R2 (no-op salvo producción con R2 configurado):
+    # si la imagen es una URL externa, se marca y se encola su descarga a WebP+R2.
+    from .imagenes import marcar_para_sync, encolar_sync
+    if marcar_para_sync(nuevo, nuevo.imagen_url):
+        db.session.commit()
+        encolar_sync(user.id, [nuevo.id])
     emit_to_role(_INV_ROLES, 'producto:changed', {
         'id': nuevo.id, 'action': 'created',
     })
@@ -277,11 +363,24 @@ def update_producto(producto_id: int):
     if not prod:
         return jsonify({'detail': 'Producto no encontrado'}), 404
 
-    # Decimales según unidad: si la unidad (nueva o actual) es por pieza, el
-    # stock que se vaya a guardar debe ser entero.
+    # Cable: reglas sobre la categoría/unidad/campos EFECTIVOS (los nuevos si
+    # vienen, si no los actuales del producto). Un campo de cable en None se
+    # interpreta como "no lo mandaron" → conserva el actual; así un update
+    # parcial (p.ej. solo precio) no borra el Tipo/Tamaño de un cable existente.
+    categoria_efectiva = data['categoria'] if data.get('categoria') is not None else prod.categoria
     unidad_efectiva = data['unidad'] if data.get('unidad') is not None else prod.unidad
+    cable_tipo_eff = data.get('cable_tipo') if data.get('cable_tipo') is not None else prod.cable_tipo
+    cable_calibre_eff = data.get('cable_calibre') if data.get('cable_calibre') is not None else prod.cable_calibre
+    unidad_final, cable_tipo_final, cable_calibre_final, err_cable = _validar_normalizar_cable(
+        categoria_efectiva, unidad_efectiva, cable_tipo_eff, cable_calibre_eff,
+    )
+    if err_cable:
+        return jsonify({'detail': err_cable}), 422
+
+    # Decimales según unidad: si la unidad (nueva/actual/forzada a M) es por pieza,
+    # el stock que se vaya a guardar debe ser entero.
     err_dec = _validar_stock_entero(
-        unidad_efectiva,
+        unidad_final,
         data.get('stock_actual'),
         data.get('stock_minimo'),
     )
@@ -298,7 +397,14 @@ def update_producto(producto_id: int):
         cambios.append("descripcion actualizada")
         prod.descripcion = data['descripcion']
     if data.get('categoria') is not None: prod.categoria = data['categoria']
-    if data.get('unidad') is not None: prod.unidad = data['unidad']
+    # unidad_final ya considera el forzado a 'M' para cable; para no-cable es la
+    # nueva unidad (si vino) o la actual, así que asignarla siempre es seguro.
+    prod.unidad = unidad_final
+    # Campos de cable normalizados (valores para cable; None para no-cable).
+    if (prod.cable_tipo, prod.cable_calibre) != (cable_tipo_final, cable_calibre_final):
+        cambios.append("datos de cable actualizados")
+    prod.cable_tipo = cable_tipo_final
+    prod.cable_calibre = cable_calibre_final
     if data.get('imagen_url') is not None: prod.imagen_url = data['imagen_url'] or None
     if data.get('stock_actual') is not None:
         cambios.append(f"stock_actual: {prod.stock_actual}→{data['stock_actual']}")
@@ -318,6 +424,13 @@ def update_producto(producto_id: int):
 
     db.session.commit()
     db.session.refresh(prod)
+    # Pipeline de imágenes → R2: si mandaron una imagen nueva y es URL externa,
+    # se marca y se encola (no-op salvo producción con R2 configurado). El
+    # background task cambiará imagen_url al dominio de R2 al terminar.
+    from .imagenes import marcar_para_sync, encolar_sync
+    if data.get('imagen_url') is not None and marcar_para_sync(prod, prod.imagen_url):
+        db.session.commit()
+        encolar_sync(request.current_user.id, [prod.id])
     emit_to_role(_INV_ROLES, 'producto:changed', {
         'id': prod.id, 'action': 'updated',
     })
