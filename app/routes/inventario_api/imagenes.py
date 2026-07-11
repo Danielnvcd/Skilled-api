@@ -233,6 +233,47 @@ def get_imagenes_estado():
     })
 
 
+@bp.route('/productos/imagenes/errores', methods=['GET'])
+@_require_inventario_admin
+def get_imagenes_errores():
+    """Lista productos y categorías cuya imagen falló al subir a R2 (estado
+    ERROR), con la URL que falló y el motivo — para que el usuario la corrija.
+    La corrección se hace por los endpoints de edición normales (PUT), que
+    re-encolan la imagen automáticamente."""
+    items = []
+    prods = (
+        Producto.query
+        .filter(Producto.activo == True, Producto.imagen_estado == 'ERROR')  # noqa: E712
+        .order_by(Producto.codigo)
+        .all()
+    )
+    for p in prods:
+        items.append({
+            'tipo': 'producto',
+            'id': p.id,
+            'codigo': p.codigo,
+            'nombre': p.descripcion,
+            'url_fallida': p.imagen_source_url or p.imagen_url,
+            'error': p.imagen_error,
+        })
+    cats = (
+        CategoriaConfig.query
+        .filter(CategoriaConfig.imagen_estado == 'ERROR')
+        .order_by(CategoriaConfig.nombre)
+        .all()
+    )
+    for c in cats:
+        items.append({
+            'tipo': 'categoria',
+            'id': c.id,
+            'codigo': c.nombre,
+            'nombre': c.nombre,
+            'url_fallida': c.imagen_source_url or c.imagen_url,
+            'error': c.imagen_error,
+        })
+    return jsonify({'total': len(items), 'items': items})
+
+
 def _recolectar_candidatos(Model, tipo, filtro_activo=False):
     """Selecciona registros con imagen externa aún no migrada (o PENDIENTE/ERROR),
     los marca PENDIENTE y devuelve la lista de (tipo, id) a encolar."""
