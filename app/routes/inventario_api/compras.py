@@ -38,7 +38,7 @@ from ._core import (
     _parse_or_422, _int_arg, _audit,
     _BaseSchema,
     _INV_ROLES,
-    _almacen_default_id, _lock_stock, _recalcular_cache_stock,
+    _almacen_default_id, _depositar, _recalcular_caches,
 )
 from .etiquetas import _render_oc_express_pdf, _whatsapp_link
 from .solicitudes import _unidad_permite_decimales
@@ -521,20 +521,23 @@ def recibir_solicitud_compra(sol_id: int):
             productos_locked[prod_id] = producto
 
             cant_total = delta_por_producto[prod_id]
-            stock_almacen = _lock_stock(prod_id, almacen_id)
-            stock_almacen.cantidad = (stock_almacen.cantidad or Decimal('0')) + cant_total
+            # ENTRADA al bucket del proyecto de la compra (feature stock por
+            # proyecto): lo recibido para un proyecto queda etiquetado a él;
+            # una compra sin proyecto cae en el bucket general.
+            _depositar(prod_id, almacen_id, sol.proyecto_id, cant_total)
 
             db.session.add(MovimientoInventario(
                 tipo='ENTRADA',
                 producto_id=prod_id,
                 cantidad=cant_total,
                 almacen_destino_id=almacen_id,
+                proyecto_destino_id=sol.proyecto_id,
                 motivo=motivo_base,
                 usuario_id=user.id,
             ))
 
         for producto in productos_locked.values():
-            _recalcular_cache_stock(producto)
+            _recalcular_caches(producto, almacen_id)
 
         # Acumular cantidad_recibida por línea.
         for det, delta in recepciones:

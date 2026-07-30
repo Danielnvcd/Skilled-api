@@ -39,6 +39,10 @@ class Producto(db.Model):
     codigo = db.Column(db.String(100), unique=True, nullable=False, index=True)
     descripcion = db.Column(db.String(250), nullable=False)
     categoria = db.Column(db.String(100), nullable=False, index=True)
+    # Marca / fabricante del producto. Campo INDEPENDIENTE del proveedor default
+    # (una marca no es un proveedor). Texto libre, nullable para no romper los
+    # productos existentes (quedan con marca=NULL hasta que se capture).
+    marca = db.Column(db.String(100), nullable=True)
     unidad = db.Column(db.String(50), nullable=False)  # pieza, caja, kg, etc.
     # Atributos específicos de CABLE (categoría que contiene "cable"). Nullable a
     # propósito: solo los productos de cable los usan; el resto quedan NULL sin
@@ -119,6 +123,49 @@ class StockPorAlmacen(db.Model):
 
     producto = db.relationship('Producto', backref=db.backref('stocks_por_almacen', lazy='select', cascade='all, delete-orphan'))
     almacen = db.relationship('Almacen', backref=db.backref('stocks', lazy='select'))
+
+
+class StockAlmacenProyecto(db.Model):
+    """Stock físico desglosado por (producto, almacén, proyecto) — grano más
+    fino que `StockPorAlmacen` (feature "stock por proyecto", 2026-07).
+
+    `proyecto_id = NULL` significa stock GENERAL/libre (no apartado a ningún
+    proyecto). Ésta es la nueva **fuente de verdad**; los dos caches previos se
+    mantienen en la MISMA transacción que modifica esta tabla:
+        Σ proyecto  ⇒  StockPorAlmacen.cantidad   (por almacén)
+        Σ almacén   ⇒  Producto.stock_actual      (total del producto)
+    Así todo el código que ya lee esos caches sigue funcionando sin cambios.
+
+    El grano de proyecto NO se propaga a `producto_estante` (celdas): ese
+    sub-libro sigue siendo por almacén, con su invariante Σceldas ≤ stock_almacén.
+
+    `proyecto_id` no forma parte de la PK porque Postgres no admite NULL en PK;
+    la unicidad de (producto, almacén, bucket) se garantiza con un índice único
+    funcional sobre COALESCE(proyecto_id, 0) — el general (NULL) mapea al 0.
+    """
+    __tablename__ = "stock_almacen_proyecto"
+    id = db.Column(db.Integer, primary_key=True)
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id', ondelete='CASCADE'), nullable=False, index=True)
+    almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id', ondelete='RESTRICT'), nullable=False, index=True)
+    proyecto_id = db.Column(db.Integer, db.ForeignKey('proyectos.id', ondelete='RESTRICT'), nullable=True, index=True)
+    cantidad = db.Column(db.Numeric(10, 2), default=0, nullable=False, server_default='0')
+    updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
+
+    producto = db.relationship('Producto', backref=db.backref('stocks_por_proyecto', lazy='select', cascade='all, delete-orphan'))
+    almacen = db.relationship('Almacen', foreign_keys=[almacen_id])
+    proyecto = db.relationship('Proyecto', foreign_keys=[proyecto_id])
+
+    __table_args__ = (
+        # Unicidad por bucket: general (NULL) ⇒ COALESCE→0. Funciona en Postgres
+        # y SQLite (ambos soportan índices únicos por expresión).
+        db.Index(
+            'uq_stock_almacen_proyecto',
+            'producto_id', 'almacen_id',
+            db.text('coalesce(proyecto_id, 0)'),
+            unique=True,
+        ),
+        db.Index('ix_sap_almacen_proyecto', 'almacen_id', 'proyecto_id'),
+    )
 
 
 # ─── Pausa 10 — Conteo físico / Toma de inventario ──────────────────────────
@@ -227,19 +274,53 @@ class ProductoEstante(db.Model):
 class MovimientoInventario(db.Model):
     __tablename__ = "movimientos_inventario"
     id = db.Column(db.Integer, primary_key=True)
-    tipo = db.Column(db.String(50), nullable=False, index=True)  # ENTRADA, SALIDA, AJUSTE, TRASPASO
+    tipo = db.Column(db.String(50), nullable=False, index=True)  # ENTRADA, SALIDA, AJUSTE, TRASPASO, REASIGNACION
     producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=False, index=True)
     almacen_origen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=True, index=True)
     almacen_destino_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=True, index=True)
+    # Atribución de proyecto del movimiento (feature "stock por proyecto"). NULL
+    # = bucket general. ENTRADA/AJUSTE+ usan proyecto_destino; SALIDA/AJUSTE− usan
+    # proyecto_origen; TRASPASO conserva el mismo bucket en ambos; REASIGNACION
+    # mueve de proyecto_origen a proyecto_destino dentro del mismo almacén.
+    proyecto_origen_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=True, index=True)
+    proyecto_destino_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=True, index=True)
     cantidad = db.Column(db.Numeric(10, 2), nullable=False)
     motivo = db.Column(db.String(250), nullable=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     fecha = db.Column(db.DateTime, default=_now_utc, index=True)
+    # Partes del movimiento (feature "vale de movimiento"): quién ENTREGA y quién
+    # RECIBE la mercancía, para el comprobante PDF y la trazabilidad. Cada parte
+    # puede ser un trabajador del sistema (FK) o un nombre libre — mismo patrón
+    # que el solicitante real de una entrega directa (ver SolicitudMaterial).
+    # Todas nullable: los movimientos previos y los internos (AJUSTE/REASIGNACION)
+    # no las necesitan. FK con SET NULL para no bloquear el borrado de trabajadores.
+    entrega_trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id', ondelete='SET NULL'), nullable=True)
+    entrega_nombre = db.Column(db.String(200), nullable=True)
+    recibe_trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id', ondelete='SET NULL'), nullable=True)
+    recibe_nombre = db.Column(db.String(200), nullable=True)
 
     producto = db.relationship('Producto', backref=db.backref('movimientos', lazy=True, cascade='all, delete-orphan'))
     almacen_origen = db.relationship('Almacen', foreign_keys=[almacen_origen_id])
     almacen_destino = db.relationship('Almacen', foreign_keys=[almacen_destino_id])
+    proyecto_origen = db.relationship('Proyecto', foreign_keys=[proyecto_origen_id])
+    proyecto_destino = db.relationship('Proyecto', foreign_keys=[proyecto_destino_id])
     usuario = db.relationship('User', foreign_keys=[usuario_id])
+    entrega_trabajador = db.relationship('Trabajador', foreign_keys=[entrega_trabajador_id])
+    recibe_trabajador = db.relationship('Trabajador', foreign_keys=[recibe_trabajador_id])
+
+    @property
+    def entrega_display(self):
+        """Nombre de quien ENTREGA: el trabajador ligado o el nombre libre."""
+        if self.entrega_trabajador:
+            return self.entrega_trabajador.nombre_completo
+        return self.entrega_nombre
+
+    @property
+    def recibe_display(self):
+        """Nombre de quien RECIBE: el trabajador ligado o el nombre libre."""
+        if self.recibe_trabajador:
+            return self.recibe_trabajador.nombre_completo
+        return self.recibe_nombre
 
 
 class CategoriaConfig(db.Model):

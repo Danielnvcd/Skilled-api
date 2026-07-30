@@ -5,7 +5,7 @@ import io
 import pytest
 from werkzeug.security import generate_password_hash
 
-from app.models import User, Almacen, Producto, StockPorAlmacen, Proyecto
+from app.models import User, Almacen, Producto, StockPorAlmacen, StockAlmacenProyecto, Proyecto
 from app.routes.api_auth import _encode_access_token
 
 
@@ -43,6 +43,8 @@ def producto(db, almacen):
                  stock_actual=100, stock_minimo=0, precio_unitario=50)
     db.session.add(p)
     db.session.flush()
+    db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=almacen.id,
+                                        proyecto_id=None, cantidad=100))
     db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=almacen.id, cantidad=100))
     db.session.commit()
     return p

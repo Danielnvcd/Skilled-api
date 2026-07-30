@@ -19,7 +19,8 @@ from werkzeug.security import generate_password_hash
 
 from app.extensions import db as flask_db
 from app.models import (
-    User, Almacen, Estante, Producto, StockPorAlmacen, MovimientoInventario,
+    User, Almacen, Estante, Producto, StockPorAlmacen, StockAlmacenProyecto,
+    MovimientoInventario, Proyecto, Trabajador,
     SolicitudMaterial, SolicitudMaterialDetalle, AuditLog
 )
 from app.routes.api_auth import _encode_access_token
@@ -480,6 +481,8 @@ def _build_import_xlsx(rows):
         'Código (SKU)', 'Descripción', 'Categoría', 'Unidad',
         'Stock Inicial', 'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
         'Tipo (cable)', 'Tamaño mm²/AWG (cable)',
+        # Feature stock por proyecto: destino del stock inicial por fila.
+        'Almacén', 'Proyecto',
     ]
     wb = Workbook()
     ws = wb.active
@@ -1125,10 +1128,14 @@ class TestMovimientos:
             unidad='pza', stock_actual=Decimal(str(stock)), stock_minimo=10,
         )
         db.session.add(p); db.session.flush()
-        # Refactor 'stock por almacén': la cache `Producto.stock_actual` se
-        # recalcula desde StockPorAlmacen, así que necesitamos sembrar el
-        # registro inicial en la bodega default. Sin esto, todo movimiento
-        # parte de stock=0 y los asserts del test no cuadran.
+        # Feature 'stock por proyecto': la fuente de verdad es
+        # stock_almacen_proyecto (bucket general = proyecto NULL); stock_por_almacen
+        # y stock_actual son caches que se recalculan desde los buckets. Sembramos
+        # ambos para que los movimientos partan del stock esperado.
+        db.session.add(StockAlmacenProyecto(
+            producto_id=p.id, almacen_id=self._bodega_id, proyecto_id=None,
+            cantidad=Decimal(str(stock)),
+        ))
         db.session.add(StockPorAlmacen(
             producto_id=p.id, almacen_id=self._bodega_id,
             cantidad=Decimal(str(stock)),
@@ -1502,3 +1509,284 @@ class TestEdgeCases:
                            data={'codigo': 'FORM-001', 'descripcion': 'Test'})
         # request.get_json(silent=True) devuelve None → schema rechaza
         assert resp.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 12. MOVIMIENTOS — PARTES (quién entrega / quién recibe) + VALE PDF
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestMovimientoPartes:
+
+    @pytest.fixture(autouse=True)
+    def _seed(self, db):
+        self._bodega = Almacen(nombre='Bodega Partes', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(self._bodega); db.session.commit()
+
+    def _producto(self, db, stock=100):
+        from decimal import Decimal
+        p = Producto(codigo=f'PT-{uuid.uuid4().hex[:6]}', descripcion='X', categoria='T',
+                     unidad='pza', stock_actual=Decimal(str(stock)), stock_minimo=0)
+        db.session.add(p); db.session.flush()
+        db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=self._bodega.id,
+                                            proyecto_id=None, cantidad=Decimal(str(stock))))
+        db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=self._bodega.id,
+                                       cantidad=Decimal(str(stock))))
+        db.session.commit()
+        return p
+
+    def _trabajador(self, db, activo=True):
+        t = Trabajador(no_empleado=f'TP-{uuid.uuid4().hex[:5]}', nombre='Juan',
+                       nombre_apellidos='Pérez López', activo=activo)
+        db.session.add(t); db.session.commit()
+        return t
+
+    def test_salida_con_partes_persiste_y_serializa(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, stock=100)
+        t = self._trabajador(db)
+        resp = client.post('/api/v1/movimientos/', json={
+            'tipo': 'SALIDA', 'producto_id': p.id, 'cantidad': 10.0,
+            'almacen_origen_id': self._bodega.id,
+            'entrega_nombre': 'Almacén Central',
+            'recibe_trabajador_id': t.id,
+        })
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['entrega_nombre'] == 'Almacén Central'
+        assert body['recibe_nombre'] == t.nombre_completo
+        assert body['recibe_trabajador_id'] == t.id
+        mov = MovimientoInventario.query.get(body['id'])
+        assert mov.recibe_trabajador_id == t.id
+        assert mov.entrega_nombre == 'Almacén Central'
+
+    def test_vale_pdf_responde_ok(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, stock=50)
+        resp = client.post('/api/v1/movimientos/', json={
+            'tipo': 'ENTRADA', 'producto_id': p.id, 'cantidad': 5.0,
+            'almacen_destino_id': self._bodega.id,
+            'entrega_nombre': 'Proveedor X', 'recibe_nombre': 'Bodeguero',
+        })
+        assert resp.status_code == 200, resp.get_json()
+        mov_id = resp.get_json()['id']
+        pdf = client.get(f'/api/v1/movimientos/{mov_id}/pdf')
+        assert pdf.status_code == 200
+        assert pdf.mimetype == 'application/pdf'
+        assert pdf.data[:4] == b'%PDF'
+
+    def test_vale_pdf_404_si_no_existe(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/movimientos/999999/pdf')
+        assert resp.status_code == 404
+
+    def test_trabajador_inexistente_422(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post('/api/v1/movimientos/', json={
+            'tipo': 'ENTRADA', 'producto_id': p.id, 'cantidad': 5.0,
+            'almacen_destino_id': self._bodega.id,
+            'recibe_trabajador_id': 999999,
+        })
+        assert resp.status_code == 422
+
+    def test_trabajador_inactivo_422(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        t = self._trabajador(db, activo=False)
+        resp = client.post('/api/v1/movimientos/', json={
+            'tipo': 'ENTRADA', 'producto_id': p.id, 'cantidad': 5.0,
+            'almacen_destino_id': self._bodega.id,
+            'entrega_trabajador_id': t.id,
+        })
+        assert resp.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 13. EDITOR DE STOCK POR BUCKET (ajustar-buckets → AJUSTES)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestAjustarBuckets:
+
+    @pytest.fixture(autouse=True)
+    def _seed(self, db):
+        self._bodega = Almacen(nombre='Bodega Buckets', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(self._bodega); db.session.commit()
+
+    def _producto(self, db, general=50):
+        from decimal import Decimal
+        p = Producto(codigo=f'BK-{uuid.uuid4().hex[:6]}', descripcion='X', categoria='T',
+                     unidad='pza', stock_actual=Decimal(str(general)), stock_minimo=0)
+        db.session.add(p); db.session.flush()
+        db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=self._bodega.id,
+                                            proyecto_id=None, cantidad=Decimal(str(general))))
+        db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=self._bodega.id,
+                                       cantidad=Decimal(str(general))))
+        db.session.commit()
+        return p
+
+    def test_subir_bucket_genera_ajuste(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, general=50)
+        resp = client.post(f'/api/v1/productos/{p.id}/ajustar-buckets', json={
+            'buckets': [{'almacen_id': self._bodega.id, 'proyecto_id': None, 'cantidad_objetivo': 60}],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['buckets_ajustados'] == 1
+        db.session.refresh(p)
+        assert float(p.stock_actual) == pytest.approx(60.0, abs=0.01)
+        ajustes = MovimientoInventario.query.filter_by(producto_id=p.id, tipo='AJUSTE').all()
+        assert len(ajustes) == 1 and float(ajustes[0].cantidad) == pytest.approx(10.0, abs=0.01)
+
+    def test_agregar_bucket_proyecto(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, general=50)
+        proy = Proyecto(numero_proyecto=f'PB-{uuid.uuid4().hex[:5]}', nombre='Obra', activo=True)
+        db.session.add(proy); db.session.commit()
+        resp = client.post(f'/api/v1/productos/{p.id}/ajustar-buckets', json={
+            'buckets': [
+                {'almacen_id': self._bodega.id, 'proyecto_id': None, 'cantidad_objetivo': 50},
+                {'almacen_id': self._bodega.id, 'proyecto_id': proy.id, 'cantidad_objetivo': 20},
+            ],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        db.session.refresh(p)
+        assert float(p.stock_actual) == pytest.approx(70.0, abs=0.01)
+        bucket = StockAlmacenProyecto.query.filter_by(
+            producto_id=p.id, almacen_id=self._bodega.id, proyecto_id=proy.id).first()
+        assert bucket is not None and float(bucket.cantidad) == pytest.approx(20.0, abs=0.01)
+
+    def test_ajuste_respeta_reservas(self, client, inv_admin, db):
+        from decimal import Decimal
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, general=50)
+        p.stock_reservado = Decimal('40')
+        db.session.commit()
+        resp = client.post(f'/api/v1/productos/{p.id}/ajustar-buckets', json={
+            'buckets': [{'almacen_id': self._bodega.id, 'proyecto_id': None, 'cantidad_objetivo': 5}],
+        })
+        assert resp.status_code == 409
+        db.session.refresh(p)
+        assert float(p.stock_actual) == pytest.approx(50.0, abs=0.01)  # rollback
+
+    def test_bucket_duplicado_422(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post(f'/api/v1/productos/{p.id}/ajustar-buckets', json={
+            'buckets': [
+                {'almacen_id': self._bodega.id, 'proyecto_id': None, 'cantidad_objetivo': 5},
+                {'almacen_id': self._bodega.id, 'proyecto_id': None, 'cantidad_objetivo': 7},
+            ],
+        })
+        assert resp.status_code == 422
+
+    def test_almacen_inexistente_422(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post(f'/api/v1/productos/{p.id}/ajustar-buckets', json={
+            'buckets': [{'almacen_id': 999999, 'proyecto_id': None, 'cantidad_objetivo': 5}],
+        })
+        assert resp.status_code == 422
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 14. IMPORTACIÓN — destino por Almacén + Proyecto
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestImportarBuckets:
+
+    def _post(self, client, rows):
+        import io as _io
+        data = {'archivo': (_io.BytesIO(_build_import_xlsx(rows)), 'materiales.xlsx')}
+        return client.post('/api/v1/productos/importar', data=data,
+                           content_type='multipart/form-data')
+
+    def test_importar_deposita_en_bucket(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        cdmx = Almacen(nombre='CDMX', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(cdmx)
+        proy = Proyecto(numero_proyecto='PROY-A', nombre='Nave', activo=True)
+        db.session.add(proy); db.session.commit()
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-BK-1', 'Descripción': 'Tornillo', 'Categoría': 'Tornillería',
+            'Unidad': 'pza', 'Stock Inicial': 30, 'Stock Mínimo': 0,
+            'Almacén': 'CDMX', 'Proyecto': 'PROY-A',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['exitosos'] == 1
+        p = Producto.query.filter_by(codigo='IMP-BK-1').first()
+        assert p is not None
+        bucket = StockAlmacenProyecto.query.filter_by(
+            producto_id=p.id, almacen_id=cdmx.id, proyecto_id=proy.id).first()
+        assert bucket is not None and float(bucket.cantidad) == pytest.approx(30.0, abs=0.01)
+        cache = StockPorAlmacen.query.filter_by(producto_id=p.id, almacen_id=cdmx.id).first()
+        assert cache is not None and float(cache.cantidad) == pytest.approx(30.0, abs=0.01)
+
+    def test_importar_almacen_inexistente_error(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        # Debe existir al menos una bodega activa (default) para el resto del flujo.
+        db.session.add(Almacen(nombre='Central', qr_code=str(uuid.uuid4()), activo=True))
+        db.session.commit()
+        resp = self._post(client, [{
+            'Código (SKU)': 'IMP-BK-2', 'Descripción': 'Tuerca', 'Categoría': 'Tornillería',
+            'Unidad': 'pza', 'Stock Inicial': 10, 'Stock Mínimo': 0,
+            'Almacén': 'NoExiste',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['exitosos'] == 0
+        assert len(body['errores']) == 1 and 'almac' in body['errores'][0].lower()
+        assert Producto.query.filter_by(codigo='IMP-BK-2').first() is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 15. RESUMEN POR PROYECTO Y ALMACÉN (portada)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestResumenProyectos:
+
+    def _seed(self, db):
+        from decimal import Decimal
+        a = Almacen(nombre='Alm A', qr_code=str(uuid.uuid4()), activo=True)
+        b = Almacen(nombre='Alm B', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add_all([a, b])
+        proy = Proyecto(numero_proyecto=f'RP-{uuid.uuid4().hex[:5]}', nombre='Obra', activo=True)
+        p = Producto(codigo=f'RP-{uuid.uuid4().hex[:6]}', descripcion='X', categoria='T',
+                     unidad='pza', stock_actual=Decimal('150'), stock_minimo=0)
+        db.session.add_all([proy, p]); db.session.flush()
+        # General en A(100) y B(10); proyecto en A(40).
+        db.session.add_all([
+            StockAlmacenProyecto(producto_id=p.id, almacen_id=a.id, proyecto_id=None, cantidad=Decimal('100')),
+            StockAlmacenProyecto(producto_id=p.id, almacen_id=b.id, proyecto_id=None, cantidad=Decimal('10')),
+            StockAlmacenProyecto(producto_id=p.id, almacen_id=a.id, proyecto_id=proy.id, cantidad=Decimal('40')),
+        ])
+        db.session.commit()
+        return a, b, proy
+
+    def test_resumen_matriz(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a, b, proy = self._seed(db)
+        resp = client.get('/api/v1/almacenes/resumen-proyectos')
+        assert resp.status_code == 200, resp.get_json()
+        data = resp.get_json()
+        # Columnas: ambos almacenes activos.
+        nombres_alm = {c['nombre'] for c in data['almacenes']}
+        assert {'Alm A', 'Alm B'}.issubset(nombres_alm)
+        assert data['total_unidades'] == pytest.approx(150.0, abs=0.01)
+        # Productos distintos con existencia en todo el inventario (1 SKU).
+        assert data['total_productos'] == 1
+        # General primero.
+        assert data['filas'][0]['es_general'] is True
+        general = data['filas'][0]
+        assert general['total_unidades'] == pytest.approx(110.0, abs=0.01)
+        assert general['total_productos'] == 1
+        assert general['celdas'][str(a.id)]['unidades'] == pytest.approx(100.0, abs=0.01)
+        assert general['celdas'][str(b.id)]['unidades'] == pytest.approx(10.0, abs=0.01)
+        # Fila del proyecto.
+        fila_proy = next(f for f in data['filas'] if f['proyecto_id'] == proy.id)
+        assert fila_proy['total_unidades'] == pytest.approx(40.0, abs=0.01)
+        assert fila_proy['celdas'][str(a.id)]['unidades'] == pytest.approx(40.0, abs=0.01)
+        assert str(b.id) not in fila_proy['celdas']
+
+    def test_resumen_requiere_login(self, client):
+        resp = client.get('/api/v1/almacenes/resumen-proyectos')
+        assert resp.status_code == 401

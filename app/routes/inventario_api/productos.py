@@ -7,7 +7,8 @@ from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.models import (
-    Producto, MovimientoInventario, StockPorAlmacen, Almacen,
+    Producto, MovimientoInventario, StockPorAlmacen, StockAlmacenProyecto,
+    Almacen, Proyecto,
     SolicitudMaterial, SolicitudMaterialDetalle, User,
     SolicitudCompra, SolicitudCompraDetalle,
 )
@@ -16,9 +17,11 @@ from ._core import (
     bp,
     _require_inventario, _require_inventario_admin,
     _parse_or_422, _int_arg,
-    ProductoCreateSchema, ProductoUpdateSchema,
+    ProductoCreateSchema, ProductoUpdateSchema, AjusteBucketsSchema,
     _producto_to_dict,
     _audit, _almacen_default_id,
+    _depositar, _recalcular_caches, _ajustar_bucket,
+    _stock_proyecto_total, _reserva_derivada,
     _INV_ROLES,
 )
 from app.realtime import emit_to_role
@@ -103,6 +106,7 @@ def _productos_filtered_query():
             Producto.codigo.ilike(like),
             Producto.descripcion.ilike(like),
             Producto.categoria.ilike(like),
+            Producto.marca.ilike(like),
         ))
 
     # Filtros avanzados (combinables con categoría/búsqueda).
@@ -313,6 +317,7 @@ def create_producto():
         codigo=data['codigo'],
         descripcion=data['descripcion'],
         categoria=data['categoria'],
+        marca=(data.get('marca') or None),
         unidad=unidad_final,
         cable_tipo=cable_tipo,
         cable_calibre=cable_calibre,
@@ -326,17 +331,22 @@ def create_producto():
     db.session.add(nuevo)
     db.session.flush()  # obtener nuevo.id
 
-    # Pausa 2: depositar el stock inicial en la bodega default. Sin esto,
-    # Producto.stock_actual (cache) y stock_por_almacen (verdad) divergen
-    # desde el primer movimiento.
+    # Depositar el stock inicial en el bucket (almacén, proyecto|general) elegido
+    # — feature stock por proyecto. Sin destino explícito cae en la bodega
+    # default y el bucket general (compat con el comportamiento previo). Se
+    # recalculan los caches (stock_por_almacen + stock_actual) para no divergir.
     if stock_inicial > 0:
-        default_id = _almacen_default_id()
-        if default_id:
-            db.session.add(StockPorAlmacen(
-                producto_id=nuevo.id,
-                almacen_id=default_id,
-                cantidad=stock_inicial,
-            ))
+        almacen_id = data.get('stock_inicial_almacen_id') or _almacen_default_id()
+        proyecto_id = data.get('stock_inicial_proyecto_id')
+        if almacen_id:
+            if not Almacen.query.filter(Almacen.id == almacen_id).first():
+                db.session.rollback()
+                return jsonify({'detail': f'Almacén #{almacen_id} no existe'}), 422
+            if proyecto_id and not Proyecto.query.filter(Proyecto.id == proyecto_id).first():
+                db.session.rollback()
+                return jsonify({'detail': f'Proyecto #{proyecto_id} no existe'}), 422
+            _depositar(nuevo.id, almacen_id, proyecto_id, stock_inicial)
+            _recalcular_caches(nuevo, almacen_id)
 
     _audit(user, f"Producto creado: {data['codigo']} — {data['descripcion']}")
     db.session.commit()
@@ -397,6 +407,12 @@ def update_producto(producto_id: int):
         cambios.append("descripcion actualizada")
         prod.descripcion = data['descripcion']
     if data.get('categoria') is not None: prod.categoria = data['categoria']
+    # Marca: None = "no la mandaron" → conserva la actual; '' = limpiar a NULL.
+    if data.get('marca') is not None:
+        nueva_marca = (data['marca'] or '').strip() or None
+        if nueva_marca != prod.marca:
+            cambios.append(f"marca: {prod.marca or '—'}→{nueva_marca or '—'}")
+            prod.marca = nueva_marca
     # unidad_final ya considera el forzado a 'M' para cable; para no-cable es la
     # nueva unidad (si vino) o la actual, así que asignarla siempre es seguro.
     prod.unidad = unidad_final
@@ -406,9 +422,11 @@ def update_producto(producto_id: int):
     prod.cable_tipo = cable_tipo_final
     prod.cable_calibre = cable_calibre_final
     if data.get('imagen_url') is not None: prod.imagen_url = data['imagen_url'] or None
-    if data.get('stock_actual') is not None:
-        cambios.append(f"stock_actual: {prod.stock_actual}→{data['stock_actual']}")
-        prod.stock_actual = Decimal(str(data['stock_actual']))
+    # `stock_actual` YA NO se edita desde el PUT: es un cache de la suma de buckets
+    # (stock_almacen_proyecto). Pisarlo aquí lo desfasaría hasta el próximo
+    # movimiento (que lo recalcula). El stock real se ajusta por bucket vía
+    # POST /productos/<id>/ajustar-buckets (genera AJUSTES trazables). Se ignora
+    # en silencio para no romper clientes que aún manden el campo.
     if data.get('stock_minimo') is not None:
         prod.stock_minimo = Decimal(str(data['stock_minimo']))
     if data.get('precio_unitario') is not None:
@@ -437,6 +455,120 @@ def update_producto(producto_id: int):
     return jsonify(_producto_to_dict(prod))
 
 
+@bp.route('/productos/<int:producto_id>/ajustar-buckets', methods=['POST'])
+@_require_inventario_admin
+def ajustar_buckets_producto(producto_id: int):
+    """Editor de stock por bodega+proyecto (feature stock por proyecto).
+
+    Recibe una lista de buckets `(almacen_id, proyecto_id|null)` con su
+    `cantidad_objetivo`. Por cada bucket calcula el delta contra lo que hay hoy y
+    genera un AJUSTE (via `_ajustar_bucket`) para cuadrarlo — así la fuente de
+    verdad (`stock_almacen_proyecto`) queda consistente y el cambio es trazable en
+    el kardex. Todo en UNA transacción; si un bucket no cuadra se revierte entero.
+
+    No permite dejar el stock total por debajo de lo apartado por solicitudes
+    aprobadas (`stock_reservado`).
+    """
+    data, err = _parse_or_422(AjusteBucketsSchema(), request.get_json(silent=True))
+    if err: return err
+
+    user = request.current_user
+    buckets = data['buckets']
+    motivo = (data.get('motivo') or '').strip() or 'Ajuste manual desde edición'
+
+    # Rechazar buckets duplicados (mismo almacén+proyecto) para no aplicar dos
+    # deltas contradictorios sobre la misma fila.
+    vistos = set()
+    for b in buckets:
+        clave = (b['almacen_id'], b.get('proyecto_id') or 0)
+        if clave in vistos:
+            return jsonify({'detail': 'Hay buckets repetidos (mismo almacén y proyecto)'}), 422
+        vistos.add(clave)
+
+    # Validar existencia de almacenes/proyectos referenciados (422 legible).
+    almacen_ids = {b['almacen_id'] for b in buckets}
+    encontrados_alm = {a.id for a in Almacen.query.filter(Almacen.id.in_(almacen_ids)).all()}
+    faltan_alm = almacen_ids - encontrados_alm
+    if faltan_alm:
+        return jsonify({'detail': f'Almacén(es) inexistente(s): {sorted(faltan_alm)}'}), 422
+    proyecto_ids = {b['proyecto_id'] for b in buckets if b.get('proyecto_id')}
+    if proyecto_ids:
+        encontrados_proy = {p.id for p in Proyecto.query.filter(Proyecto.id.in_(proyecto_ids)).all()}
+        faltan_proy = proyecto_ids - encontrados_proy
+        if faltan_proy:
+            return jsonify({'detail': f'Proyecto(s) inexistente(s): {sorted(faltan_proy)}'}), 422
+
+    try:
+        prod = (
+            Producto.query
+            .with_for_update(nowait=True)
+            .filter(Producto.id == producto_id, Producto.activo == True)  # noqa: E712
+            .first()
+        )
+        if not prod:
+            db.session.rollback()
+            return jsonify({'detail': 'Producto no encontrado'}), 404
+
+        # Regla de decimales por unidad sobre las cantidades objetivo.
+        err_dec = _validar_stock_entero(prod.unidad, *[b['cantidad_objetivo'] for b in buckets])
+        if err_dec:
+            db.session.rollback()
+            return jsonify({'detail': err_dec}), 422
+
+        cambios = 0
+        for b in buckets:
+            almacen_id = b['almacen_id']
+            proyecto_id = b.get('proyecto_id')
+            objetivo = Decimal(str(b['cantidad_objetivo']))
+            actual = (
+                db.session.query(db.func.coalesce(StockAlmacenProyecto.cantidad, 0))
+                .filter(
+                    StockAlmacenProyecto.producto_id == producto_id,
+                    StockAlmacenProyecto.almacen_id == almacen_id,
+                    StockAlmacenProyecto.proyecto_id.is_(None) if proyecto_id is None
+                    else StockAlmacenProyecto.proyecto_id == proyecto_id,
+                )
+                .scalar()
+            )
+            actual = Decimal(str(actual or 0))
+            delta = objetivo - actual
+            if delta == 0:
+                continue
+            err_bucket = _ajustar_bucket(prod, almacen_id, proyecto_id, delta, user, motivo)
+            if err_bucket:
+                db.session.rollback()
+                return jsonify({'detail': f'No se pudo ajustar el bucket: {err_bucket}'}), 409
+            cambios += 1
+
+        # Guard global: no dejar el total por debajo de lo apartado (reservas).
+        reservado = Decimal(str(prod.stock_reservado or 0))
+        total_post = Decimal(str(prod.stock_actual or 0))
+        if total_post < reservado:
+            db.session.rollback()
+            return jsonify({
+                'detail': (
+                    f'El ajuste dejaría el stock total en {total_post}, por debajo de lo '
+                    f'apartado por solicitudes aprobadas ({reservado}). Libera/rechaza '
+                    f'solicitudes antes de reducir tanto.'
+                ),
+            }), 409
+
+        if cambios:
+            _audit(user, f"Ajuste de buckets producto #{producto_id}: {cambios} bucket(s) — {motivo}")
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        if 'could not obtain lock' in str(exc).lower():
+            return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
+        raise
+
+    db.session.refresh(prod)
+    if cambios:
+        emit_to_role(_INV_ROLES, 'producto:changed', {'id': prod.id, 'action': 'stock_ajustado'})
+        emit_to_role(_INV_ROLES, 'movimiento:changed', {'producto_id': prod.id, 'tipo': 'AJUSTE'})
+    return jsonify({'producto': _producto_to_dict(prod), 'buckets_ajustados': cambios})
+
+
 @bp.route('/productos/<int:producto_id>/stocks', methods=['GET'])
 @_require_inventario_admin
 def get_producto_stocks(producto_id: int):
@@ -462,6 +594,32 @@ def get_producto_stocks(producto_id: int):
 
     rows = q.all()
     total = sum(float(s.cantidad or 0) for s, _ in rows)
+
+    # Desglose por proyecto dentro de cada almacén (feature stock por proyecto).
+    # proyecto_id NULL = bucket general. Se listan solo buckets con cantidad > 0
+    # (o todos si incluir_vacios) para que la UI pinte "Almacén → [General 10,
+    # Proyecto X 90]".
+    pq = (
+        db.session.query(StockAlmacenProyecto, Almacen, Proyecto)
+        .join(Almacen, Almacen.id == StockAlmacenProyecto.almacen_id)
+        .outerjoin(Proyecto, Proyecto.id == StockAlmacenProyecto.proyecto_id)
+        .filter(StockAlmacenProyecto.producto_id == producto_id, Almacen.activo == True)  # noqa: E712
+        .order_by(Almacen.nombre, Proyecto.numero_proyecto.nullsfirst())
+    )
+    if not incluir_vacios:
+        pq = pq.filter(StockAlmacenProyecto.cantidad > 0)
+    stocks_proyecto = [
+        {
+            'almacen_id': a.id,
+            'almacen_nombre': a.nombre,
+            'proyecto_id': p.id if p else None,
+            'proyecto_nombre': (p.numero_proyecto if p else None),
+            'proyecto_descripcion': (p.nombre if p else None),
+            'cantidad': float(s.cantidad or 0),
+        }
+        for s, a, p in pq.all()
+    ]
+
     return jsonify({
         'producto_id': producto_id,
         'total': total,
@@ -475,6 +633,7 @@ def get_producto_stocks(producto_id: int):
             }
             for s, a in rows
         ],
+        'stocks_proyecto': stocks_proyecto,
     })
 
 
@@ -491,6 +650,30 @@ def get_producto_disponibilidad(producto_id: int):
     actual = float(p.stock_actual or 0)
     reservado = float(p.stock_reservado or 0)
     disponible = actual - reservado
+
+    # Disponibilidad POR BUCKET del proyecto (feature stock por proyecto). Con
+    # ?proyecto_id= devuelve lo que ese proyecto puede surtir bajo la regla
+    # proyecto→general: (stockP − reservadoP) + máx(0, stockGen − reservadoGen).
+    # Sirve para que el solicitante vea "disponible para tu proyecto".
+    por_proyecto = None
+    proyecto_id = request.args.get('proyecto_id', type=int)
+    stock_gen = _stock_proyecto_total(producto_id, None)
+    reservado_gen = _reserva_derivada(producto_id, None)
+    disp_gen = stock_gen - reservado_gen
+    if proyecto_id:
+        stock_proj = _stock_proyecto_total(producto_id, proyecto_id)
+        reservado_proj = _reserva_derivada(producto_id, proyecto_id)
+        disp_proj_only = stock_proj - reservado_proj
+        disponible_proyecto = disp_proj_only + (disp_gen if disp_gen > 0 else Decimal('0'))
+        por_proyecto = {
+            'proyecto_id': proyecto_id,
+            'stock_proyecto': float(stock_proj),
+            'reservado_proyecto': float(reservado_proj),
+            'stock_general': float(stock_gen),
+            'reservado_general': float(reservado_gen),
+            # Lo que este proyecto puede surtir (bucket propio + general libre).
+            'disponible_para_proyecto': float(disponible_proyecto),
+        }
 
     # Solicitudes que generan la reserva: APROBADAS con detalles de este producto.
     rows = (
@@ -526,6 +709,7 @@ def get_producto_disponibilidad(producto_id: int):
         'stock_actual': actual,
         'stock_reservado': reservado,
         'stock_disponible': disponible,
+        'por_proyecto': por_proyecto,
         'reservas': [
             {
                 'solicitud_id': r.id,
