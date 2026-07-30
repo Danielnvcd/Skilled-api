@@ -34,6 +34,7 @@ from app.realtime import emit_to_role
 
 from ._core import (
     bp,
+    _es_error_de_lock,
     _require_login,
     _parse_or_422, _int_arg, _audit,
     _BaseSchema,
@@ -570,7 +571,7 @@ def recibir_solicitud_compra(sol_id: int):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 

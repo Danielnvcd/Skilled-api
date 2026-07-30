@@ -19,6 +19,7 @@ import qrcode
 from flask import Blueprint, jsonify, request, Response, abort, send_file, render_template, current_app, g
 from marshmallow import Schema, fields, validate, ValidationError, EXCLUDE, pre_load
 from sqlalchemy import distinct as sql_distinct
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
@@ -668,6 +669,26 @@ def _liberar_reservas(reservas: dict[int, Decimal]):
         prod.stock_reservado = nuevo if nuevo > 0 else Decimal('0')
 
 
+# ─── Errores de concurrencia ──────────────────────────────────────────────────
+
+def _es_error_de_lock(exc: Exception) -> bool:
+    """True si `exc` viene de un `SELECT ... FOR UPDATE NOWAIT` que no pudo tomar
+    el lock (SQLSTATE 55P03 / lock_not_available).
+
+    Se mira el SQLSTATE, NO el texto: PostgreSQL traduce sus mensajes según el
+    `lc_messages` del servidor, así que comparar contra la frase en inglés
+    ("could not obtain lock") falla en un servidor con locale español y el
+    endpoint devuelve 500 en vez del 409 'reintenta'. El match por texto queda
+    de respaldo para SQLite (tests) y para drivers que no expongan el código.
+    """
+    orig = getattr(exc, 'orig', None)
+    sqlstate = getattr(orig, 'sqlstate', None) or getattr(orig, 'pgcode', None)
+    if sqlstate == '55P03':
+        return True
+    texto = str(exc).lower()
+    return 'could not obtain lock' in texto or 'lock_not_available' in texto
+
+
 # ─── Stock por almacén (Pausa 2 del plan) ─────────────────────────────────────
 
 def _almacen_default_id() -> int | None:
@@ -683,23 +704,55 @@ def _almacen_default_id() -> int | None:
     return row[0] if row else None
 
 
+def _crear_o_releer(leer, construir):
+    """Crea la fila que `leer()` no encontró, tolerando la carrera del INSERT.
+
+    `SELECT ... FOR UPDATE` no bloquea filas inexistentes, así que dos
+    transacciones concurrentes pueden ver `None` a la vez y ambas insertar: la
+    segunda choca con el índice único (`IntegrityError`). Antes ese error salía
+    como 500 porque el guard de los endpoints solo reconocía el error de lock.
+
+    Aislamos el INSERT en un savepoint: si choca, lo descartamos sin tocar el
+    resto de la transacción y releemos la fila que dejó el ganador (ya
+    commiteada, así que el FOR UPDATE la toma sin esperar).
+    """
+    try:
+        with db.session.begin_nested():
+            fila = construir()
+            db.session.add(fila)
+            db.session.flush()
+        return fila
+    except IntegrityError:
+        fila = leer()
+        if fila is None:
+            # No debería pasar: el único motivo de la violación es que ya existe.
+            raise
+        return fila
+
+
 def _lock_stock(producto_id: int, almacen_id: int) -> StockPorAlmacen:
     """SELECT ... FOR UPDATE sobre la fila (producto, almacen). Crea la fila
     en 0 si no existe — útil para ENTRADAs hacia bodegas nuevas que aún no
     tienen registro de este producto."""
-    fila = (
-        db.session.query(StockPorAlmacen)
-        .with_for_update(nowait=True)
-        .filter(
-            StockPorAlmacen.producto_id == producto_id,
-            StockPorAlmacen.almacen_id == almacen_id,
+    def _leer():
+        return (
+            db.session.query(StockPorAlmacen)
+            .with_for_update(nowait=True)
+            .filter(
+                StockPorAlmacen.producto_id == producto_id,
+                StockPorAlmacen.almacen_id == almacen_id,
+            )
+            .first()
         )
-        .first()
-    )
+
+    fila = _leer()
     if fila is None:
-        fila = StockPorAlmacen(producto_id=producto_id, almacen_id=almacen_id, cantidad=Decimal('0'))
-        db.session.add(fila)
-        db.session.flush()  # asegura que existe antes de bloquear
+        fila = _crear_o_releer(
+            _leer,
+            lambda: StockPorAlmacen(
+                producto_id=producto_id, almacen_id=almacen_id, cantidad=Decimal('0'),
+            ),
+        )
     return fila
 
 
@@ -766,24 +819,28 @@ def _lock_stock_proyecto(producto_id: int, almacen_id: int,
     Crea la fila en 0 si no existe. `proyecto_id=None` = bucket general.
     nowait=True: si otra transacción la tiene, se levanta y el caller devuelve
     409 'reintenta' (mismo patrón que `_lock_stock`)."""
-    q = (
-        db.session.query(StockAlmacenProyecto)
-        .with_for_update(nowait=True)
-        .filter(
-            StockAlmacenProyecto.producto_id == producto_id,
-            StockAlmacenProyecto.almacen_id == almacen_id,
+    def _leer():
+        q = (
+            db.session.query(StockAlmacenProyecto)
+            .with_for_update(nowait=True)
+            .filter(
+                StockAlmacenProyecto.producto_id == producto_id,
+                StockAlmacenProyecto.almacen_id == almacen_id,
+            )
         )
-    )
-    q = q.filter(StockAlmacenProyecto.proyecto_id.is_(None)) if proyecto_id is None \
-        else q.filter(StockAlmacenProyecto.proyecto_id == proyecto_id)
-    fila = q.first()
+        q = q.filter(StockAlmacenProyecto.proyecto_id.is_(None)) if proyecto_id is None \
+            else q.filter(StockAlmacenProyecto.proyecto_id == proyecto_id)
+        return q.first()
+
+    fila = _leer()
     if fila is None:
-        fila = StockAlmacenProyecto(
-            producto_id=producto_id, almacen_id=almacen_id,
-            proyecto_id=proyecto_id, cantidad=Decimal('0'),
+        fila = _crear_o_releer(
+            _leer,
+            lambda: StockAlmacenProyecto(
+                producto_id=producto_id, almacen_id=almacen_id,
+                proyecto_id=proyecto_id, cantidad=Decimal('0'),
+            ),
         )
-        db.session.add(fila)
-        db.session.flush()
     return fila
 
 

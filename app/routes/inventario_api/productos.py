@@ -15,6 +15,7 @@ from app.models import (
 
 from ._core import (
     bp,
+    _es_error_de_lock,
     _require_inventario, _require_inventario_admin,
     _parse_or_422, _int_arg,
     ProductoCreateSchema, ProductoUpdateSchema, AjusteBucketsSchema,
@@ -345,8 +346,18 @@ def create_producto():
             if proyecto_id and not Proyecto.query.filter(Proyecto.id == proyecto_id).first():
                 db.session.rollback()
                 return jsonify({'detail': f'Proyecto #{proyecto_id} no existe'}), 422
-            _depositar(nuevo.id, almacen_id, proyecto_id, stock_inicial)
-            _recalcular_caches(nuevo, almacen_id)
+            # El producto acaba de crearse, así que en la práctica nadie más
+            # tiene su bucket bloqueado; el guard es por consistencia con el
+            # resto de endpoints que mutan stock (y por si el almacén destino
+            # está siendo tocado por otra operación).
+            try:
+                _depositar(nuevo.id, almacen_id, proyecto_id, stock_inicial)
+                _recalcular_caches(nuevo, almacen_id)
+            except Exception as exc:
+                db.session.rollback()
+                if _es_error_de_lock(exc):
+                    return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
+                raise
 
     _audit(user, f"Producto creado: {data['codigo']} — {data['descripcion']}")
     db.session.commit()
@@ -558,7 +569,7 @@ def ajustar_buckets_producto(producto_id: int):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 

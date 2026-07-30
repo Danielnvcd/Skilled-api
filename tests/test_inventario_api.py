@@ -21,7 +21,8 @@ from app.extensions import db as flask_db
 from app.models import (
     User, Almacen, Estante, Producto, StockPorAlmacen, StockAlmacenProyecto,
     MovimientoInventario, Proyecto, Trabajador,
-    SolicitudMaterial, SolicitudMaterialDetalle, AuditLog
+    SolicitudMaterial, SolicitudMaterialDetalle, AuditLog,
+    TomaInventario,
 )
 from app.routes.api_auth import _encode_access_token
 
@@ -1790,3 +1791,139 @@ class TestResumenProyectos:
     def test_resumen_requiere_login(self, client):
         resp = client.get('/api/v1/almacenes/resumen-proyectos')
         assert resp.status_code == 401
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOMAS FÍSICAS — atomicidad del cierre
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCierreTomaAtomico:
+    """El cierre de una toma aplica N ajustes: o todos, o ninguno.
+
+    Regresión: `_perform_movimiento` commiteaba cada ajuste por separado, así que
+    un fallo a media lista dejaba la toma ABIERTA con parte del stock ya movido.
+    Como `cantidad_sistema` es un snapshot fijado al abrir la toma, al reintentar
+    el cierre se recalculaba la misma diferencia y los ajustes ya aplicados se
+    volvían a aplicar — duplicando el descuento.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, db, inv_admin, client):
+        from decimal import Decimal
+        self.bodega = Almacen(
+            nombre=f'B-{uuid.uuid4().hex[:5]}', qr_code=str(uuid.uuid4()), activo=True,
+        )
+        db.session.add(self.bodega)
+        db.session.commit()
+        _login(client, inv_admin.id)
+        self._db = db
+        self._admin = inv_admin
+
+    def _producto(self, stock, reservado=0):
+        from decimal import Decimal
+        p = Producto(
+            codigo=f'TA-{uuid.uuid4().hex[:6]}', descripcion='Prod toma',
+            categoria='T', unidad='pza',
+            stock_actual=Decimal(str(stock)), stock_minimo=0,
+            stock_reservado=Decimal(str(reservado)),
+        )
+        self._db.session.add(p)
+        self._db.session.flush()
+        self._db.session.add(StockAlmacenProyecto(
+            producto_id=p.id, almacen_id=self.bodega.id, proyecto_id=None,
+            cantidad=Decimal(str(stock)),
+        ))
+        self._db.session.add(StockPorAlmacen(
+            producto_id=p.id, almacen_id=self.bodega.id, cantidad=Decimal(str(stock)),
+        ))
+        self._db.session.commit()
+        return p
+
+    def test_ajuste_sin_autocommit_es_revertible(self, app):
+        """El corazón del arreglo: con `autocommit=False` el ajuste NO se
+        commitea, así que el llamador puede deshacerlo.
+
+        Antes `_perform_movimiento` commiteaba internamente, y por eso el cierre
+        de toma no podía revertir las líneas ya aplicadas cuando otra fallaba.
+        Se prueba a este nivel y no vía el endpoint porque el `db` de conftest
+        envuelve cada test en su propia transacción, así que un
+        `session.rollback()` dentro del request no se puede observar desde fuera.
+        """
+        from decimal import Decimal
+        from app.routes.inventario_api.movimientos import _perform_movimiento
+
+        prod = self._producto(stock=10)
+        punto = self._db.session.begin_nested()
+        with app.test_request_context():
+            resp = _perform_movimiento(
+                {
+                    'tipo': 'AJUSTE', 'producto_id': prod.id,
+                    'cantidad': Decimal('-4'), 'almacen_origen_id': self.bodega.id,
+                    'motivo': 'toma test', 'reconciliar': True,
+                },
+                self._admin,
+                autocommit=False,
+            )
+        assert not isinstance(resp, tuple), getattr(resp, 'json', resp)
+
+        # Dentro de la transacción el descuento ya se ve...
+        assert Producto.query.get(prod.id).stock_actual == 6
+
+        # ...pero deshacer el savepoint lo revierte: no hubo commit interno.
+        punto.rollback()
+        self._db.session.expire_all()
+        assert Producto.query.get(prod.id).stock_actual == 10, (
+            'el ajuste sobrevivió al rollback — _perform_movimiento commiteó por dentro'
+        )
+        bucket = StockAlmacenProyecto.query.filter_by(
+            producto_id=prod.id, almacen_id=self.bodega.id, proyecto_id=None,
+        ).first()
+        assert bucket.cantidad == 10, 'el bucket quedó descuadrado tras el rollback'
+
+    def test_cierre_con_linea_invalida_deja_la_toma_abierta(self, client):
+        """`bloqueado` no se puede ajustar (invadiría stock apartado): el cierre
+        responde 409, reporta el error y la toma NO pasa a CERRADA."""
+        bloqueado = self._producto(stock=10, reservado=10)
+
+        toma_id = client.post(
+            '/api/v1/tomas/', json={'almacen_id': self.bodega.id},
+        ).get_json()['id']
+        detalles = client.get(f'/api/v1/tomas/{toma_id}').get_json()['detalles']
+        det = next(d for d in detalles if d['producto_id'] == bloqueado.id)
+        client.patch(
+            f"/api/v1/tomas/{toma_id}/detalles/{det['id']}",
+            json={'cantidad_fisica': 5},
+        )
+
+        resp = client.post(f'/api/v1/tomas/{toma_id}/cerrar', json={})
+        assert resp.status_code == 409, resp.get_json()
+        cuerpo = resp.get_json()
+        assert cuerpo['errores'], 'debe reportar qué línea falló'
+        assert cuerpo['errores'][0]['producto_id'] == bloqueado.id
+        assert TomaInventario.query.get(toma_id).estatus == 'ABIERTA'
+
+    def test_cierre_sin_fallos_aplica_todo(self, client):
+        """Camino feliz: sin errores, los ajustes SÍ se aplican y la toma cierra."""
+        a = self._producto(stock=10)
+        b = self._producto(stock=8)
+
+        toma_id = client.post(
+            '/api/v1/tomas/', json={'almacen_id': self.bodega.id},
+        ).get_json()['id']
+        detalles = client.get(f'/api/v1/tomas/{toma_id}').get_json()['detalles']
+        por_prod = {d['producto_id']: d for d in detalles}
+
+        for prod, fisico in ((a, 7), (b, 8)):
+            client.patch(
+                f"/api/v1/tomas/{toma_id}/detalles/{por_prod[prod.id]['id']}",
+                json={'cantidad_fisica': fisico},
+            )
+
+        resp = client.post(f'/api/v1/tomas/{toma_id}/cerrar', json={})
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['ajustes_creados'] == 1  # solo `a` tenía diferencia
+
+        self._db.session.expire_all()
+        assert Producto.query.get(a.id).stock_actual == 7
+        assert Producto.query.get(b.id).stock_actual == 8
+        assert TomaInventario.query.get(toma_id).estatus == 'CERRADA'

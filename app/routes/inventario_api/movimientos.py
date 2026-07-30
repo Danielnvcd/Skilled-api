@@ -20,6 +20,7 @@ from app.realtime import emit_to_role
 
 from ._core import (
     bp,
+    _es_error_de_lock,
     _require_inventario_admin,
     _parse_or_422, _int_arg,
     MovimientoCreateSchema,
@@ -101,7 +102,7 @@ def create_movimiento():
     return _perform_movimiento(data, request.current_user)
 
 
-def _perform_movimiento(data: dict, user):
+def _perform_movimiento(data: dict, user, autocommit: bool = True):
     """Lógica central de creación de movimiento — usada por POST /movimientos/
     y POST /movimientos/rapido. `data` ya viene validado por
     MovimientoCreateSchema.
@@ -110,8 +111,23 @@ def _perform_movimiento(data: dict, user):
     deposita/consume en `stock_almacen_proyecto` (proyecto|general) y luego
     recalcula los caches `stock_por_almacen` y `Producto.stock_actual` vía
     `_recalcular_caches`. La regla de consumo es proyecto→general para
-    SALIDA/AJUSTE−, y bucket exacto para TRASPASO/REASIGNACION."""
+    SALIDA/AJUSTE−, y bucket exacto para TRASPASO/REASIGNACION.
+
+    `autocommit=False` deja el control de la transacción al llamador: no hace
+    commit, ni rollback, ni emite el evento — solo `flush()` para que el
+    movimiento obtenga id. Lo usa `tomas.cerrar_toma`, que necesita aplicar N
+    ajustes de forma ATÓMICA (todos o ninguno) dentro de una sola transacción.
+    Sin esto, cada ajuste se commiteaba por separado y un fallo a medias dejaba
+    la toma ABIERTA con stock ya movido — al reintentar se volvía a aplicar."""
     tipo = data['tipo']
+
+    def _rollback():
+        """Solo revierte si somos dueños de la transacción. Con autocommit=False
+        el caller la controla (savepoints), y un rollback aquí se llevaría por
+        delante el trabajo de las demás líneas."""
+        if autocommit:
+            db.session.rollback()
+
     cantidad_raw = data['cantidad']
     proyecto_id = data.get('proyecto_id')
     proyecto_origen_id = data.get('proyecto_origen_id')
@@ -160,13 +176,13 @@ def _perform_movimiento(data: dict, user):
         try:
             err = _consumir_bucket_exacto(producto.id, almacen_id, proyecto_origen_id, cantidad_decimal)
             if err:
-                db.session.rollback()
+                _rollback()
                 return jsonify({'detail': f'No se puede reasignar: {err}'}), 409
             _depositar(producto.id, almacen_id, proyecto_destino_id, cantidad_decimal)
             _recalcular_caches(producto, almacen_id)
         except Exception as exc:
-            db.session.rollback()
-            if 'could not obtain lock' in str(exc).lower():
+            _rollback()
+            if _es_error_de_lock(exc):
                 return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
             raise
         nuevo_mov = MovimientoInventario(
@@ -182,11 +198,14 @@ def _perform_movimiento(data: dict, user):
             f"proy {proyecto_origen_id or 'general'}→{proyecto_destino_id or 'general'} "
             f"(almacén #{almacen_id})"
         ))
-        db.session.commit()
-        db.session.refresh(nuevo_mov)
-        emit_to_role(_INV_ROLES, 'movimiento:changed', {
-            'id': nuevo_mov.id, 'producto_id': producto.id, 'tipo': 'REASIGNACION',
-        })
+        if autocommit:
+            db.session.commit()
+            db.session.refresh(nuevo_mov)
+            emit_to_role(_INV_ROLES, 'movimiento:changed', {
+                'id': nuevo_mov.id, 'producto_id': producto.id, 'tipo': 'REASIGNACION',
+            })
+        else:
+            db.session.flush()  # el caller commitea; flush da id al movimiento
         return jsonify(_movimiento_to_dict(nuevo_mov))
 
     # 1) Resolver almacenes (con inferencia desde estante si solo vino estante_id).
@@ -249,14 +268,14 @@ def _perform_movimiento(data: dict, user):
             # 1º) Físico insuficiente en el bucket del almacén → 400 (igual que antes).
             err = _consumir_proyecto_luego_general(producto.id, almacen_origen_id, proyecto_id, cantidad_decimal)
             if err:
-                db.session.rollback()
+                _rollback()
                 return jsonify({'detail': f'Stock insuficiente en bodega #{almacen_origen_id}: {err}'}), 400
             # 2º) Guard global de reservas (no sacar lo apartado) → 409. Usa
             # stock_antes (total previo), por eso el orden no altera el cálculo.
             reservado = Decimal(str(producto.stock_reservado or 0))
             disponible_global = stock_antes - reservado
             if disponible_global < cantidad_decimal:
-                db.session.rollback()
+                _rollback()
                 return jsonify({
                     'detail': (
                         f'Hay {reservado} {producto.unidad} apartados por solicitudes aprobadas. '
@@ -283,13 +302,13 @@ def _perform_movimiento(data: dict, user):
                 else:
                     err = _consumir_proyecto_luego_general(producto.id, almacen_origen_id, proyecto_id, -cantidad_decimal)
                 if err:
-                    db.session.rollback()
+                    _rollback()
                     return jsonify({'detail': f'Ajuste provocaría stock negativo en bodega #{almacen_origen_id}: {err}'}), 400
                 # 2º) Guard global de reservas (no invadir lo apartado) → 409.
                 reservado = Decimal(str(producto.stock_reservado or 0))
                 disponible_global_post = stock_antes + cantidad_decimal - reservado
                 if disponible_global_post < 0:
-                    db.session.rollback()
+                    _rollback()
                     return jsonify({
                         'detail': (
                             f'Ajuste invadiría stock apartado. Reservado: {reservado}, '
@@ -304,7 +323,7 @@ def _perform_movimiento(data: dict, user):
             # a otro conservando la etiqueta de proyecto.
             err = _consumir_bucket_exacto(producto.id, almacen_origen_id, proyecto_id, cantidad_decimal)
             if err:
-                db.session.rollback()
+                _rollback()
                 return jsonify({'detail': f'Stock insuficiente para traspaso en bodega #{almacen_origen_id}: {err}'}), 400
             _depositar(producto.id, almacen_destino_id, proyecto_id, cantidad_decimal)
             mov_proy_origen = proyecto_id
@@ -312,10 +331,10 @@ def _perform_movimiento(data: dict, user):
             almacenes_tocados = [almacen_origen_id, almacen_destino_id]
 
     except Exception as exc:
-        db.session.rollback()
+        _rollback()
         # nowait=True levanta si la fila ya estaba bloqueada por otra transacción.
         # Devolvemos 409 para que el cliente reintente.
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 
@@ -367,11 +386,14 @@ def _perform_movimiento(data: dict, user):
     )
     db.session.add(nuevo_mov)
     _audit(user, f"Movimiento {tipo} — producto #{data['producto_id']} — cantidad: {cantidad_raw}")
-    db.session.commit()
-    db.session.refresh(nuevo_mov)
-    emit_to_role(_INV_ROLES, 'movimiento:changed', {
-        'id': nuevo_mov.id, 'producto_id': nuevo_mov.producto_id, 'tipo': tipo,
-    })
+    if autocommit:
+        db.session.commit()
+        db.session.refresh(nuevo_mov)
+        emit_to_role(_INV_ROLES, 'movimiento:changed', {
+            'id': nuevo_mov.id, 'producto_id': nuevo_mov.producto_id, 'tipo': tipo,
+        })
+    else:
+        db.session.flush()  # el caller commitea; flush da id al movimiento
     return jsonify(_movimiento_to_dict(nuevo_mov))
 
 
