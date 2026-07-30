@@ -25,6 +25,7 @@ from app.realtime import emit_to_role
 
 from ._core import (
     bp,
+    _es_error_de_lock,
     _require_login, _require_inventario_admin,
     _parse_or_422,
     SolicitudCreateSchema, SolicitudUpdateEstadoSchema,
@@ -399,7 +400,7 @@ def create_entrega_directa():
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 
@@ -650,7 +651,7 @@ def update_solicitud_estado(sol_id: int):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 
@@ -749,7 +750,7 @@ def patch_solicitud_detalle(sol_id: int, det_id: int):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 
@@ -1115,7 +1116,7 @@ def entregar_solicitud(sol_id: int):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        if 'could not obtain lock' in str(exc).lower():
+        if _es_error_de_lock(exc):
             return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
         raise
 

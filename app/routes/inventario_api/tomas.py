@@ -16,10 +16,14 @@ from app.models import (
     TomaInventario, TomaInventarioDetalle, ESTADOS_TOMA,
 )
 
+from app.realtime import emit_to_role
+
 from ._core import (
     bp,
+    _es_error_de_lock,
     _require_inventario_admin,
     _audit,
+    _INV_ROLES,
 )
 from .movimientos import _perform_movimiento
 
@@ -125,6 +129,7 @@ def create_toma():
     _audit(user, f"Toma #{nueva.id} iniciada en almacén {alm.nombre} ({len(productos)} líneas)")
     db.session.commit()
     db.session.refresh(nueva)
+    emit_to_role(_INV_ROLES, 'toma:changed', {'id': nueva.id, 'action': 'creada'})
     return jsonify(_toma_to_dict(nueva))
 
 
@@ -178,6 +183,9 @@ def patch_toma_detalle(toma_id: int, det_id: int):
 
     db.session.commit()
     db.session.refresh(det)
+    emit_to_role(_INV_ROLES, 'toma:changed', {
+        'id': t.id, 'action': 'captura', 'detalle_id': det.id,
+    })
     return jsonify(_toma_detalle_to_dict(det))
 
 
@@ -219,6 +227,9 @@ def patch_toma_detalle_por_codigo(toma_id: int):
     det.capturado_en = datetime.datetime.utcnow()
     db.session.commit()
     db.session.refresh(det)
+    emit_to_role(_INV_ROLES, 'toma:changed', {
+        'id': t.id, 'action': 'captura', 'detalle_id': det.id,
+    })
     return jsonify(_toma_detalle_to_dict(det))
 
 
@@ -269,22 +280,42 @@ def cerrar_toma(toma_id: int):
             data['almacen_destino_id'] = t.almacen_id
         else:
             data['almacen_origen_id'] = t.almacen_id
-        resp = _perform_movimiento(data, user)
+        # `autocommit=False`: el ajuste se queda en ESTA transacción. Cada línea
+        # va en su savepoint para poder descartar solo la que falla y seguir
+        # recolectando el resto de errores; si al final hubo alguno, el rollback
+        # de abajo deshace TODO. Antes cada ajuste se commiteaba por separado:
+        # un fallo a media lista dejaba la toma ABIERTA con stock ya movido, y
+        # como `cantidad_sistema` es un snapshot, el reintento volvía a aplicar
+        # los ajustes ya hechos (stock duplicado).
+        punto = db.session.begin_nested()
+        try:
+            resp = _perform_movimiento(data, user, autocommit=False)
+        except Exception as exc:
+            punto.rollback()
+            errores.append({
+                'producto_id': det.producto_id,
+                'detail': ('Stock bloqueado por otra operación, reintenta'
+                           if _es_error_de_lock(exc) else str(exc)),
+                'status': 409 if _es_error_de_lock(exc) else 500,
+            })
+            continue
         # _perform_movimiento puede devolver (response, status) o response.
-        # Si es tuple con código de error, abortamos.
+        # Si es tuple con código de error, descartamos esa línea.
         if isinstance(resp, tuple):
             body_resp, status = resp
             if status >= 400:
+                punto.rollback()
                 errores.append({
                     'producto_id': det.producto_id,
                     'detail': body_resp.get_json().get('detail') if hasattr(body_resp, 'get_json') else str(body_resp),
                     'status': status,
                 })
                 continue
+        punto.commit()  # libera el savepoint; sigue todo dentro de la transacción
         ajustes_creados += 1
 
     if errores:
-        db.session.rollback()
+        db.session.rollback()  # ahora SÍ deshace los ajustes: nada fue commiteado
         return jsonify({
             'detail': 'No se pudieron generar todos los ajustes — toma sigue ABIERTA',
             'errores': errores,
@@ -295,8 +326,14 @@ def cerrar_toma(toma_id: int):
     t.fecha_cierre = datetime.datetime.utcnow()
     t.cerrada_por_id = user.id
     _audit(user, f"Toma #{t.id} cerrada — {ajustes_creados} ajustes generados")
-    db.session.commit()
+    db.session.commit()  # único commit: los N ajustes + el cierre, atómicos
     db.session.refresh(t)
+    # Los ajustes no emitieron (autocommit=False), así que avisamos aquí: stock
+    # cambió y la toma pasó a CERRADA.
+    emit_to_role(_INV_ROLES, 'toma:changed', {'id': t.id, 'action': 'cerrada'})
+    if ajustes_creados:
+        emit_to_role(_INV_ROLES, 'movimiento:changed', {'origen': 'toma_cierre', 'toma_id': t.id})
+        emit_to_role(_INV_ROLES, 'producto:changed', {'origen': 'toma_cierre'})
     return jsonify({**_toma_to_dict(t), 'ajustes_creados': ajustes_creados})
 
 
@@ -312,6 +349,7 @@ def cancelar_toma(toma_id: int):
     t.cerrada_por_id = request.current_user.id
     _audit(request.current_user, f"Toma #{t.id} cancelada")
     db.session.commit()
+    emit_to_role(_INV_ROLES, 'toma:changed', {'id': t.id, 'action': 'cancelada'})
     return jsonify(_toma_to_dict(t))
 
 
