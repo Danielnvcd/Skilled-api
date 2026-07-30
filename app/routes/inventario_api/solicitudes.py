@@ -32,7 +32,8 @@ from ._core import (
     EntregaDirectaSchema,
     _solicitud_to_dict, _solicitud_detalle_to_dict,
     _audit,
-    _almacen_default_id, _lock_stock, _recalcular_cache_stock,
+    _almacen_default_id, _recalcular_caches,
+    _consumir_proyecto_luego_general,
     _reservas_de_solicitud, _intentar_reservar, _liberar_reservas,
     _INV_ROLES, _SOL_ROLES,
 )
@@ -327,17 +328,17 @@ def create_entrega_directa():
                 return jsonify({'detail': f'Producto #{pid} no encontrado'}), 404
             productos_cache[pid] = producto
 
-            stock_almacen = _lock_stock(pid, almacen_id)
-            disponible = stock_almacen.cantidad or Decimal('0')
-            if disponible < cant_total:
+            # Consumo proyecto→general en el almacén de origen (feature stock por
+            # proyecto): descuenta del bucket del proyecto de la entrega y el
+            # remanente del general; nunca de otros proyectos.
+            err = _consumir_proyecto_luego_general(pid, almacen_id, proyecto_id, cant_total)
+            if err:
                 db.session.rollback()
                 return jsonify({
                     'detail': (
-                        f'Stock insuficiente en {almacen.nombre} para {producto.codigo}: '
-                        f'requiere {cant_total} {producto.unidad}, disponible {disponible}.'
+                        f'Stock insuficiente en {almacen.nombre} para {producto.codigo}: {err}.'
                     ),
                 }), 409
-            stock_almacen.cantidad = disponible - cant_total
 
         # Crear la solicitud ENTREGADA + sus líneas + las SALIDAs.
         nueva = SolicitudMaterial(
@@ -370,6 +371,7 @@ def create_entrega_directa():
                 producto_id=pid,
                 cantidad=cant_total,
                 almacen_origen_id=almacen_id,
+                proyecto_origen_id=proyecto_id,
                 motivo=motivo_base,
                 usuario_id=user.id,
             ))
@@ -386,7 +388,7 @@ def create_entrega_directa():
                         nuevo_pe = Decimal(str(pe.cantidad or 0)) - cant_total
                         pe.cantidad = nuevo_pe if nuevo_pe > 0 else Decimal('0')
 
-            _recalcular_cache_stock(productos_cache[pid])
+            _recalcular_caches(productos_cache[pid], almacen_id)
 
         quien = trabajador.nombre_completo if trabajador else nombre_libre
         _audit(
@@ -597,6 +599,8 @@ def update_solicitud_estado(sol_id: int):
 
     try:
         # ── Aplicar efecto en stock_reservado según transición ──
+        # La reserva/aprobación es GLOBAL por producto (como antes). El candado
+        # por proyecto se aplica en la ENTREGA (consumo proyecto→general).
         if estado_previo == 'PENDIENTE' and nuevo_estado == 'APROBADA':
             errs = _intentar_reservar(reservas)
             if errs:
@@ -950,20 +954,19 @@ def entregar_solicitud(sol_id: int):
             productos_locked[prod_id] = producto
 
             cant_total = delta_por_producto[prod_id]
-            stock_almacen = _lock_stock(prod_id, almacen_id)
-            disponible_almacen = stock_almacen.cantidad or Decimal('0')
-            if disponible_almacen < cant_total:
+            # Consumo proyecto→general en el almacén de origen (feature stock por
+            # proyecto): descuenta primero del bucket del proyecto de la solicitud
+            # y el remanente del general; nunca de otros proyectos.
+            err = _consumir_proyecto_luego_general(prod_id, almacen_id, sol.proyecto_id, cant_total)
+            if err:
                 db.session.rollback()
                 return jsonify({
                     'detail': (
-                        f'Stock insuficiente en bodega #{almacen_id} para {producto.codigo}: '
-                        f'requiere {cant_total} {producto.unidad}, disponible {disponible_almacen}.'
+                        f'Stock insuficiente en bodega #{almacen_id} para {producto.codigo}: {err}.'
                     ),
                 }), 409
 
-            # Descontar stock físico del almacén y liberar reserva equivalente.
-            # Liberamos lo apartado por esta solicitud (clamp a 0 por seguridad).
-            stock_almacen.cantidad = disponible_almacen - cant_total
+            # Liberar la reserva equivalente (cache global; clamp a 0 por seguridad).
             reservado = Decimal(str(producto.stock_reservado or 0))
             nuevo_res = reservado - cant_total
             producto.stock_reservado = nuevo_res if nuevo_res > 0 else Decimal('0')
@@ -1011,6 +1014,7 @@ def entregar_solicitud(sol_id: int):
                 producto_id=det.producto_id,
                 cantidad=delta,
                 almacen_origen_id=almacen_id,
+                proyecto_origen_id=sol.proyecto_id,
                 motivo=motivo_base,
                 usuario_id=user.id,
             )
@@ -1031,9 +1035,10 @@ def entregar_solicitud(sol_id: int):
                         nuevo = Decimal(str(pe.cantidad or 0)) - delta
                         pe.cantidad = nuevo if nuevo > 0 else Decimal('0')
 
-        # Refrescar cache stock_actual por cada producto tocado.
+        # Refrescar caches (stock_por_almacen + stock_actual) del almacén de
+        # origen por cada producto tocado.
         for producto in productos_locked.values():
-            _recalcular_cache_stock(producto)
+            _recalcular_caches(producto, almacen_id)
 
         # Aplicar deltas por línea HERRAMIENTA: crear N asignaciones al
         # trabajador del solicitante, marcar unidades como ASIGNADA y registrar

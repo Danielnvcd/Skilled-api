@@ -8,7 +8,7 @@ from sqlalchemy import distinct as sql_distinct
 
 from app.extensions import db, limiter
 from app.models import (
-    Producto, Proyecto, CategoriaConfig, StockPorAlmacen,
+    Producto, Proyecto, CategoriaConfig, StockPorAlmacen, StockAlmacenProyecto,
     SolicitudMaterial, SolicitudMaterialDetalle,
 )
 
@@ -278,11 +278,16 @@ def delete_categoria_config(nombre: str):
 # (no al final). El importador empareja por NOMBRE de columna, no por posición,
 # así que este orden se puede cambiar sin romper la importación.
 PLANTILLA_HEADERS = [
-    'Código (SKU)', 'Descripción', 'Categoría',
+    'Código (SKU)', 'Descripción', 'Marca', 'Categoría',
     # Solo para CABLE (categoría que contenga "cable"): obligatorios en cable,
     # se ignoran en cualquier otra categoría.
     'Tipo (cable)', 'Tamaño mm²/AWG (cable)',
-    'Unidad', 'Stock Inicial', 'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
+    'Unidad', 'Stock Inicial',
+    # Destino del stock inicial por fila (feature stock por proyecto). Opcionales:
+    # si van vacías, el stock inicial cae en la bodega default y bucket general.
+    # Solo aplican a productos NUEVOS (en existentes el stock no se toca).
+    'Almacén', 'Proyecto',
+    'Stock Mínimo', 'Precio Unitario', 'URL Imagen (opcional)',
 ]
 # Columnas específicas de cable (para colorearlas distinto en la plantilla).
 PLANTILLA_CABLE_COLS = {'Tipo (cable)', 'Tamaño mm²/AWG (cable)'}
@@ -375,11 +380,14 @@ PLANTILLA_SECTION_PREFIX = '#'
 PLANTILLA_TOOLTIPS = {
     'Código (SKU)': 'Código único del producto (SKU). Acepta letras, números, -_./',
     'Descripción': 'Descripción corta del producto (máx 250 caracteres)',
+    'Marca': 'OPCIONAL — Marca / fabricante del producto (ej: Cooper, Truper, Condumex). Máx 100 caracteres.',
     'Categoría': 'Categoría (ej: Tornillería, Eléctrico, Cable). Si contiene "cable", llena Tipo y Tamaño.',
     'Tipo (cable)': 'SOLO CABLE — Tipo de cable (THHN, THW, desnudo…). Llénalo SOLO si la Categoría es de cable; en otras categorías déjalo vacío.',
     'Tamaño mm²/AWG (cable)': 'SOLO CABLE — Tamaño en mm²/AWG (12, 2/0, 500 kcmil…). Llénalo SOLO si la Categoría es de cable; en otras categorías déjalo vacío.',
     'Unidad': 'Unidad de medida: Pza, Kg, Mts, Lts, Caja, Bote… (en cable se pone M sola).',
     'Stock Inicial': 'Cantidad inicial en almacén (número >= 0). En productos EXISTENTES este valor NO cambia el stock.',
+    'Almacén': 'OPCIONAL — Nombre de la bodega donde llega el stock inicial (ej: CDMX). Vacío = bodega default. Solo aplica a productos NUEVOS.',
+    'Proyecto': 'OPCIONAL — Número/nombre del proyecto al que se aparta el stock inicial. Vacío = General (libre). Solo aplica a productos NUEVOS.',
     'Stock Mínimo': 'Cantidad mínima antes de alertar de bajo stock (número >= 0)',
     'Precio Unitario': 'Precio unitario del material (número >= 0). Se usa para los costos por proyecto.',
     'URL Imagen (opcional)': 'OPCIONAL — URL HTTPS de la imagen del producto. Ej: https://cdn.miempresa.com/tornillo.jpg',
@@ -387,9 +395,10 @@ PLANTILLA_TOOLTIPS = {
 
 # Anchos por NOMBRE de columna.
 PLANTILLA_WIDTHS = {
-    'Código (SKU)': 18, 'Descripción': 40, 'Categoría': 18,
+    'Código (SKU)': 18, 'Descripción': 40, 'Marca': 18, 'Categoría': 18,
     'Tipo (cable)': 16, 'Tamaño mm²/AWG (cable)': 20, 'Unidad': 10,
-    'Stock Inicial': 13, 'Stock Mínimo': 13, 'Precio Unitario': 14,
+    'Stock Inicial': 13, 'Almacén': 18, 'Proyecto': 18,
+    'Stock Mínimo': 13, 'Precio Unitario': 14,
     'URL Imagen (opcional)': 42,
 }
 
@@ -540,11 +549,17 @@ def _producto_export_row(p: Producto) -> list:
     return [
         p.codigo or '',
         p.descripcion or '',
+        p.marca or '',
         p.categoria or '',
         p.cable_tipo or '',
         p.cable_calibre or '',
         p.unidad or '',
         float(p.stock_actual or 0),
+        # Almacén / Proyecto: vacíos en el export a propósito — el stock de un
+        # producto existente puede estar repartido en varios buckets, así que no
+        # hay un único destino que exportar, y al reimportar NO se reubica stock.
+        '',
+        '',
         float(p.stock_minimo or 0),
         float(p.precio_unitario or 0),
         p.imagen_url or '',
@@ -711,6 +726,20 @@ def importar_materiales():
     # huérfano (cache lleno, stock_por_almacen vacío) hasta que se cree una.
     bodega_default_id = _almacen_default_id()
 
+    # Feature stock por proyecto: caches para resolver las columnas opcionales
+    # 'Almacén' y 'Proyecto' por fila (case/acento-insensitivo, una query cada
+    # uno). El proyecto se resuelve por número o por nombre.
+    from app.models import Almacen as _Almacen
+    alm_by_name: dict[str, int] = {}
+    for _a in _Almacen.query.filter(_Almacen.activo == True).all():  # noqa: E712
+        alm_by_name.setdefault(_norm_categoria(_a.nombre), _a.id)
+    proy_by_key: dict[str, int] = {}
+    for _p in Proyecto.query.all():
+        if _p.numero_proyecto:
+            proy_by_key.setdefault(_norm_categoria(_p.numero_proyecto), _p.id)
+        if _p.nombre:
+            proy_by_key.setdefault(_norm_categoria(_p.nombre), _p.id)
+
     # Cache de categorías existentes para resolver case/acento-insensitivamente.
     # Unimos Producto.categoria (catálogo real) + CategoriaConfig (metadatos
     # visuales). El usuario puede capturar "tornilleria" en el Excel y, si ya
@@ -779,11 +808,16 @@ def importar_materiales():
         try:
             codigo      = _cell_str(_g(row, 'Código (SKU)'), maxlen=50)
             descripcion = _cell_str(_g(row, 'Descripción'), maxlen=250)
+            marca       = _cell_str(_g(row, 'Marca'), maxlen=100)
             categoria   = _cell_str(_g(row, 'Categoría'), maxlen=100)
             unidad      = _cell_str(_g(row, 'Unidad'), maxlen=50)
             imagen_url  = _cell_str(_g(row, 'URL Imagen (opcional)'), maxlen=500)
             cable_tipo_in    = _cell_str(_g(row, 'Tipo (cable)'), maxlen=60)
             cable_calibre_in = _cell_str(_g(row, 'Tamaño mm²/AWG (cable)'), maxlen=40)
+            # Destino del stock inicial (feature stock por proyecto). Solo se usan
+            # al crear un producto nuevo con stock > 0; en updates se ignoran.
+            almacen_in  = _cell_str(_g(row, 'Almacén'), maxlen=100)
+            proyecto_in = _cell_str(_g(row, 'Proyecto'), maxlen=100)
 
             # Aplicar la decisión del usuario: si esta categoría del archivo se
             # mapeó a una existente, la sustituimos antes de procesar.
@@ -920,6 +954,9 @@ def importar_materiales():
                 if descripcion != (existente.descripcion or ''):
                     cambios_fila.append('descripción')
                     existente.descripcion = descripcion
+                if (marca or None) != (existente.marca or None):
+                    cambios_fila.append(f'marca: {existente.marca or "—"} → {marca or "—"}')
+                    existente.marca = marca or None
                 if categoria_canonica != (existente.categoria or ''):
                     cambios_fila.append(f'categoría: {existente.categoria or "—"} → {categoria_canonica}')
                     existente.categoria = categoria_canonica
@@ -960,9 +997,30 @@ def importar_materiales():
                 continue
 
             stock_inicial_dec = Decimal(str(stock_actual))
+
+            # Resolver destino del stock inicial (columnas opcionales Almacén /
+            # Proyecto). Vacío → bodega default / bucket general (compat). Si viene
+            # un nombre que no existe, error de fila claro para no colocar el stock
+            # en el bucket equivocado en silencio.
+            almacen_destino_id = bodega_default_id
+            proyecto_destino_id = None
+            if almacen_in:
+                aid = alm_by_name.get(_norm_categoria(almacen_in))
+                if not aid:
+                    errores.append(f'Fila {fila_excel}: almacén "{almacen_in}" no existe (créalo o deja la celda vacía)')
+                    continue
+                almacen_destino_id = aid
+            if proyecto_in:
+                pid = proy_by_key.get(_norm_categoria(proyecto_in))
+                if not pid:
+                    errores.append(f'Fila {fila_excel}: proyecto "{proyecto_in}" no existe (usa su número o nombre, o deja la celda vacía)')
+                    continue
+                proyecto_destino_id = pid
+
             nuevo = Producto(
                 codigo=codigo,
                 descripcion=descripcion,
+                marca=(marca or None),
                 categoria=categoria_canonica,
                 unidad=unidad,
                 cable_tipo=cable_tipo_final,
@@ -976,11 +1034,20 @@ def importar_materiales():
             db.session.add(nuevo)
             db.session.flush()  # asegura nuevo.id antes de crear StockPorAlmacen
 
-            # Pausa 2: depositar stock inicial en bodega default si hay y >0.
-            if stock_inicial_dec > 0 and bodega_default_id:
+            # Depositar stock inicial en el bucket resuelto (almacén, proyecto|
+            # general) si hay bodega y >0. Feature stock por proyecto: la fuente de
+            # verdad es stock_almacen_proyecto; se crea también el cache
+            # stock_por_almacen consistente (producto nuevo = un solo bucket).
+            if stock_inicial_dec > 0 and almacen_destino_id:
+                db.session.add(StockAlmacenProyecto(
+                    producto_id=nuevo.id,
+                    almacen_id=almacen_destino_id,
+                    proyecto_id=proyecto_destino_id,
+                    cantidad=stock_inicial_dec,
+                ))
                 db.session.add(StockPorAlmacen(
                     producto_id=nuevo.id,
-                    almacen_id=bodega_default_id,
+                    almacen_id=almacen_destino_id,
                     cantidad=stock_inicial_dec,
                 ))
 

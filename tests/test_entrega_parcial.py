@@ -14,7 +14,8 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from app.models import (
-    User, Almacen, Producto, StockPorAlmacen, MovimientoInventario,
+    User, Almacen, Producto, StockPorAlmacen, StockAlmacenProyecto,
+    MovimientoInventario,
     SolicitudMaterial, SolicitudMaterialDetalle,
     Trabajador, Herramienta, HerramientaUnidad, AsignacionHerramienta,
     Estante, ProductoEstante,
@@ -65,6 +66,8 @@ def producto(db, almacen):
         stock_minimo=0, activo=True,
     )
     db.session.add(p); db.session.flush()
+    db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=almacen.id,
+                                        proyecto_id=None, cantidad=Decimal('100')))
     db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=almacen.id,
                                     cantidad=Decimal('100')))
     db.session.commit()
@@ -79,6 +82,8 @@ def producto2(db, almacen):
         stock_minimo=0, activo=True,
     )
     db.session.add(p); db.session.flush()
+    db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=almacen.id,
+                                        proyecto_id=None, cantidad=Decimal('50')))
     db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=almacen.id,
                                     cantidad=Decimal('50')))
     db.session.commit()
@@ -94,6 +99,8 @@ def producto_kg(db, almacen):
         stock_minimo=0, activo=True,
     )
     db.session.add(p); db.session.flush()
+    db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=almacen.id,
+                                        proyecto_id=None, cantidad=Decimal('100')))
     db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=almacen.id,
                                     cantidad=Decimal('100')))
     db.session.commit()
@@ -342,6 +349,8 @@ class TestEntregar:
                      stock_actual=Decimal('10'), stock_reservado=Decimal('0'),
                      stock_minimo=0, activo=True)
         db.session.add(p); db.session.flush()
+        db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=almacen.id,
+                                            proyecto_id=None, cantidad=Decimal('2')))
         db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=almacen.id,
                                         cantidad=Decimal('2')))
         db.session.commit()

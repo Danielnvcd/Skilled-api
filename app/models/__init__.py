@@ -87,6 +87,7 @@ from app.models.inventario import (
     NotificacionUmbral,
     Producto,
     ProductoEstante,
+    StockAlmacenProyecto,
     StockPorAlmacen,
     TomaInventario,
     TomaInventarioDetalle,
@@ -157,7 +158,8 @@ __all__ = [
     'AjustePeriodo', 'AjusteTrabajadorPeriodo', 'AjusteDescuento',
     # inventario
     'Almacen', 'Estante', 'Producto', 'NotificacionUmbral',
-    'StockPorAlmacen', 'TomaInventario', 'TomaInventarioDetalle',
+    'StockPorAlmacen', 'StockAlmacenProyecto',
+    'TomaInventario', 'TomaInventarioDetalle',
     'ProductoEstante', 'MovimientoInventario', 'CategoriaConfig',
     'ESTADOS_TOMA',
     # solicitudes

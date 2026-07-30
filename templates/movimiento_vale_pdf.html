@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Vale {{ folio }}</title>
+  <style>
+    @page { size: letter; margin: 1.4cm 1.6cm; }
+    body { font-family: Helvetica, Arial, sans-serif; color: #111; margin: 0; padding: 0; font-size: 10pt; }
+
+    /* ─── Header ─────────────────────────────────────────────────────────── */
+    table.header-table { width: 100%; margin-bottom: 8px; }
+    table.header-table td { vertical-align: middle; padding: 0; }
+    .logo-text { font-size: 22pt; font-weight: bold; color: #111827; }
+    .logo-text-accent { color: #4F46E5; }
+    .logo-sub { font-size: 8pt; color: #888; text-transform: uppercase; font-weight: bold; margin-top: 2px; }
+    .folio-cell { text-align: right; }
+    .folio-num { font-size: 14pt; font-weight: bold; color: #111827; }
+    .folio-date { font-size: 9pt; color: #888; margin-top: 2px; }
+    hr.divider { border: none; border-top: 2px solid #111827; margin: 6px 0 14px 0; height: 0; }
+
+    /* ─── Etiqueta de tipo ───────────────────────────────────────────────── */
+    .tipo-box { padding: 7px 12px; margin-bottom: 14px; font-size: 10pt; font-weight: bold;
+                border-left: 4px solid #4F46E5; background-color: #EEF2FF; color: #3730A3;
+                text-transform: uppercase; }
+
+    /* ─── Info bloque ────────────────────────────────────────────────────── */
+    table.info-table { width: 100%; margin-bottom: 12px; border-collapse: collapse; }
+    table.info-table td { padding: 0 8px 10px 0; vertical-align: top; width: 33%; }
+    .info-label { font-size: 7pt; font-weight: bold; color: #888; text-transform: uppercase; padding-bottom: 2px; }
+    .info-value { font-size: 11pt; font-weight: bold; color: #111827; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+    .info-value-sm { font-size: 10pt; font-weight: bold; color: #111827; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+
+    /* ─── Producto destacado ─────────────────────────────────────────────── */
+    .prod-box { background-color: #F9FAFB; border: 1px solid #E5E7EB; padding: 10px 14px; margin-bottom: 14px; }
+    .prod-desc { font-size: 12pt; font-weight: bold; color: #111827; }
+    .prod-meta { font-size: 8pt; color: #6B7280; margin-top: 2px; }
+    .sku-pill { background-color: #F3F4F6; color: #6B7280; padding: 1px 6px; font-size: 8pt; font-weight: bold; text-transform: uppercase; }
+    .cable-tag { color: #92400E; font-weight: bold; font-size: 8pt; }
+    .cant-big { font-size: 16pt; font-weight: bold; color: #4F46E5; }
+
+    /* ─── Observaciones ──────────────────────────────────────────────────── */
+    .notes-box { background-color: #F9FAFB; border-left: 3px solid #6B7280; padding: 8px 12px; margin-bottom: 14px; }
+    .notes-label { font-size: 7pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
+    .notes-text { font-size: 9pt; color: #374151; }
+
+    /* ─── Partes ─────────────────────────────────────────────────────────── */
+    .section-title { font-size: 9pt; font-weight: bold; color: #6B7280; text-transform: uppercase; margin: 18px 0 6px 0; }
+    table.partes-table { width: 100%; margin-top: 4px; }
+    table.partes-table td { width: 50%; padding: 0 18px; vertical-align: bottom; text-align: center; }
+    .parte-name { font-size: 11pt; font-weight: bold; color: #111827; min-height: 26px; padding-bottom: 4px; }
+    .sig-line { border-top: 1px solid #374151; padding-top: 5px; font-size: 8pt; color: #6B7280; font-weight: bold; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+  <table class="header-table">
+    <tr>
+      <td>
+        {% if logo_path %}
+          <img src="{{ logo_path }}" height="32" alt="SKILLED"/>
+        {% else %}
+          <span class="logo-text">SKIL<span class="logo-text-accent">LED</span></span>
+        {% endif %}
+        <div class="logo-sub">Vale de Movimiento de Inventario</div>
+      </td>
+      <td class="folio-cell">
+        <div class="folio-num">{{ folio }}</div>
+        <div class="folio-date">{{ fecha }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <hr class="divider"/>
+
+  <div class="tipo-box">{{ tipo_label }}</div>
+
+  <div class="prod-box">
+    <table style="width:100%;"><tr>
+      <td style="vertical-align:middle;">
+        <div class="prod-desc">{{ producto_descripcion }}</div>
+        <div class="prod-meta">
+          <span class="sku-pill">{{ producto_codigo }}</span>
+          {% if cable_tipo or cable_calibre %}
+            &nbsp; <span class="cable-tag">Cable: {{ cable_tipo or '—' }} · {{ cable_calibre or '—' }} mm²/AWG</span>
+          {% endif %}
+        </div>
+      </td>
+      <td style="text-align:right; vertical-align:middle; width:120px;">
+        <span class="cant-big">{{ cantidad }}</span>
+        <div class="prod-meta">{{ unidad }}</div>
+      </td>
+    </tr></table>
+  </div>
+
+  <table class="info-table">
+    <tr>
+      <td>
+        <div class="info-label">Bodega origen</div>
+        <div class="info-value-sm">{{ almacen_origen or '—' }}</div>
+      </td>
+      <td>
+        <div class="info-label">Bodega destino</div>
+        <div class="info-value-sm">{{ almacen_destino or '—' }}</div>
+      </td>
+      <td>
+        <div class="info-label">Proyecto</div>
+        <div class="info-value-sm">
+          {% if proyecto_origen and proyecto_destino and proyecto_origen != proyecto_destino %}
+            {{ proyecto_origen }} → {{ proyecto_destino }}
+          {% else %}
+            {{ proyecto_destino or proyecto_origen or 'General' }}
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  {% if motivo %}
+  <div class="notes-box">
+    <div class="notes-label">Motivo / Observaciones</div>
+    <div class="notes-text">{{ motivo }}</div>
+  </div>
+  {% endif %}
+
+  <div class="section-title">Responsables</div>
+  <table class="partes-table">
+    <tr>
+      <td><div class="parte-name">{{ entrega or '' }}</div><div class="sig-line">Entrega</div></td>
+      <td><div class="parte-name">{{ recibe or '' }}</div><div class="sig-line">Recibe</div></td>
+    </tr>
+  </table>
+
+</body>
+</html>

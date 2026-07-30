@@ -254,11 +254,16 @@ def cerrar_toma(toma_id: int):
         if diff == 0:
             continue
         # AJUSTE: positivo sube destino, negativo baja origen.
+        # `reconciliar`: la toma es a nivel almacén; un faltante físico se
+        # descuenta de cualquier bucket (general primero, luego proyectos) para
+        # cuadrar el conteo sin fallar aunque el general esté vacío. Feature
+        # stock por proyecto — el positivo (sobrante) entra al bucket general.
         data = {
             'tipo': 'AJUSTE',
             'producto_id': det.producto_id,
             'cantidad': diff,
             'motivo': f'Toma física #{t.id}',
+            'reconciliar': True,
         }
         if diff > 0:
             data['almacen_destino_id'] = t.almacen_id

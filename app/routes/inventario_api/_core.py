@@ -25,6 +25,7 @@ from app.extensions import db, limiter, get_real_client_ip_flask
 from app.realtime import emit_to_role
 from app.models import (
     Almacen, Estante, Producto, MovimientoInventario, StockPorAlmacen,
+    StockAlmacenProyecto,
     ProductoEstante, TomaInventario, TomaInventarioDetalle, ESTADOS_TOMA,
     SolicitudMaterial, SolicitudMaterialDetalle, User, AuditLog, Proyecto,
     CategoriaConfig, Herramienta, HerramientaUnidad, AsignacionHerramienta,
@@ -142,6 +143,8 @@ class ProductoCreateSchema(_BaseSchema):
     ])
     descripcion = fields.Str(required=True, validate=validate.Length(min=1, max=250))
     categoria = fields.Str(required=True, validate=validate.Length(min=1, max=100))
+    # Marca / fabricante (opcional, independiente del proveedor).
+    marca = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=100))
     unidad = fields.Str(required=True, validate=validate.Length(min=1, max=50))
     # Atributos de cable (obligatorios SOLO cuando la categoría es cable — se
     # valida en la ruta, no aquí, porque depende del valor de `categoria`).
@@ -150,6 +153,10 @@ class ProductoCreateSchema(_BaseSchema):
     stock_actual = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
     stock_minimo = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=1_000_000))
     precio_unitario = fields.Float(load_default=0.0, validate=validate.Range(min=0, max=100_000_000))
+    # Destino del stock inicial (feature stock por proyecto). Opcionales: si no
+    # vienen, el stock inicial cae en el almacén default y bucket general (compat).
+    stock_inicial_almacen_id = fields.Int(load_default=None, allow_none=True)
+    stock_inicial_proyecto_id = fields.Int(load_default=None, allow_none=True)
     imagen_url = fields.Str(load_default=None, allow_none=True, validate=[
         validate.Length(max=500),
         # Anti-XSS/SSRF: solo HTTPS o path absoluto local
@@ -167,6 +174,7 @@ class ProductoUpdateSchema(_BaseSchema):
     ])
     descripcion = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=250))
     categoria = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=100))
+    marca = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=100))
     unidad = fields.Str(load_default=None, allow_none=True, validate=validate.Length(min=1, max=50))
     cable_tipo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=60))
     cable_calibre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=40))
@@ -228,12 +236,47 @@ class EstanteLayoutSchema(_BaseSchema):
 
 
 class MovimientoCreateSchema(_BaseSchema):
-    tipo = fields.Str(required=True, validate=validate.OneOf(['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASPASO']))
+    tipo = fields.Str(required=True, validate=validate.OneOf(['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASPASO', 'REASIGNACION']))
     producto_id = fields.Int(required=True)
     cantidad = fields.Float(required=True, validate=validate.Range(min=-100_000, max=100_000))
     almacen_origen_id = fields.Int(load_default=None, allow_none=True)
     almacen_destino_id = fields.Int(load_default=None, allow_none=True)
     estante_id = fields.Int(load_default=None, allow_none=True)
+    # Bucket de proyecto del movimiento (None = general/sin proyecto):
+    #   ENTRADA / AJUSTE+ → proyecto destino    SALIDA / AJUSTE− → proyecto origen
+    #   TRASPASO          → bucket que se mueve entre almacenes
+    proyecto_id = fields.Int(load_default=None, allow_none=True)
+    # Solo REASIGNACION: mueve stock del bucket origen al destino en el MISMO
+    # almacén (cualquiera de los dos puede ser None = general).
+    proyecto_origen_id = fields.Int(load_default=None, allow_none=True)
+    proyecto_destino_id = fields.Int(load_default=None, allow_none=True)
+    motivo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
+    # Partes del movimiento para el vale/PDF (feature "vale de movimiento"): quién
+    # ENTREGA y quién RECIBE. Cada parte = trabajador del sistema (…_trabajador_id)
+    # o nombre libre (…_nombre). Opcionales: no bloquean el flujo actual.
+    entrega_trabajador_id = fields.Int(load_default=None, allow_none=True)
+    entrega_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+    recibe_trabajador_id = fields.Int(load_default=None, allow_none=True)
+    recibe_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+
+
+class AjusteBucketItemSchema(_BaseSchema):
+    """Un bucket (almacén, proyecto|general) con su cantidad OBJETIVO — la que
+    debe quedar tras el ajuste. `proyecto_id=None` = bucket general/libre."""
+    almacen_id = fields.Int(required=True)
+    proyecto_id = fields.Int(load_default=None, allow_none=True)
+    cantidad_objetivo = fields.Float(required=True, validate=validate.Range(min=0, max=1_000_000))
+
+
+class AjusteBucketsSchema(_BaseSchema):
+    """Editor de stock por bodega+proyecto: fija la cantidad objetivo de cada
+    bucket. El backend calcula el delta contra lo que hay y genera un AJUSTE por
+    cada bucket que cambió (fuente de verdad = stock_almacen_proyecto)."""
+    buckets = fields.List(
+        fields.Nested(AjusteBucketItemSchema),
+        required=True,
+        validate=validate.Length(min=1, max=200),
+    )
     motivo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
 
 
@@ -359,6 +402,8 @@ def _producto_to_dict(p: Producto) -> dict:
         'codigo': p.codigo,
         'descripcion': p.descripcion,
         'categoria': p.categoria,
+        # Marca / fabricante (None si no se capturó). Independiente del proveedor.
+        'marca': p.marca,
         'unidad': p.unidad,
         # Atributos de cable (None en productos que no son cable).
         'cable_tipo': p.cable_tipo,
@@ -421,8 +466,19 @@ def _movimiento_to_dict(m: MovimientoInventario) -> dict:
         'fecha': m.fecha.isoformat() if m.fecha else None,
         'almacen_origen_id': m.almacen_origen_id,
         'almacen_destino_id': m.almacen_destino_id,
+        # Atribución de proyecto (None = general). Se incluye el número de
+        # proyecto para pintarlo sin resolver por id en el cliente.
+        'proyecto_origen_id': m.proyecto_origen_id,
+        'proyecto_destino_id': m.proyecto_destino_id,
+        'proyecto_origen': m.proyecto_origen.numero_proyecto if m.proyecto_origen else None,
+        'proyecto_destino': m.proyecto_destino.numero_proyecto if m.proyecto_destino else None,
         'usuario_id': m.usuario_id,
         'motivo': m.motivo,
+        # Partes del vale (None si no se capturaron / movimiento interno).
+        'entrega_trabajador_id': m.entrega_trabajador_id,
+        'recibe_trabajador_id': m.recibe_trabajador_id,
+        'entrega_nombre': m.entrega_display,
+        'recibe_nombre': m.recibe_display,
     }
 
 
@@ -553,10 +609,17 @@ def _reservas_de_solicitud(sol: 'SolicitudMaterial') -> dict[int, Decimal]:
 
 
 def _intentar_reservar(reservas: dict[int, Decimal]) -> list[str]:
-    """Locks + valida disponibilidad. Aplica las reservas si TODOS los productos
-    alcanzan. Si alguno no, NO aplica nada (caller debe hacer rollback) y
-    devuelve lista de errores legibles para el SPA.
-    Disponible = stock_actual − stock_reservado."""
+    """Locks + valida disponibilidad GLOBAL. Aplica las reservas si TODOS los
+    productos alcanzan. Si alguno no, NO aplica nada (caller debe hacer rollback)
+    y devuelve lista de errores legibles para el SPA.
+    Disponible = stock_actual − stock_reservado.
+
+    Nota de diseño (feature stock por proyecto): la reserva/aprobación sigue
+    siendo GLOBAL por producto (como antes) — permisiva a propósito, igual que el
+    resto del sistema. El "candado" por proyecto (no consumir stock etiquetado a
+    OTRO proyecto) se aplica en el consumo físico de la ENTREGA/SALIDA vía
+    `_consumir_proyecto_luego_general`. La disponibilidad POR proyecto se expone
+    aparte, solo informativa, en `GET /productos/<id>/disponibilidad?proyecto_id=`."""
     if not reservas:
         return []
     errores = []
@@ -689,6 +752,283 @@ def _recalcular_cache_stock(producto: Producto):
         .scalar()
     )
     producto.stock_actual = Decimal(str(total or 0))
+
+
+# ─── Stock por proyecto (feature "stock por proyecto") ───────────────────────
+#
+# `stock_almacen_proyecto` es la fuente de verdad de grano (producto, almacén,
+# proyecto|NULL=general). `stock_por_almacen` y `Producto.stock_actual` quedan
+# como caches, recalculados por `_recalcular_caches` tras cada mutación.
+
+def _lock_stock_proyecto(producto_id: int, almacen_id: int,
+                         proyecto_id: int | None) -> StockAlmacenProyecto:
+    """SELECT ... FOR UPDATE sobre la fila (producto, almacén, proyecto|NULL).
+    Crea la fila en 0 si no existe. `proyecto_id=None` = bucket general.
+    nowait=True: si otra transacción la tiene, se levanta y el caller devuelve
+    409 'reintenta' (mismo patrón que `_lock_stock`)."""
+    q = (
+        db.session.query(StockAlmacenProyecto)
+        .with_for_update(nowait=True)
+        .filter(
+            StockAlmacenProyecto.producto_id == producto_id,
+            StockAlmacenProyecto.almacen_id == almacen_id,
+        )
+    )
+    q = q.filter(StockAlmacenProyecto.proyecto_id.is_(None)) if proyecto_id is None \
+        else q.filter(StockAlmacenProyecto.proyecto_id == proyecto_id)
+    fila = q.first()
+    if fila is None:
+        fila = StockAlmacenProyecto(
+            producto_id=producto_id, almacen_id=almacen_id,
+            proyecto_id=proyecto_id, cantidad=Decimal('0'),
+        )
+        db.session.add(fila)
+        db.session.flush()
+    return fila
+
+
+def _recalcular_caches(producto: Producto, almacen_id: int):
+    """Recalcula, en cascada, los dos caches tras mutar stock_almacen_proyecto:
+      1. stock_por_almacen(producto, almacen) = Σ buckets de proyecto del almacén.
+      2. Producto.stock_actual = Σ almacenes (vía `_recalcular_cache_stock`).
+    Se llama dentro de la misma transacción que modificó los buckets."""
+    total_alm = (
+        db.session.query(db.func.coalesce(db.func.sum(StockAlmacenProyecto.cantidad), 0))
+        .filter(
+            StockAlmacenProyecto.producto_id == producto.id,
+            StockAlmacenProyecto.almacen_id == almacen_id,
+        )
+        .scalar()
+    )
+    total_alm = Decimal(str(total_alm or 0))
+    fila = (
+        db.session.query(StockPorAlmacen)
+        .filter(
+            StockPorAlmacen.producto_id == producto.id,
+            StockPorAlmacen.almacen_id == almacen_id,
+        )
+        .first()
+    )
+    if fila is None:
+        db.session.add(StockPorAlmacen(
+            producto_id=producto.id, almacen_id=almacen_id, cantidad=total_alm,
+        ))
+    else:
+        fila.cantidad = total_alm
+    db.session.flush()  # que el sum de _recalcular_cache_stock vea el cache nuevo
+    _recalcular_cache_stock(producto)
+
+
+def _depositar(producto_id: int, almacen_id: int, proyecto_id: int | None,
+               cantidad) -> StockAlmacenProyecto:
+    """Suma `cantidad` al bucket (producto, almacén, proyecto|general)."""
+    fila = _lock_stock_proyecto(producto_id, almacen_id, proyecto_id)
+    fila.cantidad = (fila.cantidad or Decimal('0')) + Decimal(str(cantidad))
+    return fila
+
+
+def _consumir_proyecto_luego_general(producto_id: int, almacen_id: int,
+                                     proyecto_id: int | None, cantidad) -> str | None:
+    """Descuenta `cantidad` del almacén dado aplicando la regla PROYECTO→GENERAL:
+    primero del bucket del proyecto, el remanente del general. NUNCA toca el
+    stock etiquetado a OTROS proyectos. Con `proyecto_id=None` sale solo del
+    general. Devuelve None si ok, o un string de error si el físico no alcanza.
+    Bloquea las filas con FOR UPDATE."""
+    cantidad = Decimal(str(cantidad))
+    if cantidad <= 0:
+        return None
+    fila_gen = _lock_stock_proyecto(producto_id, almacen_id, None)
+    disp_gen = Decimal(str(fila_gen.cantidad or 0))
+    fila_proj = None
+    disp_proj = Decimal('0')
+    if proyecto_id is not None:
+        fila_proj = _lock_stock_proyecto(producto_id, almacen_id, proyecto_id)
+        disp_proj = Decimal(str(fila_proj.cantidad or 0))
+    if disp_proj + disp_gen < cantidad:
+        return (
+            f'requiere {cantidad}, disponible {disp_proj + disp_gen} en el almacén '
+            f'(proyecto {disp_proj} + general {disp_gen})'
+        )
+    if proyecto_id is not None:
+        take_proj = disp_proj if disp_proj < cantidad else cantidad
+        fila_proj.cantidad = disp_proj - take_proj
+        resto = cantidad - take_proj
+        if resto > 0:
+            fila_gen.cantidad = disp_gen - resto
+    else:
+        fila_gen.cantidad = disp_gen - cantidad
+    return None
+
+
+def _consumir_bucket_exacto(producto_id: int, almacen_id: int,
+                            proyecto_id: int | None, cantidad) -> str | None:
+    """Descuenta `cantidad` EXACTAMENTE del bucket indicado, sin fallback a
+    general. Para TRASPASO/REASIGNACION, que mueven un bucket específico y deben
+    dejar cuadrado el bucket destino. Devuelve None si ok o un error string."""
+    cantidad = Decimal(str(cantidad))
+    if cantidad <= 0:
+        return None
+    fila = _lock_stock_proyecto(producto_id, almacen_id, proyecto_id)
+    disp = Decimal(str(fila.cantidad or 0))
+    if disp < cantidad:
+        etiqueta = 'general' if proyecto_id is None else f'proyecto #{proyecto_id}'
+        return f'el bucket {etiqueta} solo tiene {disp} en el almacén (requiere {cantidad})'
+    fila.cantidad = disp - cantidad
+    return None
+
+
+def _consumir_reconciliando(producto_id: int, almacen_id: int, cantidad) -> str | None:
+    """Descuenta `cantidad` del almacén tomando de CUALQUIER bucket: general
+    primero, luego los de proyecto (mayor cantidad primero). Se usa SOLO para
+    reconciliar una TOMA física a nivel almacén: el conteo es la verdad, así que
+    si físicamente hay menos se reduce de donde haya. A diferencia del consumo
+    normal, NO respeta la etiqueta de proyecto (el faltante físico ya ocurrió).
+    Devuelve None o un error si el total del almacén no alcanza."""
+    restante = Decimal(str(cantidad))
+    if restante <= 0:
+        return None
+    fila_gen = _lock_stock_proyecto(producto_id, almacen_id, None)
+    disp_gen = Decimal(str(fila_gen.cantidad or 0))
+    toma_gen = disp_gen if disp_gen < restante else restante
+    if toma_gen > 0:
+        fila_gen.cantidad = disp_gen - toma_gen
+        restante -= toma_gen
+    if restante > 0:
+        filas = (
+            db.session.query(StockAlmacenProyecto)
+            .with_for_update(nowait=True)
+            .filter(
+                StockAlmacenProyecto.producto_id == producto_id,
+                StockAlmacenProyecto.almacen_id == almacen_id,
+                StockAlmacenProyecto.proyecto_id.isnot(None),
+                StockAlmacenProyecto.cantidad > 0,
+            )
+            .order_by(StockAlmacenProyecto.cantidad.desc())
+            .all()
+        )
+        for f in filas:
+            if restante <= 0:
+                break
+            disp = Decimal(str(f.cantidad or 0))
+            toma = disp if disp < restante else restante
+            f.cantidad = disp - toma
+            restante -= toma
+    if restante > 0:
+        return f'requiere {cantidad}, faltan {restante} en el almacén (todos los buckets)'
+    return None
+
+
+def _stock_proyecto_total(producto_id: int, proyecto_id: int | None) -> Decimal:
+    """Σ cantidad del bucket (producto, proyecto|general) sobre TODOS los
+    almacenes. El almacén se resuelve en la entrega, así que la disponibilidad
+    a nivel de aprobación es cross-almacén (como la reserva)."""
+    q = (
+        db.session.query(db.func.coalesce(db.func.sum(StockAlmacenProyecto.cantidad), 0))
+        .filter(StockAlmacenProyecto.producto_id == producto_id)
+    )
+    q = q.filter(StockAlmacenProyecto.proyecto_id.is_(None)) if proyecto_id is None \
+        else q.filter(StockAlmacenProyecto.proyecto_id == proyecto_id)
+    return Decimal(str(q.scalar() or 0))
+
+
+def _reserva_derivada(producto_id: int, proyecto_id: int | None,
+                      excluir_solicitud_id: int | None = None) -> Decimal:
+    """Reserva vigente del bucket (producto, proyecto|general): suma del
+    pendiente (aprobada−entregada, con fallback a solicitada) de las solicitudes
+    APROBADAS ligadas a ese proyecto. Mismo criterio que `_reservas_de_solicitud`
+    pero agregado en SQL. Evita GREATEST/LEAST (no existen en SQLite) con CASE."""
+    base = db.case(
+        (SolicitudMaterialDetalle.cantidad_aprobada > 0, SolicitudMaterialDetalle.cantidad_aprobada),
+        else_=SolicitudMaterialDetalle.cantidad_solicitada,
+    )
+    pend = base - db.func.coalesce(SolicitudMaterialDetalle.cantidad_entregada, 0)
+    reserved_row = db.case((pend > 0, pend), else_=0)
+    q = (
+        db.session.query(db.func.coalesce(db.func.sum(reserved_row), 0))
+        .join(SolicitudMaterial, SolicitudMaterial.id == SolicitudMaterialDetalle.solicitud_id)
+        .filter(
+            SolicitudMaterial.estatus == 'APROBADA',
+            SolicitudMaterialDetalle.producto_id == producto_id,
+        )
+    )
+    q = q.filter(SolicitudMaterial.proyecto_id.is_(None)) if proyecto_id is None \
+        else q.filter(SolicitudMaterial.proyecto_id == proyecto_id)
+    if excluir_solicitud_id is not None:
+        q = q.filter(SolicitudMaterial.id != excluir_solicitud_id)
+    return Decimal(str(q.scalar() or 0))
+
+
+def _resolver_partes(data: dict):
+    """Valida y resuelve las partes (entrega/recibe) de un movimiento a partir del
+    payload validado por `MovimientoCreateSchema`.
+
+    Cada parte puede venir como trabajador del sistema (`*_trabajador_id`) o como
+    nombre libre (`*_nombre`). Si viene un `*_trabajador_id` debe existir y estar
+    activo (mismo criterio que la entrega directa). Devuelve una tupla
+    `(campos, error)` donde `campos` es el dict listo para asignar al modelo
+    (`entrega_trabajador_id`, `entrega_nombre`, `recibe_trabajador_id`,
+    `recibe_nombre`) y `error` es un `Response` 422 (o None si todo ok). Ambas
+    partes son OPCIONALES: si no se manda nada, `campos` queda en None."""
+    campos = {
+        'entrega_trabajador_id': None, 'entrega_nombre': None,
+        'recibe_trabajador_id': None, 'recibe_nombre': None,
+    }
+    for parte, key_id, key_nombre in (
+        ('Entrega', 'entrega_trabajador_id', 'entrega_nombre'),
+        ('Recibe', 'recibe_trabajador_id', 'recibe_nombre'),
+    ):
+        trab_id = data.get(key_id)
+        nombre = (data.get(key_nombre) or '').strip() or None
+        if trab_id is not None:
+            trab = Trabajador.query.filter(
+                Trabajador.id == trab_id,
+                Trabajador.activo == True,  # noqa: E712
+            ).first()
+            if not trab:
+                return None, (jsonify({'detail': f'{parte}: trabajador #{trab_id} no existe o está inactivo'}), 422)
+            # El trabajador manda: ignoramos un nombre libre redundante.
+            campos[key_id] = trab.id
+            campos[key_nombre] = None
+        else:
+            campos[key_nombre] = nombre
+    return campos, None
+
+
+def _ajustar_bucket(producto: Producto, almacen_id: int, proyecto_id, delta: Decimal,
+                    user: User, motivo: str) -> str | None:
+    """Aplica un AJUSTE de `delta` (±) al bucket (producto, almacén, proyecto|general)
+    SIN commitear — el caller controla la transacción (editor de stock por bucket).
+
+    Reusa los helpers de stock por proyecto: `_depositar` para deltas positivos y
+    `_consumir_bucket_exacto` (bucket exacto, sin fallback a general) para los
+    negativos, luego `_recalcular_caches`. Registra un MovimientoInventario
+    tipo AJUSTE con la atribución de proyecto correspondiente. Devuelve None si ok
+    o un string de error (bucket insuficiente). No valida reservas aquí: el caller
+    hace el guard global tras aplicar todos los buckets."""
+    delta = Decimal(str(delta))
+    if delta == 0:
+        return None
+    if delta > 0:
+        _depositar(producto.id, almacen_id, proyecto_id, delta)
+        mov_proy_destino, mov_proy_origen = proyecto_id, None
+    else:
+        err = _consumir_bucket_exacto(producto.id, almacen_id, proyecto_id, -delta)
+        if err:
+            return err
+        mov_proy_destino, mov_proy_origen = None, proyecto_id
+    _recalcular_caches(producto, almacen_id)
+    db.session.add(MovimientoInventario(
+        tipo='AJUSTE',
+        producto_id=producto.id,
+        cantidad=delta,
+        almacen_origen_id=(almacen_id if delta < 0 else None),
+        almacen_destino_id=(almacen_id if delta > 0 else None),
+        proyecto_origen_id=mov_proy_origen,
+        proyecto_destino_id=mov_proy_destino,
+        motivo=(motivo or 'Ajuste manual desde edición')[:250],
+        usuario_id=user.id,
+    ))
+    return None
 
 
 def _audit(user: User, action: str):
