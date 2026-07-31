@@ -30,6 +30,7 @@ import os
 from flask import request
 from flask_socketio import SocketIO, join_room, disconnect
 from socketio.exceptions import ConnectionRefusedError as SocketIOConnectionRefusedError
+from app.extensions import db
 
 socketio = SocketIO()
 
@@ -411,7 +412,7 @@ def _register_handlers() -> None:
         except (KeyError, TypeError, ValueError):
             raise SocketIOConnectionRefusedError('token_invalid')
 
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             raise SocketIOConnectionRefusedError('user_not_found')
         # Invalidar si la contraseña fue rotada después de emitir el JWT.
@@ -481,10 +482,10 @@ def _register_handlers() -> None:
         from app.models import ReporteSemanal, User
         from app.routes.api_horas import _puede_acceder_proyecto
 
-        reporte = ReporteSemanal.query.get(reporte_id)
+        reporte = db.session.get(ReporteSemanal, reporte_id)
         if not reporte:
             return {'ok': False, 'reporte_id': reporte_id, 'error': 'no existe'}
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return {'ok': False, 'reporte_id': reporte_id, 'error': 'sin usuario'}
 
@@ -521,7 +522,7 @@ def _register_handlers() -> None:
             from datetime import datetime
             from app.extensions import db as _db
             from app.models import User
-            u = User.query.get(user_id)
+            u = db.session.get(User, user_id)
             if u:
                 u.last_seen = datetime.now()
                 _db.session.commit()

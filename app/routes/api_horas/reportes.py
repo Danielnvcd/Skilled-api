@@ -95,7 +95,7 @@ def crear_reporte():
     if not proyecto_id or not fecha_inicio_str or not fecha_fin_str:
         return jsonify({'error': 'proyecto_id, fecha_inicio y fecha_fin son obligatorios'}), 400
 
-    proyecto = Proyecto.query.get_or_404(proyecto_id)
+    proyecto = db.get_or_404(Proyecto, proyecto_id)
     if not _puede_acceder_proyecto(proyecto):
         return jsonify({'error': 'Acceso denegado. No eres coordinador de este proyecto.'}), 403
 
@@ -150,10 +150,10 @@ def crear_reporte():
 @bp.route('/reportes/<int:reporte_id>', methods=['GET'])
 @jwt_required
 def detalle_reporte(reporte_id):
-    r = ReporteSemanal.query.options(
+    r = db.get_or_404(ReporteSemanal, reporte_id, options=[
         joinedload(ReporteSemanal.proyecto).selectinload(Proyecto.participantes),
         selectinload(ReporteSemanal.registros),
-    ).get_or_404(reporte_id)
+    ])
 
     if not _puede_acceder_proyecto(r.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403
@@ -181,7 +181,7 @@ def detalle_reporte(reporte_id):
 @bp.route('/reportes/<int:reporte_id>/cerrar', methods=['POST'])
 @jwt_required
 def cerrar_reporte(reporte_id):
-    r = ReporteSemanal.query.get_or_404(reporte_id)
+    r = db.get_or_404(ReporteSemanal, reporte_id)
     if not _puede_acceder_proyecto(r.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403
     if r.estado != 'BORRADOR':

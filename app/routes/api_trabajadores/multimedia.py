@@ -28,7 +28,7 @@ from ._core import _authorized, _parse_date, _save_foto, bp
 @bp.route('/<int:id>/foto', methods=['POST'])
 @jwt_required
 def subir_foto(id):
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(t):
@@ -51,7 +51,7 @@ def subir_foto(id):
 @bp.route('/<int:id>/foto', methods=['GET'])
 @jwt_required
 def get_foto(id):
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(t):
@@ -64,7 +64,7 @@ def get_foto(id):
 @bp.route('/<int:id>/foto/thumb', methods=['GET'])
 @jwt_required
 def get_foto_thumb(id):
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(t):
@@ -94,7 +94,7 @@ _DOCUMENTO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB por archivo (vs los 50 MB globa
 @jwt_required
 @limiter.limit('10 per minute')
 def subir_documento(id):
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(t):
@@ -166,7 +166,7 @@ def subir_documento(id):
 @bp.route('/documentos/<int:doc_id>', methods=['GET'])
 @jwt_required
 def descargar_documento(doc_id):
-    doc = DocumentoTrabajador.query.get(doc_id)
+    doc = db.session.get(DocumentoTrabajador, doc_id)
     if not doc:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(doc.trabajador):
@@ -186,7 +186,7 @@ def descargar_documento(doc_id):
 @bp.route('/documentos/<int:doc_id>', methods=['DELETE'])
 @jwt_required
 def eliminar_documento(doc_id):
-    doc = DocumentoTrabajador.query.get(doc_id)
+    doc = db.session.get(DocumentoTrabajador, doc_id)
     if not doc:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(doc.trabajador):

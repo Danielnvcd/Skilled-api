@@ -180,7 +180,7 @@ def obtener(id):
     user = current_user()
     if not (is_admin() or user.role == 'coordinador'):
         return jsonify({'error': 'Acceso denegado'}), 403
-    p = Proyecto.query.options(selectinload(Proyecto.participantes)).get_or_404(id)
+    p = db.get_or_404(Proyecto, id, options=[selectinload(Proyecto.participantes)])
     # Coordinador solo accede a los propios.
     if user.role == 'coordinador' and p.coordinador_id != user.id:
         return jsonify({'error': 'Acceso denegado'}), 403

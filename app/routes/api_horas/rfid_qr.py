@@ -81,7 +81,7 @@ def qr_generar(trabajador_id):
     if not is_admin():
         return jsonify({'ok': False, 'error': 'Acceso denegado'}), 403
 
-    trabajador = Trabajador.query.get_or_404(trabajador_id)
+    trabajador = db.get_or_404(Trabajador, trabajador_id)
 
     try:
         trabajador.qr_code = str(uuid.uuid4())
@@ -123,7 +123,7 @@ def qr_imagen_trabajador(trabajador_id):
     if not is_admin():
         return jsonify({'error': 'Acceso denegado'}), 403
 
-    trabajador = Trabajador.query.get_or_404(trabajador_id)
+    trabajador = db.get_or_404(Trabajador, trabajador_id)
 
     # Generar si no existe — útil para empleados nuevos sin QR todavía.
     if not trabajador.qr_code:
@@ -184,7 +184,7 @@ def rfid_asociar():
     if len(uid) > 64:
         return jsonify({'ok': False, 'error': 'UID demasiado largo (máx 64 chars)'}), 400
 
-    trabajador = Trabajador.query.get_or_404(trabajador_id)
+    trabajador = db.get_or_404(Trabajador, trabajador_id)
 
     # Si el coordinador intenta asociar tarjeta a un trabajador, debe ser de un
     # proyecto suyo (mismo criterio que el resto del módulo).
@@ -230,9 +230,9 @@ def rfid_trabajadores_reporte(reporte_id):
     pago_dia_festivo). El kiosko llama este endpoint al descargar un reporte
     antes de irse offline.
     """
-    r = ReporteSemanal.query.options(
+    r = db.get_or_404(ReporteSemanal, reporte_id, options=[
         joinedload(ReporteSemanal.proyecto).selectinload(Proyecto.participantes),
-    ).get_or_404(reporte_id)
+    ])
 
     if not _puede_acceder_proyecto(r.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403

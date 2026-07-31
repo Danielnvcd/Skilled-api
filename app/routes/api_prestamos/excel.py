@@ -10,6 +10,7 @@ from app.routes._api_helpers import _aplicar_estilos_y_retornar, _sanitize_rows,
 from app.routes.api_auth import jwt_required
 
 from ._core import bp
+from app.extensions import db
 
 
 @bp.route('/trabajadores/<int:trabajador_id>/excel', methods=['GET'])
@@ -21,7 +22,7 @@ def excel_prestamos_trabajador(trabajador_id):
     if denied:
         return denied
 
-    trabajador = Trabajador.query.get_or_404(trabajador_id)
+    trabajador = db.get_or_404(Trabajador, trabajador_id)
     prestamos = (
         Prestamo.query
         .filter_by(trabajador_id=trabajador.id)

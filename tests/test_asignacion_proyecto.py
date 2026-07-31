@@ -16,6 +16,7 @@ from app.models import (
     StockAlmacenProyecto, StockPorAlmacen, User,
 )
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 def _login(client, user):
@@ -172,7 +173,7 @@ class TestAplicar:
         assert _bucket(db, producto, almacen, proyecto.id) == 30
         assert _bucket(db, producto, almacen, None) == 70, 'debe salir de General'
         # El total NO cambia: el material solo cambió de etiqueta.
-        assert float(Producto.query.get(producto.id).stock_actual) == 100
+        assert float(flask_db.session.get(Producto, producto.id).stock_actual) == 100
 
     def test_entrada_nueva_si_aumenta_el_total(self, client, db, admin, almacen, proyecto, producto):
         """origen='entrada' es material que llega de fuera: crea stock."""
@@ -183,7 +184,7 @@ class TestAplicar:
         db.session.expire_all()
         assert _bucket(db, producto, almacen, proyecto.id) == 40
         assert _bucket(db, producto, almacen, None) == 100, 'General no se toca'
-        assert float(Producto.query.get(producto.id).stock_actual) == 140
+        assert float(flask_db.session.get(Producto, producto.id).stock_actual) == 140
 
     def test_deja_rastro_en_el_kardex(self, client, db, admin, almacen, proyecto, producto):
         """Si algo mueve stock sin quedar registrado, el inventario deja de ser

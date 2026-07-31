@@ -91,7 +91,7 @@ def actualizar(user_id):
     if err:
         return err
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 
@@ -119,7 +119,7 @@ def actualizar(user_id):
                 tid = int(raw)
             except (TypeError, ValueError):
                 return jsonify({'error': 'trabajador_id debe ser un número entero'}), 400
-            trabajador = Trabajador.query.get(tid)
+            trabajador = db.session.get(Trabajador, tid)
             if not trabajador:
                 return jsonify({'error': f'Trabajador #{tid} no existe'}), 404
             # Validar 1:1: si otro usuario ya está ligado a este trabajador, rechazar.
@@ -166,7 +166,7 @@ def eliminar(user_id):
     if user_id == current_user().id:
         return jsonify({'error': 'No puedes desactivar tu propia cuenta'}), 400
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 
@@ -215,7 +215,7 @@ def reactivar(user_id):
     if err:
         return err
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 

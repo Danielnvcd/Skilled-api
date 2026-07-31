@@ -21,6 +21,7 @@ from app.models import (
     Estante, ProductoEstante,
 )
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 def _hdr(user):
@@ -520,7 +521,7 @@ class TestEntregaHerramienta:
         assert asigs[0].estado == 'ACTIVA'
 
         # La unidad asignada pasó a ASIGNADA y vinculada al trabajador
-        unidad = HerramientaUnidad.query.get(asigs[0].unidad_id)
+        unidad = flask_db.session.get(HerramientaUnidad, asigs[0].unidad_id)
         assert unidad.estado == 'ASIGNADA'
         assert unidad.asignado_trabajador_id == trabajador.id
 

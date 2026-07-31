@@ -97,7 +97,7 @@ def qr_check():
     hoy = date.today()
 
     if reporte_id:
-        reporte = ReporteSemanal.query.get(int(reporte_id))
+        reporte = db.session.get(ReporteSemanal, int(reporte_id))
         if not reporte or reporte.estado != 'BORRADOR':
             return jsonify({'ok': False, 'error': 'El reporte ya fue cerrado o no existe'}), 404
         if not _puede_acceder_proyecto(reporte.proyecto):

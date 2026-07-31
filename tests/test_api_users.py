@@ -36,6 +36,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.models import RefreshToken, Trabajador, User
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -304,14 +305,14 @@ class TestEliminar:
         assert r.get_json()['ok'] is True
         # Borrado lógico: el usuario NO se borra físicamente (tiene FKs en otras
         # tablas); se desactiva para conservar su historial.
-        eliminado = User.query.get(coord.id)
+        eliminado = flask_db.session.get(User, coord.id)
         assert eliminado is not None
         assert eliminado.activo is False
 
     def test_no_eliminar_propia_cuenta_400(self, client, gestor):
         r = client.delete(f'/api/users/{gestor.id}', headers=_hdr(gestor))
         assert r.status_code == 400
-        assert User.query.get(gestor.id) is not None
+        assert flask_db.session.get(User, gestor.id) is not None
 
     def test_no_eliminar_usuario_admin_literal_400(
         self, client, gestor, admin_literal,
@@ -334,7 +335,7 @@ class TestEliminar:
         db.session.add(otro); db.session.commit()
         r = client.delete(f'/api/users/{otro.id}', headers=_hdr(super_admin))
         assert r.status_code == 200
-        desactivado = User.query.get(otro.id)
+        desactivado = flask_db.session.get(User, otro.id)
         assert desactivado is not None
         assert desactivado.activo is False
 
@@ -353,12 +354,12 @@ class TestReactivar:
         # Primero desactivar
         r = client.delete(f'/api/users/{coord.id}', headers=_hdr(gestor))
         assert r.status_code == 200
-        assert User.query.get(coord.id).activo is False
+        assert flask_db.session.get(User, coord.id).activo is False
         # Luego reactivar
         r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(gestor))
         assert r.status_code == 200
         assert r.get_json()['activo'] is True
-        assert User.query.get(coord.id).activo is True
+        assert flask_db.session.get(User, coord.id).activo is True
 
     def test_reactivar_cuenta_ya_activa_400(self, client, gestor, coord):
         r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(gestor))

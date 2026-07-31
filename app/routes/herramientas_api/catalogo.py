@@ -16,19 +16,27 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.realtime import emit_to_role
+from app.models._base import _now_utc
 from app.models import (
     Herramienta, HerramientaUnidad, HerramientaCategoria,
     AsignacionHerramienta, IncidenciaHerramienta, SolicitudBajaHerramienta,
     ESTADOS_UNIDAD,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario, _require_inventario_admin,
-    _parse_or_422, _int_arg, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    HerramientaCreateSchema, HerramientaUpdateSchema, CategoriaUpsertSchema,
-    _herramienta_to_dict, _asignacion_to_dict, _categoria_to_dict,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario,
+    _require_inventario_admin,
+    _parse_or_422,
+    _int_arg,
+    _audit,
+    HerramientaCreateSchema,
+    HerramientaUpdateSchema,
+    CategoriaUpsertSchema,
+    _herramienta_to_dict,
+    _asignacion_to_dict,
+    _categoria_to_dict,
 )
 
 
@@ -290,7 +298,7 @@ def stats_herramientas():
     solicitudes_baja_pend = SolicitudBajaHerramienta.query.filter(
         SolicitudBajaHerramienta.estado == 'PENDIENTE'
     ).count()
-    ahora = datetime.datetime.utcnow()
+    ahora = _now_utc()
     en_3_dias = ahora + datetime.timedelta(days=3)
     proximas_devolver = (
         AsignacionHerramienta.query

@@ -388,7 +388,7 @@ class TestDescuentos:
             headers=_hdr(pn_admin),
         )
         assert r.status_code == 200
-        assert DescuentoPrenomina.query.get(d.id) is None
+        assert flask_db.session.get(DescuentoPrenomina, d.id) is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -427,7 +427,7 @@ class TestDepositos:
             headers=_hdr(pn_admin),
         )
         assert r.status_code == 200
-        assert DepositoExtra.query.get(d.id) is None
+        assert flask_db.session.get(DepositoExtra, d.id) is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

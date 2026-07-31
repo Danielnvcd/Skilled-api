@@ -25,15 +25,24 @@ from app.models import (
     ESTADOS_UNIDAD,
     crear_evento_herramienta,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario, _require_inventario_admin,
-    _parse_or_422, _int_arg, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    UnidadCreateSchema, UnidadUpdateSchema,
-    _unidad_to_dict, _asignacion_to_dict, _media_to_dict, _evento_to_dict,
-    _next_codigo_interno, _puede_ver_unidad, _redactar_para_rol,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario,
+    _require_inventario_admin,
+    _parse_or_422,
+    _int_arg,
+    _audit,
+    UnidadCreateSchema,
+    UnidadUpdateSchema,
+    _unidad_to_dict,
+    _asignacion_to_dict,
+    _media_to_dict,
+    _evento_to_dict,
+    _next_codigo_interno,
+    _puede_ver_unidad,
+    _redactar_para_rol,
 )
 
 
@@ -179,6 +188,56 @@ def create_unidad():
     return jsonify(_unidad_to_dict(nueva, incluir_relacion=True)), 201
 
 
+def _validar_ubicacion(u: HerramientaUnidad, data: dict):
+    """Valida que, TRAS el update, el estante de la unidad siga perteneciendo a
+    su bodega. Devuelve una respuesta de error, o None si todo cuadra.
+
+    Se valida el RESULTADO, no solo lo que trae el payload: mover la unidad de
+    bodega mandando únicamente `almacen_id` dejaba colgado el estante anterior
+    —la unidad quedaba diciendo que está en la bodega B, en un estante que
+    físicamente está en la A—. No hay constraint en base que lo impida, así que
+    este guard es el único que sostiene el invariante.
+
+    Solo se valida cuando el PUT toca la ubicación: una edición de otros campos
+    no debe rebotar por una incoherencia que ya estuviera guardada.
+    """
+    almacen_pedido = data.get('almacen_id')
+    estante_pedido = data.get('estante_id')
+    if almacen_pedido is None and estante_pedido is None:
+        return None
+
+    if almacen_pedido and not Almacen.query.filter(Almacen.id == almacen_pedido).first():
+        return jsonify({'detail': 'almacen_id no existe'}), 404
+
+    almacen_final = almacen_pedido if almacen_pedido is not None else u.almacen_id
+    estante_final = estante_pedido if estante_pedido is not None else u.estante_id
+    if not estante_final:
+        return None
+
+    est = Estante.query.filter(Estante.id == estante_final).first()
+    if est is None:
+        # Un estante_id inválido en el payload es error del cliente; uno ya
+        # guardado que desapareció no debe bloquear la edición.
+        if estante_pedido:
+            return jsonify({'detail': 'estante_id no existe'}), 404
+        return None
+
+    if almacen_final and est.almacen_id != almacen_final:
+        if estante_pedido:
+            return jsonify({'detail': 'estante_id no pertenece al almacen_id indicado'}), 422
+        # Cambió la bodega y el estante que ya traía la unidad es de otra:
+        # el cliente debe decidir a qué estante va (o vaciarlo) en la misma
+        # petición, no dejamos la unidad en un estado imposible.
+        return jsonify({
+            'detail': (
+                f"La unidad está colocada en el estante '{est.nombre}', que pertenece "
+                f"a otra bodega. Indica también el estante destino (estante_id) al "
+                f"cambiar de bodega."
+            ),
+        }), 422
+    return None
+
+
 @bp.route('/herramientas-unidades/<int:uid>', methods=['PUT'])
 @_require_inventario_admin
 def update_unidad(uid: int):
@@ -197,18 +256,8 @@ def update_unidad(uid: int):
             return jsonify({'detail': 'no_serie ya existe en otra unidad'}), 400
         u.no_serie = data['no_serie']
 
-    # Validar coherencia almacén / estante antes de persistir.
-    nuevo_almacen_id = data.get('almacen_id') if data.get('almacen_id') is not None else u.almacen_id
-    nuevo_estante_id = data.get('estante_id') if data.get('estante_id') is not None else u.estante_id
-    if data.get('almacen_id'):
-        if not Almacen.query.filter(Almacen.id == data['almacen_id']).first():
-            return jsonify({'detail': 'almacen_id no existe'}), 404
-    if data.get('estante_id'):
-        est = Estante.query.filter(Estante.id == data['estante_id']).first()
-        if not est:
-            return jsonify({'detail': 'estante_id no existe'}), 404
-        if nuevo_almacen_id and est.almacen_id != nuevo_almacen_id:
-            return jsonify({'detail': 'estante_id no pertenece al almacen_id indicado'}), 422
+    err = _validar_ubicacion(u, data)
+    if err: return err
 
     for campo in ('almacen_id', 'estante_id', 'complementos', 'fecha_adquisicion',
                   'vida_util_meses', 'observaciones'):

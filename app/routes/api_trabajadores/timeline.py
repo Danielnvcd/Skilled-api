@@ -38,7 +38,7 @@ def timeline(id):
         DocumentoTrabajador, Prestamo, ReporteSemanal, RegistroDiarioHoras,
     )
 
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(t):

@@ -22,6 +22,7 @@ from werkzeug.security import generate_password_hash
 
 from app.models import Proyecto, Trabajador, User
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -351,7 +352,7 @@ class TestCrear:
         body = r.get_json()
         assert 'id' in body
         # Persistido en BD
-        t = Trabajador.query.get(body['id'])
+        t = flask_db.session.get(Trabajador, body['id'])
         assert t.no_empleado == 'NEW-001'
         assert t.nombre == 'Carlos'
         assert float(t.salario_real_pactado_x_sem) == 5000.0

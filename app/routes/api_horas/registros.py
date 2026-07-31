@@ -121,7 +121,7 @@ def _validar_y_aplicar_registro(reg: RegistroDiarioHoras, payload: dict, *, trab
 @bp.route('/reportes/<int:reporte_id>/registros', methods=['POST'])
 @jwt_required
 def crear_registro(reporte_id):
-    reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    reporte = db.get_or_404(ReporteSemanal, reporte_id)
     if not _puede_acceder_proyecto(reporte.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403
     if reporte.estado != 'BORRADOR':
@@ -157,7 +157,7 @@ def crear_registro(reporte_id):
     if not (reporte.fecha_inicio_semana <= fecha <= reporte.fecha_fin_semana):
         return jsonify({'error': 'La fecha no pertenece a la semana del reporte'}), 400
 
-    trabajador = Trabajador.query.get(trabajador_id)
+    trabajador = db.session.get(Trabajador, trabajador_id)
     if not trabajador:
         return jsonify({'error': 'Trabajador no encontrado'}), 404
     if trabajador not in reporte.proyecto.participantes:
@@ -201,7 +201,7 @@ def bulk_upsert_registros(reporte_id):
     `_register_registros_emit_hook` automáticamente al commit; no se duplica
     desde aquí.
     """
-    reporte = ReporteSemanal.query.get_or_404(reporte_id)
+    reporte = db.get_or_404(ReporteSemanal, reporte_id)
     if not _puede_acceder_proyecto(reporte.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403
     if reporte.estado != 'BORRADOR':
@@ -311,7 +311,7 @@ def bulk_upsert_registros(reporte_id):
 @bp.route('/registros/<int:registro_id>', methods=['PUT'])
 @jwt_required
 def editar_registro(registro_id):
-    reg = RegistroDiarioHoras.query.get_or_404(registro_id)
+    reg = db.get_or_404(RegistroDiarioHoras, registro_id)
     reporte = reg.reporte
     if not _puede_acceder_proyecto(reporte.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403
@@ -360,7 +360,7 @@ def editar_registro(registro_id):
 @bp.route('/registros/<int:registro_id>', methods=['DELETE'])
 @jwt_required
 def eliminar_registro(registro_id):
-    reg = RegistroDiarioHoras.query.get_or_404(registro_id)
+    reg = db.get_or_404(RegistroDiarioHoras, registro_id)
     reporte = reg.reporte
     if not _puede_acceder_proyecto(reporte.proyecto):
         return jsonify({'error': 'Acceso denegado'}), 403

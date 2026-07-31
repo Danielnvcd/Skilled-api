@@ -1,26 +1,24 @@
-"""Endpoints de Movimientos de inventario.
+"""Registro de movimientos de inventario: listado, alta y atajo de PWA.
 
-Expone `_perform_movimiento` para que el módulo `tomas` lo use al cerrar una
-toma física (genera AJUSTES automáticos).
+`_perform_movimiento` es la lógica central que comparten la API y el cierre de
+una toma física, y es el ÚNICO camino por el que se altera stock desde aquí.
 """
 import datetime
-import io
-import os
 from decimal import Decimal
 
-from flask import jsonify, request, current_app, render_template, send_file
+from flask import jsonify, request, current_app
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.models import (
-    Producto, Estante, Proyecto, MovimientoInventario, NotificacionUmbral,
+    Estante, MovimientoInventario, NotificacionUmbral, Producto, Proyecto,
     crear_notif_inventario,
 )
 from app.realtime import emit_to_role
 
-from ._core import (
+from .._core import (
     bp,
-    _es_error_de_lock,
+    _es_error_de_lock, respuesta_lock,
     _require_inventario_admin,
     _parse_or_422, _int_arg,
     MovimientoCreateSchema,
@@ -183,7 +181,7 @@ def _perform_movimiento(data: dict, user, autocommit: bool = True):
         except Exception as exc:
             _rollback()
             if _es_error_de_lock(exc):
-                return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
+                return respuesta_lock()
             raise
         nuevo_mov = MovimientoInventario(
             tipo='REASIGNACION', producto_id=producto.id, cantidad=cantidad_decimal,
@@ -335,7 +333,7 @@ def _perform_movimiento(data: dict, user, autocommit: bool = True):
         # nowait=True levanta si la fila ya estaba bloqueada por otra transacción.
         # Devolvemos 409 para que el cliente reintente.
         if _es_error_de_lock(exc):
-            return jsonify({'detail': 'Stock bloqueado por otra operación, reintenta'}), 409
+            return respuesta_lock()
         raise
 
     # 5) Recalcular caches (stock_por_almacen + Producto.stock_actual) de los
@@ -461,90 +459,3 @@ def create_movimiento_rapido():
         data['almacen_origen_id'] = almacen_id
 
     return _perform_movimiento(data, request.current_user)
-
-
-# ─── Vale (PDF) de un movimiento ─────────────────────────────────────────────
-
-_TIPO_LABEL = {
-    'ENTRADA': 'Entrada de mercancía',
-    'SALIDA': 'Salida de mercancía',
-    'AJUSTE': 'Ajuste de inventario',
-    'TRASPASO': 'Traspaso entre bodegas',
-    'REASIGNACION': 'Reasignación entre proyectos',
-}
-
-
-def _render_movimiento_pdf(mov: MovimientoInventario):
-    """Genera el vale PDF de un movimiento con xhtml2pdf → BytesIO (o None si la
-    librería no está). Mismo mecanismo y logo que `_render_solicitud_pdf`."""
-    try:
-        from xhtml2pdf import pisa
-    except ImportError:
-        return None
-    base_dir = current_app.config.get('BASE_DIR') or os.path.dirname(current_app.root_path)
-    logo_path = os.path.join(base_dir, 'static', 'imagenes', 'skilled (1).png')
-    if not os.path.exists(logo_path):
-        logo_path = None
-
-    def _q(v):
-        v = float(v or 0)
-        return int(v) if v % 1 == 0 else round(v, 2)
-
-    prod = mov.producto
-    contexto = {
-        'folio': f'MOV-{mov.id:06d}',
-        'tipo': mov.tipo,
-        'tipo_label': _TIPO_LABEL.get(mov.tipo, mov.tipo),
-        'fecha': mov.fecha.strftime('%d/%m/%Y %H:%M') if mov.fecha else '',
-        'producto_codigo': prod.codigo if prod else '—',
-        'producto_descripcion': prod.descripcion if prod else 'Producto eliminado',
-        'cable_tipo': (prod.cable_tipo if prod else None) or '',
-        'cable_calibre': (prod.cable_calibre if prod else None) or '',
-        'cantidad': _q(mov.cantidad),
-        'unidad': prod.unidad if prod else '',
-        'almacen_origen': mov.almacen_origen.nombre if mov.almacen_origen else None,
-        'almacen_destino': mov.almacen_destino.nombre if mov.almacen_destino else None,
-        'proyecto_origen': mov.proyecto_origen.numero_proyecto if mov.proyecto_origen else None,
-        'proyecto_destino': mov.proyecto_destino.numero_proyecto if mov.proyecto_destino else None,
-        'motivo': mov.motivo or '',
-        'entrega': mov.entrega_display or '',
-        'recibe': mov.recibe_display or '',
-        'logo_path': logo_path,
-    }
-    html_salida = render_template('movimiento_vale_pdf.html', **contexto)
-    buf = io.BytesIO()
-    status = pisa.CreatePDF(io.BytesIO(html_salida.encode('utf-8')), dest=buf)
-    if status.err:
-        return None
-    buf.seek(0)
-    return buf
-
-
-@bp.route('/movimientos/<int:mov_id>/pdf', methods=['GET'])
-@_require_inventario_admin
-def imprimir_movimiento(mov_id: int):
-    """Vale PDF de un movimiento ya registrado: producto, cantidad, bodegas,
-    proyecto, motivo y las partes (entrega/recibe) con espacio de firmas."""
-    mov = (
-        MovimientoInventario.query
-        .options(
-            joinedload(MovimientoInventario.producto),
-            joinedload(MovimientoInventario.almacen_origen),
-            joinedload(MovimientoInventario.almacen_destino),
-            joinedload(MovimientoInventario.proyecto_origen),
-            joinedload(MovimientoInventario.proyecto_destino),
-            joinedload(MovimientoInventario.entrega_trabajador),
-            joinedload(MovimientoInventario.recibe_trabajador),
-        )
-        .filter(MovimientoInventario.id == mov_id)
-        .first()
-    )
-    if not mov:
-        return jsonify({'detail': 'Movimiento no encontrado'}), 404
-    pdf = _render_movimiento_pdf(mov)
-    if pdf is None:
-        return jsonify({'detail': 'Error al generar el PDF'}), 500
-    return send_file(
-        pdf, mimetype='application/pdf', as_attachment=False,
-        download_name=f'MOV-{mov.id:06d}.pdf',
-    )

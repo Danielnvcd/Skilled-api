@@ -3,14 +3,12 @@
 Snapshot de stock por almacén → captura física → cierre que genera AJUSTEs
 automáticos contra `_perform_movimiento`. PDF de acta para firmar.
 """
-import io
-import os
-import datetime
 from decimal import Decimal
 
-from flask import jsonify, request, send_file, render_template, current_app
+from flask import jsonify, request, send_file
 
 from app.extensions import db
+from app.models._base import _now_utc
 from app.models import (
     Almacen, Producto, StockPorAlmacen,
     TomaInventario, TomaInventarioDetalle, ESTADOS_TOMA,
@@ -23,6 +21,7 @@ from ._core import (
     _es_error_de_lock,
     _require_inventario_admin,
     _audit,
+    renderizar_pdf,
     _INV_ROLES,
 )
 from .movimientos import _perform_movimiento
@@ -89,7 +88,7 @@ def create_toma():
 
     if not almacen_id:
         return jsonify({'detail': 'almacen_id es requerido'}), 422
-    alm = Almacen.query.get(almacen_id)
+    alm = db.session.get(Almacen, almacen_id)
     if not alm or not alm.activo:
         return jsonify({'detail': 'Almacén no encontrado o inactivo'}), 404
 
@@ -150,7 +149,7 @@ def list_tomas():
 @bp.route('/tomas/<int:toma_id>', methods=['GET'])
 @_require_inventario_admin
 def get_toma(toma_id: int):
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     return jsonify(_toma_to_dict(t, include_detalles=True))
 
 
@@ -159,7 +158,7 @@ def get_toma(toma_id: int):
 def patch_toma_detalle(toma_id: int, det_id: int):
     """Captura `cantidad_fisica` en una línea. Body: `{cantidad_fisica}`.
     Acepta null para limpiar la captura."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma {t.estatus.lower()} — no se puede modificar'}), 409
     det = TomaInventarioDetalle.query.filter_by(id=det_id, toma_id=t.id).first_or_404()
@@ -179,7 +178,7 @@ def patch_toma_detalle(toma_id: int, det_id: int):
             return jsonify({'detail': 'cantidad_fisica no puede ser negativa'}), 422
         det.cantidad_fisica = cant
         det.capturado_por_id = request.current_user.id
-        det.capturado_en = datetime.datetime.utcnow()
+        det.capturado_en = _now_utc()
 
     db.session.commit()
     db.session.refresh(det)
@@ -194,7 +193,7 @@ def patch_toma_detalle(toma_id: int, det_id: int):
 def patch_toma_detalle_por_codigo(toma_id: int):
     """Atajo para PWA scanner: captura por código de producto.
     Body: `{codigo, cantidad_fisica}`. Devuelve el detalle actualizado."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma {t.estatus.lower()} — no se puede modificar'}), 409
 
@@ -224,7 +223,7 @@ def patch_toma_detalle_por_codigo(toma_id: int):
 
     det.cantidad_fisica = cant
     det.capturado_por_id = request.current_user.id
-    det.capturado_en = datetime.datetime.utcnow()
+    det.capturado_en = _now_utc()
     db.session.commit()
     db.session.refresh(det)
     emit_to_role(_INV_ROLES, 'toma:changed', {
@@ -243,7 +242,7 @@ def cerrar_toma(toma_id: int):
     El llamador puede pasar `{omitir_no_capturados: true}` (default) o false
     para forzar que las no capturadas se traten como cantidad_fisica=0 (riesgoso).
     """
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma ya está {t.estatus.lower()}'}), 409
 
@@ -323,7 +322,7 @@ def cerrar_toma(toma_id: int):
         }), 409
 
     t.estatus = 'CERRADA'
-    t.fecha_cierre = datetime.datetime.utcnow()
+    t.fecha_cierre = _now_utc()
     t.cerrada_por_id = user.id
     _audit(user, f"Toma #{t.id} cerrada — {ajustes_creados} ajustes generados")
     db.session.commit()  # único commit: los N ajustes + el cierre, atómicos
@@ -341,11 +340,11 @@ def cerrar_toma(toma_id: int):
 @_require_inventario_admin
 def cancelar_toma(toma_id: int):
     """Cancela una toma sin aplicar ajustes."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma ya está {t.estatus.lower()}'}), 409
     t.estatus = 'CANCELADA'
-    t.fecha_cierre = datetime.datetime.utcnow()
+    t.fecha_cierre = _now_utc()
     t.cerrada_por_id = request.current_user.id
     _audit(request.current_user, f"Toma #{t.id} cancelada")
     db.session.commit()
@@ -353,46 +352,50 @@ def cancelar_toma(toma_id: int):
     return jsonify(_toma_to_dict(t))
 
 
+def _conteo_para_acta(t: TomaInventario):
+    """Líneas y resumen de la toma para el acta PDF, ordenadas por código.
+
+    Una línea sin `cantidad_fisica` es "no capturada" (nadie la contó) y no
+    cuenta como diferencia; con física, la diferencia es física − sistema.
+    """
+    detalles = []
+    capturadas = con_diferencia = no_capturadas = 0
+    for d in sorted(t.detalles, key=lambda x: (x.producto.codigo if x.producto else '')):
+        cant_sistema = float(d.cantidad_sistema or 0)
+        cant_fisica = None if d.cantidad_fisica is None else float(d.cantidad_fisica)
+        if cant_fisica is None:
+            no_capturadas += 1
+            diferencia = None
+        else:
+            capturadas += 1
+            diferencia = cant_fisica - cant_sistema
+            if abs(diferencia) > 1e-9:
+                con_diferencia += 1
+        detalles.append({
+            'codigo': d.producto.codigo if d.producto else '—',
+            'descripcion': d.producto.descripcion if d.producto else '—',
+            'unidad': d.producto.unidad if d.producto else None,
+            'sistema': cant_sistema,
+            'fisico': cant_fisica,
+            'diff': diferencia if diferencia is not None else 0,
+        })
+    resumen = {
+        'total': len(detalles),
+        'capturadas': capturadas,
+        'con_diferencia': con_diferencia,
+        'no_capturadas': no_capturadas,
+    }
+    return detalles, resumen
+
+
 @bp.route('/tomas/<int:toma_id>/pdf', methods=['GET'])
 @_require_inventario_admin
 def get_toma_pdf(toma_id: int):
     """PDF de acta de toma con diferencias y firmas."""
-    try:
-        from xhtml2pdf import pisa
-    except ImportError:
-        return jsonify({'detail': 'xhtml2pdf no instalado'}), 500
+    t = db.get_or_404(TomaInventario, toma_id)
+    detalles_out, resumen = _conteo_para_acta(t)
 
-    t = TomaInventario.query.get_or_404(toma_id)
-    detalles_out = []
-    capturadas = 0
-    con_diff = 0
-    no_cap = 0
-    for d in sorted(t.detalles, key=lambda x: (x.producto.codigo if x.producto else '')):
-        cant_fis = None if d.cantidad_fisica is None else float(d.cantidad_fisica)
-        cant_sis = float(d.cantidad_sistema or 0)
-        if cant_fis is None:
-            no_cap += 1
-            diff = None
-        else:
-            capturadas += 1
-            diff = cant_fis - cant_sis
-            if abs(diff) > 1e-9:
-                con_diff += 1
-        detalles_out.append({
-            'codigo': d.producto.codigo if d.producto else '—',
-            'descripcion': d.producto.descripcion if d.producto else '—',
-            'unidad': d.producto.unidad if d.producto else None,
-            'sistema': cant_sis,
-            'fisico': cant_fis,
-            'diff': diff if diff is not None else 0,
-        })
-
-    # API-only: `static_folder=None`. Resolvemos el logo contra BASE_DIR.
-    base_dir = current_app.config.get('BASE_DIR') or os.path.dirname(current_app.root_path)
-    logo_path = os.path.join(base_dir, 'static', 'imagenes', 'skilled (1).png')
-    if not os.path.exists(logo_path):
-        logo_path = None
-    html_salida = render_template(
+    pdf = renderizar_pdf(
         'toma_inventario_pdf.html',
         toma=t,
         almacen_nombre=t.almacen.nombre if t.almacen else None,
@@ -401,22 +404,14 @@ def get_toma_pdf(toma_id: int):
         estatus=t.estatus,
         fecha_inicio=t.fecha_inicio.strftime('%Y-%m-%d %H:%M') if t.fecha_inicio else '',
         detalles=detalles_out,
-        resumen={
-            'total': len(detalles_out),
-            'capturadas': capturadas,
-            'con_diferencia': con_diff,
-            'no_capturadas': no_cap,
-        },
-        logo_path=logo_path if os.path.exists(logo_path) else None,
+        resumen=resumen,
     )
-    buf = io.BytesIO()
-    status = pisa.CreatePDF(io.BytesIO(html_salida.encode('utf-8')), dest=buf)
-    if status.err:
+    if pdf is None:
         return jsonify({'detail': 'Error generando PDF'}), 500
-    buf.seek(0)
+
     # El no-cache de PDFs lo aplica el after_request central (_security_headers).
     return send_file(
-        buf,
+        pdf,
         mimetype='application/pdf',
         as_attachment=False,
         download_name=f'toma-{t.id}.pdf',

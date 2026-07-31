@@ -4,26 +4,29 @@ Registra:
   /incidencias-herramienta/                          POST, GET
   /incidencias-herramienta/<int:iid>/atender         PATCH
 """
-import datetime
 
 from flask import jsonify, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.realtime import emit_to_role
+from app.models._base import _now_utc
 from app.models import (
     HerramientaUnidad, IncidenciaHerramienta,
     ESTADOS_INCIDENCIA,
     crear_evento_herramienta, crear_notif_inventario,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario_admin,
-    _parse_or_422, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    IncidenciaCreateSchema, IncidenciaAtenderSchema,
-    _incidencia_to_dict, _puede_ver_unidad,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario_admin,
+    _parse_or_422,
+    _audit,
+    IncidenciaCreateSchema,
+    IncidenciaAtenderSchema,
+    _incidencia_to_dict,
+    _puede_ver_unidad,
 )
 
 
@@ -49,7 +52,7 @@ def crear_incidencia():
         tipo=data['tipo'],
         descripcion=data['descripcion'],
         estado='ABIERTA',
-        fecha_reporte=datetime.datetime.utcnow(),
+        fecha_reporte=_now_utc(),
     )
     db.session.add(inc)
     db.session.flush()
@@ -113,7 +116,7 @@ def atender_incidencia(iid: int):
     if data.get('resolucion'):
         inc.resolucion = data['resolucion']
     if data['estado'] in ('RESUELTA', 'RECHAZADA'):
-        inc.fecha_cierre = datetime.datetime.utcnow()
+        inc.fecha_cierre = _now_utc()
     _audit(user, f"Incidencia #{iid} → {data['estado']}")
     db.session.commit()
     db.session.refresh(inc)

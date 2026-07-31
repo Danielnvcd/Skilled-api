@@ -233,11 +233,11 @@ def revocar_sesion(session_id: int):
     if err:
         return err
 
-    tok = RefreshToken.query.get(session_id)
+    tok = db.session.get(RefreshToken, session_id)
     if not tok:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
-    objetivo = User.query.get(tok.user_id)
+    objetivo = db.session.get(User, tok.user_id)
     # Misma anti-escalación que en api_users: la cuenta de recuperación solo la
     # toca otro super_admin.
     if (objetivo and objetivo.role == 'super_admin'

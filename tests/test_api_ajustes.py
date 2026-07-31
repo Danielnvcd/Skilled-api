@@ -33,6 +33,7 @@ from app.models import (
     Trabajador, User,
 )
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 def _hdr(user):
@@ -182,7 +183,7 @@ class TestCrear:
         body = r.get_json()
         assert body['creados'] == 1
         # Persiste y asocia el trabajador
-        p = AjustePeriodo.query.get(body['id'])
+        p = flask_db.session.get(AjustePeriodo, body['id'])
         assert p.nombre == 'Marzo 2026'
         tps = AjusteTrabajadorPeriodo.query.filter_by(periodo_id=p.id).all()
         assert len(tps) == 1
@@ -527,7 +528,7 @@ class TestEliminarDescuento:
         d = self._descuento(db, periodo_abierto, aj_trab_a)
         r = client.delete(f'/api/ajustes/descuentos/{d.id}', headers=_hdr(aj_admin))
         assert r.status_code == 200
-        assert AjusteDescuento.query.get(d.id) is None
+        assert flask_db.session.get(AjusteDescuento, d.id) is None
 
     def test_eliminar_de_periodo_cerrado_400(
         self, client, aj_admin, periodo_cerrado, aj_trab_a, db,

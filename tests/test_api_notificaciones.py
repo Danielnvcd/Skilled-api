@@ -26,6 +26,7 @@ from werkzeug.security import generate_password_hash
 from app.models import Notificacion, User
 from app.routes.api_auth import _encode_access_token
 from app.routes.api_notificaciones._core import CHANGELOG, DIAS_EXPIRACION
+from app.extensions import db as flask_db
 
 
 def _hdr(user):
@@ -169,7 +170,7 @@ class TestResumen:
         vieja_id = vieja.id
         client.get('/api/notificaciones/resumen', headers=_hdr(n_admin))
         # Después del resumen, la vieja ya no existe
-        assert Notificacion.query.get(vieja_id) is None
+        assert flask_db.session.get(Notificacion, vieja_id) is None
 
     def test_no_purga_no_leidas_viejas(self, client, n_admin, db):
         # No leída antigua se preserva (no quieres que las pendientes desaparezcan)
@@ -177,7 +178,7 @@ class TestResumen:
                        created_at=datetime.now(timezone.utc) - timedelta(days=DIAS_EXPIRACION + 5))
         vieja_id = vieja.id
         client.get('/api/notificaciones/resumen', headers=_hdr(n_admin))
-        assert Notificacion.query.get(vieja_id) is not None
+        assert flask_db.session.get(Notificacion, vieja_id) is not None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

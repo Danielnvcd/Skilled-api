@@ -30,7 +30,7 @@ def imprimir_proyecto_pdf(fecha_str, proyecto_id):
     except ValueError:
         return jsonify({'error': 'Fecha inválida'}), 400
 
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return jsonify({'error': 'Proyecto no encontrado'}), 404
 
