@@ -64,6 +64,12 @@ class SolicitudMaterial(db.Model):
 
 class SolicitudMaterialDetalle(db.Model):
     __tablename__ = "solicitudes_material_detalle"
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_smd_tipo_item', 'tipo_item'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     solicitud_id = db.Column(db.Integer, db.ForeignKey('solicitudes_material.id'), nullable=False, index=True)
     # producto_id es NULLABLE: una línea es MATERIAL (producto_id) o HERRAMIENTA (herramienta_id), XOR.
@@ -74,7 +80,7 @@ class SolicitudMaterialDetalle(db.Model):
     cantidad_entregada = db.Column(db.Numeric(10, 2), default=0)
 
     # Extensión para soportar solicitudes de herramientas
-    tipo_item = db.Column(db.String(20), nullable=False, default='MATERIAL', server_default='MATERIAL', index=True)
+    tipo_item = db.Column(db.String(20), nullable=False, default='MATERIAL', server_default='MATERIAL')
     herramienta_id = db.Column(db.Integer, db.ForeignKey('herramientas.id'), nullable=True)
     fecha_uso_inicio = db.Column(db.Date, nullable=True)
     fecha_uso_fin = db.Column(db.Date, nullable=True)

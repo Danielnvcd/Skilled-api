@@ -116,8 +116,22 @@ class StockPorAlmacen(db.Model):
     actualiza dentro de la misma transacción que modifica esta tabla.
     """
     __tablename__ = "stock_por_almacen"
-    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), primary_key=True)
-    almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), primary_key=True)
+    # ondelete FIJADOS a lo que ya existe en la base. No es cosmético: al
+    # borrar un producto su stock se limpia en cascada, y un almacén con
+    # stock NO se puede borrar (RESTRICT). Recrear estas FK sin estos
+    # comportamientos cambiaría la integridad referencial en silencio.
+    producto_id = db.Column(
+        db.Integer,
+        db.ForeignKey('productos.id', name='stock_por_almacen_producto_id_fkey',
+                      ondelete='CASCADE'),
+        primary_key=True,
+    )
+    almacen_id = db.Column(
+        db.Integer,
+        db.ForeignKey('almacenes.id', name='stock_por_almacen_almacen_id_fkey',
+                      ondelete='RESTRICT'),
+        primary_key=True,
+    )
     cantidad = db.Column(db.Numeric(10, 2), default=0, nullable=False)
     updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
 
@@ -282,8 +296,20 @@ class MovimientoInventario(db.Model):
     # = bucket general. ENTRADA/AJUSTE+ usan proyecto_destino; SALIDA/AJUSTE− usan
     # proyecto_origen; TRASPASO conserva el mismo bucket en ambos; REASIGNACION
     # mueve de proyecto_origen a proyecto_destino dentro del mismo almacén.
-    proyecto_origen_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=True, index=True)
-    proyecto_destino_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=True, index=True)
+    # ondelete y nombre FIJADOS a lo que ya existe en la base: al borrar un
+    # proyecto, sus movimientos quedan con la referencia en NULL en vez de
+    # bloquear el borrado. Sin declararlo, una migración autogenerada
+    # recrearía la FK sin ese comportamiento.
+    proyecto_origen_id = db.Column(
+        db.Integer,
+        db.ForeignKey('proyectos.id', name='fk_mov_proyecto_origen', ondelete='SET NULL'),
+        nullable=True, index=True,
+    )
+    proyecto_destino_id = db.Column(
+        db.Integer,
+        db.ForeignKey('proyectos.id', name='fk_mov_proyecto_destino', ondelete='SET NULL'),
+        nullable=True, index=True,
+    )
     cantidad = db.Column(db.Numeric(10, 2), nullable=False)
     motivo = db.Column(db.String(250), nullable=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)

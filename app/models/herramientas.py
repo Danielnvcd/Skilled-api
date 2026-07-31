@@ -73,15 +73,32 @@ class HerramientaUnidad(db.Model):
     """Instancia física rastreable. Lleva no_serie (si serializada), estado,
     ubicación y asignación actual. Toda operación genera EventoHerramienta."""
     __tablename__ = "herramienta_unidades"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_h_unid_asig_trab', 'asignado_trabajador_id'),
+        db.Index('ix_h_unid_codigo_interno', 'codigo_interno', unique=True),
+        db.Index('ix_h_unid_estado', 'estado'),
+        db.Index('ix_h_unid_herramienta_id', 'herramienta_id'),
+        db.Index('ix_h_unid_herr_estado', 'herramienta_id', 'estado'),
+        db.Index('ix_h_unid_no_serie', 'no_serie', unique=True),
+        db.Index('ix_h_unid_qr_code', 'qr_code', unique=True),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    herramienta_id = db.Column(db.Integer, db.ForeignKey('herramientas.id'), nullable=False, index=True)
-    no_serie = db.Column(db.String(100), unique=True, nullable=True, index=True)
-    codigo_interno = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    qr_code = db.Column(db.String(100), unique=True, nullable=False, index=True)
-    estado = db.Column(db.String(20), default='DISPONIBLE', nullable=False, index=True)
+    herramienta_id = db.Column(db.Integer, db.ForeignKey('herramientas.id'), nullable=False)
+    no_serie = db.Column(db.String(100), nullable=True)
+    codigo_interno = db.Column(db.String(50), nullable=False)
+    qr_code = db.Column(db.String(100), nullable=False)
+    estado = db.Column(db.String(20), default='DISPONIBLE', nullable=False)
     almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=True)
     estante_id = db.Column(db.Integer, db.ForeignKey('estantes.id'), nullable=True)
-    asignado_trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=True, index=True)
+    asignado_trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=True)
     cantidad = db.Column(db.Numeric(10, 2), default=1, nullable=False)
     complementos = db.Column(db.String(500), nullable=True)
     fecha_adquisicion = db.Column(db.Date, nullable=True)
@@ -102,15 +119,29 @@ class AsignacionHerramienta(db.Model):
     """Préstamo/entrega de una unidad a un trabajador. La unidad pasa a ASIGNADA
     mientras la asignación esté ACTIVA."""
     __tablename__ = "asignaciones_herramienta"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_asig_estado', 'estado'),
+        db.Index('ix_asig_trabajador_id', 'trabajador_id'),
+        db.Index('ix_asig_unidad_id', 'unidad_id'),
+        db.Index('ix_asig_unidad_estado', 'unidad_id', 'estado'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False, index=True)
-    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
+    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False)
+    trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False)
     solicitud_id = db.Column(db.Integer, db.ForeignKey('solicitudes_material.id'), nullable=True)
     proyecto = db.Column(db.String(200), nullable=True)
     fecha_entrega = db.Column(db.DateTime, default=_now_utc, nullable=False)
     fecha_devolucion_prevista = db.Column(db.DateTime, nullable=True)
     fecha_devolucion_real = db.Column(db.DateTime, nullable=True)
-    estado = db.Column(db.String(20), default='ACTIVA', nullable=False, index=True)
+    estado = db.Column(db.String(20), default='ACTIVA', nullable=False)
     condicion_entrega = db.Column(db.String(20), nullable=True)
     condicion_devolucion = db.Column(db.String(20), nullable=True)
     observaciones_entrega = db.Column(db.Text, nullable=True)
@@ -128,8 +159,18 @@ class AsignacionHerramienta(db.Model):
 
 class MantenimientoHerramienta(db.Model):
     __tablename__ = "mantenimientos_herramienta"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    __table_args__ = (
+        db.Index('ix_mant_estado', 'estado'),
+        db.Index('ix_mant_unidad_id', 'unidad_id'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False, index=True)
+    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False)
     tipo = db.Column(db.String(20), nullable=False)        # TIPO_MANTENIMIENTO
     motivo = db.Column(db.String(250), nullable=False)
     proveedor = db.Column(db.String(150), nullable=True)
@@ -138,7 +179,7 @@ class MantenimientoHerramienta(db.Model):
     costo = db.Column(db.Numeric(10, 2), nullable=True)
     observaciones = db.Column(db.Text, nullable=True)
     estado_final_unidad = db.Column(db.String(20), nullable=True)   # DISPONIBLE o DAÑADA al cerrar
-    estado = db.Column(db.String(20), default='ABIERTO', nullable=False, index=True)
+    estado = db.Column(db.String(20), default='ABIERTO', nullable=False)
     abierto_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     cerrado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -150,12 +191,23 @@ class MantenimientoHerramienta(db.Model):
 
 class IncidenciaHerramienta(db.Model):
     __tablename__ = "incidencias_herramienta"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    __table_args__ = (
+        db.Index('ix_inc_estado', 'estado'),
+        db.Index('ix_inc_reportado', 'reportado_por_id'),
+        db.Index('ix_inc_unidad_id', 'unidad_id'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False, index=True)
-    reportado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False)
+    reportado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     tipo = db.Column(db.String(30), nullable=False)         # TIPO_INCIDENCIA
     descripcion = db.Column(db.Text, nullable=False)
-    estado = db.Column(db.String(20), default='ABIERTA', nullable=False, index=True)
+    estado = db.Column(db.String(20), default='ABIERTA', nullable=False)
     fecha_reporte = db.Column(db.DateTime, default=_now_utc, nullable=False)
     atendido_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     resolucion = db.Column(db.Text, nullable=True)
@@ -169,11 +221,22 @@ class IncidenciaHerramienta(db.Model):
 
 class SolicitudBajaHerramienta(db.Model):
     __tablename__ = "solicitudes_baja_herramienta"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    __table_args__ = (
+        db.Index('ix_sbh_estado', 'estado'),
+        db.Index('ix_sbh_solicitante', 'solicitante_id'),
+        db.Index('ix_sbh_unidad_id', 'unidad_id'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False, index=True)
-    solicitante_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False)
+    solicitante_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     motivo = db.Column(db.Text, nullable=False)
-    estado = db.Column(db.String(20), default='PENDIENTE', nullable=False, index=True)
+    estado = db.Column(db.String(20), default='PENDIENTE', nullable=False)
     autorizado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     ejecutado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     fecha_solicitud = db.Column(db.DateTime, default=_now_utc, nullable=False)
@@ -192,9 +255,21 @@ class EventoHerramienta(db.Model):
     """Bitácora funcional por unidad. Distinta de AuditLog (auditoría seguridad)
     para permitir queries rápidas del timeline sin escanear AuditLog completo."""
     __tablename__ = "eventos_herramienta"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_evt_tipo', 'tipo_evento'),
+        db.Index('ix_evt_unidad_fecha', 'unidad_id', 'fecha'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False, index=True)
-    tipo_evento = db.Column(db.String(40), nullable=False, index=True)  # TIPO_EVENTO_HERRAMIENTA
+    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False)
+    tipo_evento = db.Column(db.String(40), nullable=False)  # TIPO_EVENTO_HERRAMIENTA
     estado_anterior = db.Column(db.String(20), nullable=True)
     estado_nuevo = db.Column(db.String(20), nullable=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -212,10 +287,20 @@ class MediaHerramienta(db.Model):
     """Foto principal de la unidad (evento_id=NULL, tipo='FOTO_HERRAMIENTA')
     o evidencia de un evento (evento_id=N, tipo='EVIDENCIA_EVENTO')."""
     __tablename__ = "media_herramienta"
+
+    # Nombres FIJADOS a los que ya existen en la base. Sin esto,
+    # SQLAlchemy los bautizaría `ix_<tabla>_<columna>` y Alembic los
+    # vería como índices distintos: `flask db migrate` generaría una
+    # migración que los borra y recrea, bloqueando escrituras sin
+    # ninguna ganancia. Mismo índice, mismas columnas, solo el nombre.
+    __table_args__ = (
+        db.Index('ix_media_tipo', 'tipo'),
+        db.Index('ix_media_unidad_id', 'unidad_id'),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False, index=True)
+    unidad_id = db.Column(db.Integer, db.ForeignKey('herramienta_unidades.id'), nullable=False)
     evento_id = db.Column(db.Integer, db.ForeignKey('eventos_herramienta.id'), nullable=True)
-    tipo = db.Column(db.String(30), nullable=False, index=True)   # 'FOTO_HERRAMIENTA' o 'EVIDENCIA_EVENTO'
+    tipo = db.Column(db.String(30), nullable=False)   # 'FOTO_HERRAMIENTA' o 'EVIDENCIA_EVENTO'
     ruta_archivo = db.Column(db.String(500), nullable=False)
     nombre_original = db.Column(db.String(250), nullable=True)
     mime = db.Column(db.String(50), nullable=True)

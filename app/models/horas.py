@@ -5,6 +5,12 @@ from app.models._base import _now_utc
 
 class ReporteSemanal(db.Model):
     __tablename__ = "reportes_semanales"
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_reportes_fecha_estado', 'fecha_inicio_semana', 'estado'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     # Por regla: Inicia martes, termina lunes. Se guarda la fecha de inicio.
     fecha_inicio_semana = db.Column(db.Date, nullable=False, index=True)
@@ -18,6 +24,13 @@ class ReporteSemanal(db.Model):
 
 class RegistroDiarioHoras(db.Model):
     __tablename__ = "registros_diarios_horas"
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_rdh_reporte_fecha', 'reporte_id', 'fecha'),
+        db.Index('ix_rdh_reporte_trabajador', 'reporte_id', 'trabajador_id'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     reporte_id = db.Column(db.Integer, db.ForeignKey('reportes_semanales.id'), nullable=False, index=True)
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
