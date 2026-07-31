@@ -16,3 +16,9 @@ run_venv.py
 .idea
 scripts/
 backups/
+
+# CI/CD con GitHub Actions: preparado pero SIN activar. Se queda fuera del
+# repo hasta que se decida montarlo (runner autoalojado en el VPS, sudoers y
+# la variable DESPLIEGUE_ACTIVO). Instrucciones en docs/DESPLIEGUE_CI.md.
+.github/
+docs/DESPLIEGUE_CI.md
