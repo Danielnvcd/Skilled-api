@@ -878,3 +878,107 @@ def delete_producto(producto_id: int):
         'id': producto_id, 'action': 'deleted',
     })
     return Response(status=204)
+
+
+@bp.route('/productos/disponibilidad-buckets', methods=['GET'])
+@_require_inventario_admin
+def get_disponibilidad_buckets():
+    """Cuánto puede salir de una bodega, separado en «del proyecto» y «libre».
+
+    Existe porque las pantallas de varias líneas —entrega directa, entrega de
+    una solicitud— validaban contra el stock GLOBAL del producto mientras el
+    backend descuenta POR BUCKET. El resultado era decirle al usuario que hay
+    500 y luego fallar con «disponible 60 (proyecto 40 + general 20)» al
+    guardar. Aquí se responde la pregunta que esas pantallas necesitan hacer,
+    para todas sus líneas de una vez en lugar de una petición por renglón.
+
+    Se devuelven los DOS totales porque el sistema usa dos reglas distintas y
+    llamarlas por su regla —no por el tipo de movimiento— evita repetir en el
+    cliente la tabla de qué tipo usa cuál:
+
+      con_fallback = proyecto + general   SALIDA, AJUSTE−, entregas
+      exacto       = solo el bucket       TRASPASO, REASIGNACION
+
+    Sin `proyecto_id` ambos valen lo mismo: el bucket general.
+    """
+    ids_crudos = (request.args.get('ids') or '').strip()
+    if not ids_crudos:
+        return jsonify({'detail': 'Se requiere ids'}), 422
+    try:
+        ids = [int(x) for x in ids_crudos.split(',') if x.strip()]
+    except ValueError:
+        return jsonify({'detail': 'ids debe ser una lista de enteros separados por coma'}), 422
+    if not ids:
+        return jsonify({'detail': 'Se requiere al menos un id'}), 422
+    # Tope alineado con el máximo de líneas de una entrega. Sin él, una URL
+    # larga podría pedir el catálogo entero en una sola consulta.
+    if len(ids) > 500:
+        return jsonify({'detail': 'Máximo 500 productos por consulta'}), 422
+
+    # `almacen_id` es OPCIONAL. Con bodega se responde «¿puedo mover esto desde
+    # aquí?» —la pregunta de un movimiento o una entrega—. Sin ella se suma
+    # todas las bodegas activas y se responde «¿existe esto para este proyecto,
+    # en algún lado?», que es la pregunta al pedir material: una solicitud aún
+    # no elige bodega. En ese caso `exacto` deja de servir para validar un
+    # traspaso (que sí es por bodega) y solo indica cuánto tiene el proyecto.
+    almacen_id = request.args.get('almacen_id', type=int)
+    if almacen_id and not Almacen.query.filter(
+        Almacen.id == almacen_id, Almacen.activo == True,  # noqa: E712
+    ).first():
+        return jsonify({'detail': 'Almacén no encontrado'}), 404
+
+    proyecto_id = request.args.get('proyecto_id', type=int)
+    if proyecto_id and not Proyecto.query.get(proyecto_id):
+        return jsonify({'detail': 'Proyecto no encontrado'}), 404
+
+    filas = (
+        db.session.query(
+            StockAlmacenProyecto.producto_id,
+            StockAlmacenProyecto.proyecto_id,
+            StockAlmacenProyecto.cantidad,
+        )
+        .join(Almacen, Almacen.id == StockAlmacenProyecto.almacen_id)
+        .filter(
+            StockAlmacenProyecto.producto_id.in_(ids),
+            Almacen.activo == True,  # noqa: E712
+            db.or_(
+                StockAlmacenProyecto.proyecto_id.is_(None),
+                StockAlmacenProyecto.proyecto_id == proyecto_id,
+            ) if proyecto_id else StockAlmacenProyecto.proyecto_id.is_(None),
+        )
+    )
+    if almacen_id:
+        filas = filas.filter(StockAlmacenProyecto.almacen_id == almacen_id)
+    filas = filas.all()
+
+    buckets = {}
+    for pid, proy, cant in filas:
+        d = buckets.setdefault(pid, {'proyecto': Decimal('0'), 'general': Decimal('0')})
+        d['general' if proy is None else 'proyecto'] += Decimal(str(cant or 0))
+
+    productos = {
+        p.id: p for p in
+        Producto.query.filter(Producto.id.in_(ids), Producto.activo == True).all()  # noqa: E712
+    }
+
+    items = []
+    for pid in ids:
+        p = productos.get(pid)
+        if not p:
+            continue
+        d = buckets.get(pid, {'proyecto': Decimal('0'), 'general': Decimal('0')})
+        items.append({
+            'producto_id': pid,
+            'codigo': p.codigo,
+            'unidad': p.unidad,
+            'proyecto': float(d['proyecto']),
+            'general': float(d['general']),
+            'con_fallback': float(d['proyecto'] + d['general']),
+            'exacto': float(d['proyecto'] if proyecto_id else d['general']),
+        })
+
+    return jsonify({
+        'almacen_id': almacen_id,
+        'proyecto_id': proyecto_id,
+        'items': items,
+    })
