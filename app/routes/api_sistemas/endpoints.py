@@ -44,31 +44,78 @@ def _version_desplegada() -> dict:
       2. `git rev-parse` sobre el repo, si existe y git está instalado.
       3. Desconocido. Nunca lanza: no saber la versión no puede tirar el panel.
     """
-    commit = os.environ.get('APP_COMMIT') or os.environ.get('APP_VERSION')
-    fecha = os.environ.get('APP_COMMIT_FECHA')
-    origen = 'variable de entorno'
+    raiz = current_app.config.get('BASE_DIR')
 
-    if not commit:
-        try:
-            import subprocess
-            raiz = current_app.config.get('BASE_DIR')
-            salida = subprocess.run(
-                ['git', 'log', '-1', '--format=%h|%cI|%s'],
-                cwd=raiz, capture_output=True, text=True, timeout=3,
-            )
-            if salida.returncode == 0 and salida.stdout.strip():
-                commit, fecha, asunto = (salida.stdout.strip().split('|', 2) + ['', ''])[:3]
-                origen = 'git'
-                return {'commit': commit, 'fecha': fecha, 'asunto': asunto, 'origen': origen}
-        except Exception:
-            # git ausente, timeout, o el despliegue no incluye el repo.
-            pass
+    # 1) Variables de entorno: lo más fiable en producción. Un despliegue puede
+    #    no llevar el repo, y aunque lo lleve, depender de `git` en tiempo de
+    #    ejecución es frágil (ver el motivo en el paso 2).
+    commit = os.environ.get('APP_COMMIT') or os.environ.get('APP_VERSION')
+    if commit:
+        return {
+            'commit': commit,
+            'fecha': os.environ.get('APP_COMMIT_FECHA'),
+            'asunto': None,
+            'origen': 'variable de entorno',
+            'detalle': None,
+        }
+
+    # 2) Archivo VERSION en la raíz. Lo escribe el despliegue con algo como
+    #    `git rev-parse --short HEAD > VERSION`. No necesita que el repo ni el
+    #    binario de git existan en el servidor.
+    try:
+        ruta_version = os.path.join(raiz or '.', 'VERSION')
+        if os.path.isfile(ruta_version):
+            with open(ruta_version, encoding='utf-8') as f:
+                contenido = f.read().strip()
+            if contenido:
+                partes = contenido.split('|')
+                return {
+                    'commit': partes[0].strip(),
+                    'fecha': partes[1].strip() if len(partes) > 1 else None,
+                    'asunto': partes[2].strip() if len(partes) > 2 else None,
+                    'origen': 'archivo VERSION',
+                    'detalle': None,
+                }
+    except Exception:
+        pass
+
+    # 3) Preguntarle a git. Funciona en desarrollo, pero en un servidor falla a
+    #    menudo por razones que NO son evidentes:
+    #
+    #      - «dubious ownership»: desde Git 2.35, si el repo pertenece a un
+    #        usuario distinto del que corre el proceso (típico: repo de root,
+    #        gunicorn como otro usuario), git se niega a operar. Por eso se pasa
+    #        `-c safe.directory` explícito.
+    #      - `git` fuera del PATH: systemd da un PATH mínimo, no el del login.
+    #
+    #    Cuando falla se devuelve el MOTIVO, no un simple «desconocido»: sin eso
+    #    el panel no ayuda a arreglarlo.
+    try:
+        import subprocess
+        salida = subprocess.run(
+            ['git', '-c', f'safe.directory={raiz}', 'log', '-1', '--format=%h|%cI|%s'],
+            cwd=raiz, capture_output=True, text=True, timeout=3,
+        )
+        if salida.returncode == 0 and salida.stdout.strip():
+            commit, fecha, asunto = (salida.stdout.strip().split('|', 2) + ['', ''])[:3]
+            return {'commit': commit, 'fecha': fecha, 'asunto': asunto,
+                    'origen': 'git', 'detalle': None}
+        motivo = (salida.stderr or '').strip().splitlines()
+        detalle = motivo[0][:200] if motivo else f'git terminó con código {salida.returncode}'
+    except FileNotFoundError:
+        detalle = 'el binario `git` no está disponible para el proceso (PATH de systemd)'
+    except subprocess.TimeoutExpired:
+        detalle = 'git no respondió en 3 s'
+    except Exception as e:
+        detalle = f'{type(e).__name__}: {e}'[:200]
 
     return {
-        'commit': commit or None,
-        'fecha': fecha,
+        'commit': None,
+        'fecha': None,
         'asunto': None,
-        'origen': origen if commit else 'desconocido',
+        'origen': 'desconocido',
+        # Se publica el motivo para que se pueda corregir en vez de adivinar.
+        'detalle': detalle,
     }
 
 
