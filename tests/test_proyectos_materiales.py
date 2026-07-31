@@ -363,3 +363,115 @@ def test_import_upsert_actualiza_sin_pisar_stock(client, db, admin, almacen):
     assert float(actualizado.stock_minimo) == 7.0
     # Stock NO se toca aunque el Excel traía 999.
     assert float(actualizado.stock_actual) == 100.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXISTENCIAS FÍSICAS DEL PROYECTO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestExistenciasDelProyecto:
+    """Material que está guardado AHORA a nombre del proyecto.
+
+    Es una pregunta distinta de la que responde el detalle (planeado vs.
+    consumido): esto lee `stock_almacen_proyecto`, la existencia física. Antes
+    no había forma de consultarlo salvo entrando bodega por bodega.
+    """
+
+    def _apartar(self, db, producto, almacen, proyecto, cantidad):
+        """Pone `cantidad` del producto en el bucket del proyecto."""
+        db.session.add(StockAlmacenProyecto(
+            producto_id=producto.id, almacen_id=almacen.id,
+            proyecto_id=proyecto.id, cantidad=cantidad,
+        ))
+        db.session.commit()
+
+    def test_lista_el_material_apartado(self, client, db, admin, almacen, proyecto, producto):
+        _login(client, admin)
+        self._apartar(db, producto, almacen, proyecto, 30)
+
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        assert r.status_code == 200, r.get_json()
+        d = r.get_json()
+        assert d['totales']['materiales'] == 1
+        assert d['totales']['unidades'] == 30
+        fila = d['materiales'][0]
+        assert fila['codigo'] == 'CEM-01'
+        assert fila['total'] == 30
+        # precio 50 × 30 unidades
+        assert d['totales']['valor'] == 1500
+
+    def test_no_incluye_el_stock_general(self, client, db, admin, almacen, proyecto, producto):
+        """El fixture deja 100 en el bucket GENERAL. Ese stock no es de ningún
+        proyecto y no debe aparecer aquí — es justamente la distinción que da
+        sentido a la vista."""
+        _login(client, admin)
+        self._apartar(db, producto, almacen, proyecto, 30)
+
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        assert r.get_json()['totales']['unidades'] == 30, 'se coló el stock general'
+
+    def test_desglosa_por_bodega(self, client, db, admin, almacen, proyecto, producto):
+        otra = Almacen(nombre='Sucursal', qr_code='QR-PM-2', activo=True)
+        db.session.add(otra); db.session.commit()
+        self._apartar(db, producto, almacen, proyecto, 30)
+        self._apartar(db, producto, otra, proyecto, 20)
+        _login(client, admin)
+
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        d = r.get_json()
+        assert {a['nombre'] for a in d['almacenes']} == {'Central', 'Sucursal'}
+        fila = d['materiales'][0]
+        assert fila['total'] == 50
+        assert sum(fila['por_almacen'].values()) == 50
+
+    def test_solo_lista_bodegas_con_existencia(self, client, db, admin, almacen, proyecto, producto):
+        """Una bodega sin material de este proyecto no debe generar columna:
+        llenaría la tabla de columnas vacías."""
+        db.session.add(Almacen(nombre='Vacia', qr_code='QR-PM-3', activo=True))
+        db.session.commit()
+        self._apartar(db, producto, almacen, proyecto, 10)
+        _login(client, admin)
+
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        assert [a['nombre'] for a in r.get_json()['almacenes']] == ['Central']
+
+    def test_sin_plan_la_cobertura_es_null_no_cero(self, client, db, admin, almacen, proyecto, producto):
+        """`null` significa «no había plan para esto», que no es lo mismo que
+        0 % de avance. La interfaz los distingue, así que el API también."""
+        _login(client, admin)
+        self._apartar(db, producto, almacen, proyecto, 10)
+
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        fila = r.get_json()['materiales'][0]
+        assert fila['cantidad_planeada'] == 0
+        assert fila['cobertura'] is None
+
+    def test_con_plan_calcula_la_cobertura(self, client, db, admin, almacen, proyecto, producto):
+        _login(client, admin)
+        client.post(f'/api/v1/proyectos-materiales/{proyecto.id}/plan',
+                    json={'lineas': [{'producto_id': producto.id, 'cantidad_planeada': 40}]})
+        self._apartar(db, producto, almacen, proyecto, 10)
+
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        fila = r.get_json()['materiales'][0]
+        assert fila['cantidad_planeada'] == 40
+        assert fila['cobertura'] == 25.0   # 10 de 40
+
+    def test_proyecto_sin_material_devuelve_vacio(self, client, db, admin, proyecto):
+        _login(client, admin)
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        assert r.status_code == 200
+        assert r.get_json()['materiales'] == []
+        assert r.get_json()['totales']['unidades'] == 0
+
+    def test_proyecto_inexistente_404(self, client, admin):
+        _login(client, admin)
+        assert client.get('/api/v1/proyectos-materiales/999999/existencias').status_code == 404
+
+    def test_requiere_permiso(self, client, db, proyecto):
+        u = User(username='pm_forastero', password_hash=generate_password_hash('Pass123!'),
+                 role='solicitante_material')
+        db.session.add(u); db.session.commit()
+        _login(client, u)
+        r = client.get(f'/api/v1/proyectos-materiales/{proyecto.id}/existencias')
+        assert r.status_code == 403

@@ -529,3 +529,108 @@ def delete_proyecto_plan_linea(proyecto_id: int, linea_id: int):
         'proyecto_id': proyecto_id, 'action': 'linea_deleted', 'linea_id': linea_id,
     })
     return jsonify({'ok': True})
+
+
+@bp.route('/proyectos-materiales/<int:proyecto_id>/existencias', methods=['GET'])
+@_require_plan_materiales
+def get_proyecto_existencias(proyecto_id: int):
+    """Material FÍSICO apartado a este proyecto, por bodega.
+
+    ── Qué lo distingue del resto de vistas del proyecto ──────────────────────
+    El detalle del proyecto compara PLANEADO contra CONSUMIDO: cuánto se pensaba
+    usar y cuánto ya se entregó. Eso no dice cuánto material hay **ahora mismo
+    guardado** a nombre del proyecto, que es una pregunta distinta y sin
+    respuesta hasta ahora: había que entrar bodega por bodega y sumar a mano.
+
+    Esta vista lee `stock_almacen_proyecto`, la fuente de verdad del stock por
+    proyecto, y devuelve una fila por material con el desglose por bodega.
+
+    Se incluye `cantidad_planeada` cuando el material está en el plan, para
+    poder contrastar existencia contra lo previsto. Si el proyecto no tiene
+    plan, el campo llega en 0 y la interfaz simplemente no pinta la comparación
+    — no se inventa un porcentaje sobre un plan que no existe.
+    """
+    from app.models import Almacen, StockAlmacenProyecto
+
+    proyecto = Proyecto.query.get(proyecto_id)
+    if not proyecto:
+        return jsonify({'detail': 'Proyecto no encontrado'}), 404
+
+    # Buckets con existencia de ESTE proyecto, en bodegas activas.
+    filas = (
+        db.session.query(
+            Producto.id, Producto.codigo, Producto.descripcion, Producto.unidad,
+            Producto.precio_unitario,
+            Almacen.id, Almacen.nombre,
+            StockAlmacenProyecto.cantidad,
+        )
+        .join(Producto, Producto.id == StockAlmacenProyecto.producto_id)
+        .join(Almacen, Almacen.id == StockAlmacenProyecto.almacen_id)
+        .filter(
+            StockAlmacenProyecto.proyecto_id == proyecto_id,
+            StockAlmacenProyecto.cantidad > 0,
+            Almacen.activo == True,   # noqa: E712
+            Producto.activo == True,  # noqa: E712
+        )
+        .all()
+    )
+
+    # Plan del proyecto, para contrastar. Una sola consulta, no una por material.
+    planeado = {
+        pid: Decimal(str(cant or 0))
+        for pid, cant in db.session.query(
+            ProyectoMaterialPlan.producto_id, ProyectoMaterialPlan.cantidad_planeada,
+        ).filter(ProyectoMaterialPlan.proyecto_id == proyecto_id).all()
+    }
+
+    # Columnas: solo las bodegas donde este proyecto tiene algo. Mostrar todas
+    # llenaría la tabla de columnas vacías.
+    bodegas = {}
+    materiales = {}
+    for pid, codigo, desc, unidad, precio, aid, anombre, cant in filas:
+        bodegas.setdefault(aid, anombre)
+        m = materiales.setdefault(pid, {
+            'producto_id': pid,
+            'codigo': codigo,
+            'descripcion': desc,
+            'unidad': unidad,
+            'precio_unitario': _f(precio or 0),
+            'total': Decimal('0'),
+            'por_almacen': {},
+        })
+        c = Decimal(str(cant or 0))
+        m['total'] += c
+        m['por_almacen'][aid] = _f(m['por_almacen'].get(aid, 0) + float(c))
+
+    salida = []
+    for m in materiales.values():
+        total = m.pop('total')
+        plan = planeado.get(m['producto_id'], Decimal('0'))
+        salida.append({
+            **m,
+            'total': _f(total),
+            'cantidad_planeada': _f(plan),
+            'valor': _f(total * Decimal(str(m['precio_unitario']))),
+            # Porcentaje de cobertura del plan. `None` cuando no hay plan: es
+            # distinto de 0 % y la interfaz debe poder diferenciarlo.
+            'cobertura': _f(total / plan * 100) if plan > 0 else None,
+        })
+    salida.sort(key=lambda r: r['total'], reverse=True)
+
+    return jsonify({
+        'proyecto': {
+            'id': proyecto.id,
+            'numero_proyecto': proyecto.numero_proyecto,
+            'nombre': proyecto.nombre or '',
+        },
+        'almacenes': [
+            {'id': aid, 'nombre': nombre}
+            for aid, nombre in sorted(bodegas.items(), key=lambda kv: kv[1])
+        ],
+        'materiales': salida,
+        'totales': {
+            'materiales': len(salida),
+            'unidades': _f(sum(Decimal(str(m['total'])) for m in salida)),
+            'valor': _f(sum(Decimal(str(m['valor'])) for m in salida)),
+        },
+    })
