@@ -95,6 +95,12 @@ class Trabajador(db.Model):
 
 class CredencialPlanta(db.Model):
     __tablename__ = "credenciales_plantas"
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_credenciales_plantas_planta', 'planta'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     planta = db.Column(db.String(100), nullable=False)
@@ -138,6 +144,12 @@ class NotaTrabajador(db.Model):
 
 class DocumentoTrabajador(db.Model):
     __tablename__ = "documentos_trabajador"
+    # Índices con los nombres y la forma que YA tienen en la base. Declararlos
+    # aquí evita que `flask db migrate` proponga borrarlos y recrearlos.
+    __table_args__ = (
+        db.Index('ix_doctra_tipo_documento', 'trabajador_id', 'tipo_documento'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     trabajador_id = db.Column(db.Integer, db.ForeignKey('trabajadores.id'), nullable=False, index=True)
     nombre_archivo = db.Column(db.String(250), nullable=False)
