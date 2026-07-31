@@ -13,7 +13,7 @@ from app.extensions import db, limiter
 from app.models import RefreshToken
 from app.utils import log_action
 
-from ._core import bp, _RT_COOKIE, _hash_token
+from ._core import bp, _RT_COOKIE, _hash_token, _is_admin_user
 from .jwt_required import jwt_required
 from .tokens import _load_rt_meta, _decode_token, _revoke_jti, _clear_rt_cookie
 
@@ -36,16 +36,14 @@ def _device_fingerprint(ua: str, ip: str) -> str:
 
 
 def _is_known_device(user_id: int, fp: str) -> bool:
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        # Sin Redis no podemos saber. Asumir "conocido" para NO spammear con
-        # notifs de "nuevo device" en cada login.
-        return True
+    from app.extensions import redis_call
     key = f'known_device:{user_id}:{fp}'
     # SET NX: si no existía, marcamos como conocido y devolvemos False (=era nuevo).
     # Si existía, devolvemos True (=ya conocido).
-    was_new = r.set(key, '1', nx=True, ex=90 * 86400)
+    # Sin Redis (o caído) no podemos saber: `default=None` hace que `not None`
+    # sea True → "device conocido", para NO spammear con notifs de "nuevo
+    # dispositivo" en cada login mientras dure la incidencia.
+    was_new = redis_call(lambda r: r.set(key, '1', nx=True, ex=90 * 86400), default=None)
     return not was_new
 
 
@@ -199,3 +197,51 @@ def api_revoke_all_sessions():
     except Exception as e:
         current_app.logger.warning('force_logout_user falló en /sessions/all: %s', e)
     return jsonify({'ok': True})
+
+
+@bp.route('/estado-seguridad', methods=['GET'])
+@jwt_required
+@limiter.limit("30 per minute")
+def api_estado_seguridad():
+    """Estado de las defensas que dependen de Redis. SOLO admin/super_admin.
+
+    Por qué existe: varias protecciones viven en Redis y, por diseño, degradan
+    en silencio si no está disponible — el servicio sigue en pie, pero sin
+    blacklist de jti (un logout deja de matar el JWT al instante), sin lockout
+    escalado, sin anti-replay de TOTP y sin consumo del stepToken de 2FA.
+    Eso es lo correcto para disponibilidad, pero significa que se puede estar
+    operando degradado sin que nadie lo note. Este endpoint lo hace visible.
+
+    Deliberadamente NO va en `/health`: ese es público y responde a cualquier
+    escáner. Exponer ahí qué componentes tenemos y cuáles están caídos le da a
+    un atacante justo la señal que busca — "ahora mismo no hay lockout".
+    """
+    from app.extensions import get_redis
+
+    if not _is_admin_user(g._jwt_user):
+        return jsonify({'error': 'No autorizado'}), 403
+
+    r = get_redis()
+    redis_ok = False
+    detalle = 'REDIS_URL no configurada'
+    if r is not None:
+        try:
+            redis_ok = bool(r.ping())
+            detalle = 'conectado' if redis_ok else 'ping sin respuesta'
+        except Exception as e:
+            detalle = f'error de conexión: {type(e).__name__}'
+
+    return jsonify({
+        'redis': {'ok': redis_ok, 'detalle': detalle},
+        # Qué se pierde mientras Redis no responda. Sirve para que quien vea la
+        # alerta entienda el impacto sin tener que leer el código.
+        'defensas_degradadas': [] if redis_ok else [
+            'Revocación inmediata de JWT por jti (el logout no mata el token hasta su exp, ≤20 min)',
+            'Lockout escalado por intentos fallidos de contraseña',
+            'Lockout escalado por intentos fallidos de 2FA',
+            'Anti-replay de códigos TOTP',
+            'Consumo de un solo uso del stepToken de 2FA',
+            'Detección de robo de refresh token (race vs replay)',
+            'Aviso de inicio de sesión desde dispositivo nuevo',
+        ],
+    })

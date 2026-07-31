@@ -5,7 +5,6 @@ Importa helpers de twofa.py (backup codes, lockout 2FA) y sessions.py
 """
 from datetime import datetime, timedelta, timezone
 
-import jwt
 import pyotp
 import secrets
 from flask import current_app, g, jsonify, request
@@ -34,6 +33,7 @@ from ._core import (
 )
 from .sessions import _notify_new_device_login
 from .tokens import (
+    _burn_pre_2fa_jti,
     _clear_rt_cookie,
     _decode_token,
     _encode_access_token,
@@ -148,26 +148,29 @@ def api_login():
 
 
 def _api_verify_2fa_user_key() -> str:
-    """Key per-user para el rate limit de verify-2fa.
+    """Key por stepToken para el rate limit de verify-2fa.
 
-    Decodifica el stepToken sin verificación de firma (solo extrae `sub`) —
-    es OK porque solo usamos el resultado para bucketear el rate limit; la
-    autenticación real ocurre dentro del endpoint con _decode_token().
+    Bucketea por hash del stepToken CRUDO, no por el `sub` decodificado.
 
-    Falla seguro: si no podemos extraer sub, devolvemos un bucket "anon" que
-    comparte rate limit con todos los anónimos.
+    Antes se hacía `jwt.decode(..., verify_signature=False)` para leer `sub`.
+    Eso tenía dos problemas: (1) el atacante controla por completo un token sin
+    firmar, así que podía inventar un `sub` distinto en cada intento y repartir
+    su fuerza bruta entre buckets infinitos, anulando el límite por usuario; y
+    (2) hacía trabajo de parseo sobre entrada arbitraria antes de cualquier
+    validación (la clase de gasto que PyJWT corrigió en 2.13.0, CVE-2026-48525).
+
+    Hashear el token crudo lo arregla y encima aprieta el límite: para pasar de
+    `_decode_token` el atacante NECESITA un stepToken válido y firmado, y ese
+    token es un string fijo — no puede variarlo sin invalidarlo. Todos sus
+    intentos caen forzosamente en el mismo bucket. Un usuario legítimo que
+    teclea mal su código reintenta con ese mismo stepToken, así que el límite
+    de 8/min se comporta igual que antes para él.
     """
-    try:
-        data = request.get_json(silent=True) or {}
-        step = data.get('stepToken') or ''
-        if not step:
-            return 'api_v2fa_user:anon'
-        # decode sin verificación — solo lectura de claims públicos
-        payload = jwt.decode(step, options={'verify_signature': False, 'verify_aud': False, 'verify_iss': False})
-        sub = str(payload.get('sub') or 'anon')
-        return f'api_v2fa_user:{sub}'
-    except Exception:
+    data = request.get_json(silent=True) or {}
+    step = data.get('stepToken') or ''
+    if not step or not isinstance(step, str):
         return 'api_v2fa_user:anon'
+    return f'api_v2fa_user:{_hash_token(step)[:16]}'
 
 
 @bp.route('/verify-2fa', methods=['POST'])
@@ -239,6 +242,15 @@ def api_verify_2fa():
     if totp_ok and _totp_code_already_used(user.id, code):
         log_action(f"API 2FA replay bloqueado para {user.username}")
         return jsonify({'error': 'Este código ya fue usado. Espera al siguiente.'}), 401
+
+    # Consumo de un solo uso del stepToken. Se quema DESPUÉS de validar el
+    # código (no antes) a propósito: si lo quemáramos al presentarlo, un usuario
+    # que teclea mal el TOTP perdería el stepToken y tendría que reingresar la
+    # contraseña. Quemarlo aquí sigue garantizando que un stepToken solo pueda
+    # acuñar UN access token.
+    if not _burn_pre_2fa_jti(payload.get('jti'), int(payload['exp'])):
+        log_action(f"API 2FA stepToken reusado bloqueado para {user.username}")
+        return jsonify({'error': 'Esta sesión de 2FA ya fue usada. Inicia sesión de nuevo.'}), 401
 
     # Éxito: limpiar el contador de fallos 2FA para esta cuenta.
     _clear_twofa_failures(user.id)

@@ -1927,3 +1927,98 @@ class TestCierreTomaAtomico:
         assert Producto.query.get(a.id).stock_actual == 7
         assert Producto.query.get(b.id).stock_actual == 8
         assert TomaInventario.query.get(toma_id).estatus == 'CERRADA'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CATEGORÍAS CON BARRA EN EL NOMBRE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCategoriaConBarraEnElNombre:
+    """Regresión: `Tubería/Accesorios` no se podía editar ni borrar.
+
+    Las rutas usaban el convertidor `<string:nombre>`, que NO acepta barras. El
+    navegador manda el nombre con `%2F`, pero la capa WSGI lo decodifica a `/`
+    ANTES del enrutado, así que la ruta dejaba de coincidir y Flask respondía
+    404 desde el router — sin llegar nunca al endpoint. La pista para
+    diagnosticarlo fue justamente que el 404 venía con cuerpo vacío en lugar del
+    JSON con `detail` que devuelve la vista.
+
+    El arreglo es `<path:nombre>`, que sí acepta barras. Es seguro porque ese
+    nombre solo se usa para consultar la base, nunca para construir rutas de
+    archivos.
+    """
+
+    NOMBRE = 'Tubería/Accesorios'
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, client, db, inv_admin):
+        _login(client, inv_admin.id)
+        self._db = db
+
+    def _crear_config(self, db, nombre):
+        from app.models.inventario import CategoriaConfig
+        cfg = CategoriaConfig(nombre=nombre)
+        db.session.add(cfg)
+        db.session.commit()
+        return cfg
+
+    def test_borrar_categoria_con_barra(self, client, db):
+        from app.models.inventario import CategoriaConfig
+        self._crear_config(db, self.NOMBRE)
+
+        # `quote(safe='')` reproduce lo que hace encodeURIComponent en el SPA.
+        from urllib.parse import quote
+        r = client.delete(
+            f"/api/v1/categorias-config/{quote(self.NOMBRE, safe='')}?con_productos=1"
+        )
+        assert r.status_code == 200, r.get_json()
+        assert CategoriaConfig.query.filter_by(nombre=self.NOMBRE).first() is None
+
+    def test_borrar_categoria_con_barra_sin_productos(self, client, db):
+        """El caso reportado: la categoría no tiene productos y aun así fallaba."""
+        from urllib.parse import quote
+        from app.models.inventario import CategoriaConfig
+        self._crear_config(db, 'ZZ Sin Productos/Con Barra')
+
+        r = client.delete(
+            f"/api/v1/categorias-config/{quote('ZZ Sin Productos/Con Barra', safe='')}"
+            f"?con_productos=1"
+        )
+        assert r.status_code == 200, r.get_json()
+        assert CategoriaConfig.query.filter_by(nombre='ZZ Sin Productos/Con Barra').first() is None
+
+    def test_editar_categoria_con_barra(self, client, db):
+        from urllib.parse import quote
+        from app.models.inventario import CategoriaConfig
+        self._crear_config(db, self.NOMBRE)
+
+        r = client.put(
+            f"/api/v1/categorias-config/{quote(self.NOMBRE, safe='')}",
+            json={'imagen_url': 'https://ejemplo.test/tuberia.webp'},
+        )
+        assert r.status_code == 200, r.get_json()
+        cfg = CategoriaConfig.query.filter_by(nombre=self.NOMBRE).first()
+        assert cfg.imagen_url == 'https://ejemplo.test/tuberia.webp'
+
+    def test_categoria_sin_barra_sigue_funcionando(self, client, db):
+        """El cambio de convertidor no debe alterar el caso normal."""
+        from urllib.parse import quote
+        from app.models.inventario import CategoriaConfig
+        self._crear_config(db, 'ZZ Normal')
+
+        r = client.delete(
+            f"/api/v1/categorias-config/{quote('ZZ Normal', safe='')}?con_productos=1"
+        )
+        assert r.status_code == 200, r.get_json()
+        assert CategoriaConfig.query.filter_by(nombre='ZZ Normal').first() is None
+
+    def test_categoria_inexistente_sigue_devolviendo_404_del_endpoint(self, client):
+        """Este 404 debe venir de la vista (con `detail`), no del router.
+
+        Distinguirlos importa: un 404 sin cuerpo significa que la ruta ni
+        siquiera coincidió, que es exactamente el bug que se corrigió.
+        """
+        r = client.delete('/api/v1/categorias-config/ZZ No Existe/Nada?con_productos=1')
+        assert r.status_code == 404
+        assert r.get_json() is not None, 'el 404 vino del router, no del endpoint'
+        assert 'detail' in r.get_json()

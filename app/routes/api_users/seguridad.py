@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash
 
 from app.extensions import db, limiter
 from app.models import RefreshToken, User
-from app.routes._api_helpers import current_user, is_super_admin, require_admin
+from app.routes._api_helpers import current_user, is_super_admin, require_gestion_usuarios
 from app.routes.api_auth import jwt_required
 from app.utils import is_strong_password, log_action
 
@@ -28,7 +28,7 @@ def admin_revocar_sesiones(user_id):
     cambiar también la contraseña (lo cual incrementa password_version e
     invalida los JWT en uso).
     """
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -36,10 +36,14 @@ def admin_revocar_sesiones(user_id):
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 
-    # Anti-escalación lateral: solo super_admin puede revocar sesiones de otros admins
-    if user.role in ('admin', 'super_admin') and user.id != current_user().id and not is_super_admin():
+    # Anti-escalación: `super_admin` es la cuenta de recuperación del sistema y
+    # solo otro super_admin puede sacarla de sus sesiones. Cualquier otro rol
+    # (incluido admin/RRHH) SÍ puede ser desconectado por `sistemas`: poder
+    # cerrarle la sesión a una cuenta comprometida es justamente para lo que
+    # existe el rol, y bloquearlo dejaría el incidente sin quién lo contenga.
+    if user.role == 'super_admin' and user.id != current_user().id and not is_super_admin():
         return jsonify({
-            'error': 'Solo super_admin puede revocar sesiones de otros admins'
+            'error': 'Solo super_admin puede revocar sesiones de una cuenta super_admin'
         }), 403
 
     n = RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({'revoked': True})
@@ -59,7 +63,7 @@ def admin_revocar_sesiones(user_id):
 @jwt_required
 @limiter.limit('10 per minute')
 def cambiar_password(user_id):
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -71,12 +75,17 @@ def cambiar_password(user_id):
     if user.username == 'admin' and user.id != current_user().id:
         return jsonify({'error': 'Solo el usuario administrador puede cambiar su propia contraseña'}), 403
 
-    # Anti-escalación lateral: un admin no puede resetear la password de otro
-    # admin (eso permitiría takeover de cuentas entre admins). Solo el propio
-    # usuario o un super_admin pueden hacerlo.
-    if user.role in ('admin', 'super_admin') and user.id != current_user().id and not is_super_admin():
+    # Anti-escalación: la contraseña de un `super_admin` solo la resetea otro
+    # super_admin — si no, `sistemas` podría tomar la cuenta de recuperación y
+    # no quedaría ningún control por encima suyo.
+    #
+    # Para los demás roles el reseteo SÍ está permitido: es la operación de
+    # soporte más común (usuario que perdió su contraseña). Nota: resetear la
+    # contraseña NO borra el `totp_secret` (ver más abajo), así que ni siquiera
+    # esto alcanza para entrar a una cuenta ajena que tenga 2FA.
+    if user.role == 'super_admin' and user.id != current_user().id and not is_super_admin():
         return jsonify({
-            'error': 'Solo super_admin puede resetear la contraseña de otros admins'
+            'error': 'Solo super_admin puede resetear la contraseña de una cuenta super_admin'
         }), 403
 
     data = request.get_json(silent=True) or {}
@@ -85,7 +94,7 @@ def cambiar_password(user_id):
         return jsonify({'error': 'La contraseña no puede estar vacía'}), 400
     if not is_strong_password(new_password):
         return jsonify({
-            'error': 'La contraseña nueva es débil. Asegúrate de incluir 8 caracteres, mayúsculas, minúsculas, números y símbolos.',
+            'error': 'La contraseña nueva es débil. Asegúrate de incluir 12 caracteres, mayúsculas, minúsculas, números y símbolos, y que no sea una contraseña común.',
         }), 400
 
     try:

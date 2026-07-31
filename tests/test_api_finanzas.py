@@ -54,12 +54,28 @@ def trab(db):
 
 class TestRolFinanzas:
 
-    def test_admin_puede_crear_usuario_finanzas(self, client, admin):
-        r = client.post('/api/users', headers=_hdr(admin), json={
-            'username': 'contadora', 'password': 'S3gura!Pass', 'role': 'finanzas',
+    def test_sistemas_puede_crear_usuario_finanzas(self, client, db):
+        """`finanzas` sigue siendo un rol asignable al dar de alta una cuenta.
+
+        Lo que cambió es QUIÉN da de alta: la gestión de cuentas se movió de
+        admin (RRHH) al rol `sistemas`. Ver tests/test_api_sistemas.py.
+        """
+        gestor = User(username='fin_sistemas',
+                      password_hash=generate_password_hash('Pass123!'),
+                      role='sistemas')
+        db.session.add(gestor); db.session.commit()
+
+        r = client.post('/api/users', headers=_hdr(gestor), json={
+            'username': 'contadora', 'password': 'S3gura!Password', 'role': 'finanzas',
         })
-        assert r.status_code == 201
+        assert r.status_code == 201, r.get_json()
         assert r.get_json()['role'] == 'finanzas'
+
+    def test_admin_rrhh_ya_no_crea_usuarios(self, client, admin):
+        r = client.post('/api/users', headers=_hdr(admin), json={
+            'username': 'contadora2', 'password': 'S3gura!Password', 'role': 'finanzas',
+        })
+        assert r.status_code == 403
 
     def test_finanzas_no_ve_dashboard_admin(self, client, finanzas):
         # El dashboard de admin agrega PII (cumpleaños, docs con nombres) y

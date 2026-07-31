@@ -12,17 +12,25 @@ bp = Blueprint('api_users', __name__, url_prefix='/api/users')
 
 _ROLE_ORDER = {
     'super_admin': 0,
-    'admin': 1,
-    'finanzas': 2,
-    'coordinador': 3,
-    'inventario': 4,
-    'solicitante_material': 5,
+    'sistemas': 1,
+    'admin': 2,
+    'finanzas': 3,
+    'coordinador': 4,
+    'inventario': 5,
+    'solicitante_material': 6,
 }
 
 # super_admin nunca se puede crear/asignar desde este endpoint (no está en
-# _VALID_NEW_ROLES); esa cuenta solo se crea por seeding/manual.
-# Los admins pueden crear y eliminar otros admins por decisión operativa.
-_VALID_NEW_ROLES = {'admin', 'finanzas', 'coordinador', 'inventario', 'solicitante_material'}
+# _VALID_NEW_ROLES); esa cuenta solo se crea por seeding/manual. Es la última
+# línea de recuperación si la cuenta de `sistemas` queda inaccesible.
+#
+# `sistemas` SÍ está en la lista: es TI/soporte y necesita poder dar de alta a
+# sus pares. Pero solo un `sistemas` o un `super_admin` puede llegar a este
+# endpoint (ver `require_gestion_usuarios`), así que un admin de RH no puede
+# fabricarse un compañero con control total.
+_VALID_NEW_ROLES = {
+    'sistemas', 'admin', 'finanzas', 'coordinador', 'inventario', 'solicitante_material',
+}
 
 
 def _user_to_dict(u: User) -> dict:

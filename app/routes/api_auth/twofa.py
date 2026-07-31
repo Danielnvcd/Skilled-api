@@ -121,41 +121,38 @@ def _twofa_fails_key(user_id: int) -> str:          return f'twofa_fails:{user_i
 
 
 def _check_twofa_lockout(user_id: int):
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        return None
-    ttl = r.ttl(_twofa_lockout_key(user_id))
+    from app.extensions import redis_call
+    ttl = redis_call(lambda r: r.ttl(_twofa_lockout_key(user_id)))
     return ttl if (ttl is not None and ttl > 0) else None
 
 
 def _register_twofa_failure(user_id: int) -> None:
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        return
-    fkey = _twofa_fails_key(user_id)
-    fails = r.incr(fkey)
-    if fails == 1:
-        r.expire(fkey, _LOGIN_FAILS_WINDOW)
-    if fails >= _LOGIN_FAILS_THRESHOLD:
-        lkey = _twofa_level_key(user_id)
-        try:
-            level = int(r.get(lkey) or 0)
-        except (TypeError, ValueError):
-            level = 0
-        duration = _LOCKOUT_DURATIONS[min(level, len(_LOCKOUT_DURATIONS) - 1)]
-        r.setex(_twofa_lockout_key(user_id), duration, '1')
-        r.setex(lkey, _LOCKOUT_LEVEL_TTL, level + 1)
-        r.delete(fkey)
+    from app.extensions import redis_call
+
+    def _registrar(r):
+        fkey = _twofa_fails_key(user_id)
+        fails = r.incr(fkey)
+        if fails == 1:
+            r.expire(fkey, _LOGIN_FAILS_WINDOW)
+        if fails >= _LOGIN_FAILS_THRESHOLD:
+            lkey = _twofa_level_key(user_id)
+            try:
+                level = int(r.get(lkey) or 0)
+            except (TypeError, ValueError):
+                level = 0
+            duration = _LOCKOUT_DURATIONS[min(level, len(_LOCKOUT_DURATIONS) - 1)]
+            r.setex(_twofa_lockout_key(user_id), duration, '1')
+            r.setex(lkey, _LOCKOUT_LEVEL_TTL, level + 1)
+            r.delete(fkey)
+
+    redis_call(_registrar)
 
 
 def _clear_twofa_failures(user_id: int) -> None:
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        return
-    r.delete(_twofa_fails_key(user_id), _twofa_lockout_key(user_id), _twofa_level_key(user_id))
+    from app.extensions import redis_call
+    redis_call(lambda r: r.delete(
+        _twofa_fails_key(user_id), _twofa_lockout_key(user_id), _twofa_level_key(user_id),
+    ))
 
 
 # ── Pinning del secret de setup-2fa ─────────────────────────────────────────
@@ -178,31 +175,33 @@ def _setup_2fa_key(user_id: int) -> str:
 
 
 def _pin_setup_2fa_secret(user_id: int, secret: str) -> bool:
-    """Persiste el secret candidato. Devuelve True si se pudo pinear."""
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        return False
-    r.setex(_setup_2fa_key(user_id), _SETUP_2FA_TTL, secret)
-    return True
+    """Persiste el secret candidato. Devuelve True si se pudo pinear.
+
+    OJO: estos tres helpers son FAIL-CLOSED a propósito (ver el bloque de
+    comentarios de arriba). Los defaults de `redis_call` están elegidos para
+    conservar esa política: con Redis caído no se pinea y `/confirm-2fa`
+    rechaza el flujo, en vez de degradar al comportamiento vulnerable que
+    permitía instalar un TOTP arbitrario.
+    """
+    from app.extensions import redis_call
+
+    def _pinear(r):
+        r.setex(_setup_2fa_key(user_id), _SETUP_2FA_TTL, secret)
+        return True
+
+    return bool(redis_call(_pinear, default=False))
 
 
 def _peek_setup_2fa_secret(user_id: int) -> str | None:
     """Lee el secret pineado sin borrarlo. Para validar en confirm-2fa."""
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        return None
-    return r.get(_setup_2fa_key(user_id))
+    from app.extensions import redis_call
+    return redis_call(lambda r: r.get(_setup_2fa_key(user_id)), default=None)
 
 
 def _delete_setup_2fa_secret(user_id: int) -> None:
     """Borra el secret pineado. Se llama después de un confirm-2fa exitoso."""
-    from app.extensions import get_redis
-    r = get_redis()
-    if not r:
-        return
-    r.delete(_setup_2fa_key(user_id))
+    from app.extensions import redis_call
+    redis_call(lambda r: r.delete(_setup_2fa_key(user_id)))
 
 
 # ── 2FA setup (flujo en dos pasos: pedir secret → confirmar código) ────────

@@ -20,8 +20,10 @@ def _hdr(user):
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def admin(db):
-    u = User(username='ct_admin', password_hash=generate_password_hash('Pass123!'), role='admin')
+def gestor(db):
+    """Actor de gestión de cuentas: rol `sistemas` (ver test_api_users.py)."""
+    u = User(username='ct_sistemas', password_hash=generate_password_hash('Pass123!'),
+             role='sistemas')
     db.session.add(u); db.session.commit()
     return u
 
@@ -174,8 +176,8 @@ class TestCoordinadorSolicitudes:
 
 class TestUserTrabajadorLink:
 
-    def test_admin_liga_usuario_a_trabajador(self, client, admin, coord, trabajador_a):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_admin_liga_usuario_a_trabajador(self, client, gestor, coord, trabajador_a):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': trabajador_a.id,
         })
         assert r.status_code == 200, r.get_json()
@@ -184,52 +186,52 @@ class TestUserTrabajadorLink:
         assert body['trabajador_no_empleado'] == 'EMP-100'
         assert body['trabajador_nombre'] == 'Juan Pérez'
 
-    def test_admin_desvincula_con_null(self, client, db, admin, coord, trabajador_a):
+    def test_admin_desvincula_con_null(self, client, db, gestor, coord, trabajador_a):
         coord.trabajador_id = trabajador_a.id
         db.session.commit()
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': None,
         })
         assert r.status_code == 200
         assert r.get_json()['trabajador_id'] is None
 
-    def test_trabajador_inexistente(self, client, admin, coord):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_trabajador_inexistente(self, client, gestor, coord):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': 99999,
         })
         assert r.status_code == 404
 
-    def test_trabajador_no_int(self, client, admin, coord):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_trabajador_no_int(self, client, gestor, coord):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': 'abc',
         })
         assert r.status_code == 400
 
-    def test_un_trabajador_un_usuario(self, client, db, admin, coord, coord_b, trabajador_a):
+    def test_un_trabajador_un_usuario(self, client, db, gestor, coord, coord_b, trabajador_a):
         """Si trabajador ya está ligado a otro usuario, rechazar con 409."""
         coord.trabajador_id = trabajador_a.id
         db.session.commit()
-        r = client.put(f'/api/users/{coord_b.id}', headers=_hdr(admin), json={
+        r = client.put(f'/api/users/{coord_b.id}', headers=_hdr(gestor), json={
             'trabajador_id': trabajador_a.id,
         })
         assert r.status_code == 409
         assert 'ligado' in r.get_json()['error'].lower()
 
-    def test_revincular_mismo_usuario_ok(self, client, db, admin, coord, trabajador_a, trabajador_b):
+    def test_revincular_mismo_usuario_ok(self, client, db, gestor, coord, trabajador_a, trabajador_b):
         """Re-ligar al mismo usuario a otro trabajador no debe fallar por la regla 1:1."""
         coord.trabajador_id = trabajador_a.id
         db.session.commit()
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': trabajador_b.id,
         })
         assert r.status_code == 200
         assert r.get_json()['trabajador_id'] == trabajador_b.id
 
-    def test_payload_sin_trabajador_no_toca_valor(self, client, db, admin, coord, trabajador_a):
+    def test_payload_sin_trabajador_no_toca_valor(self, client, db, gestor, coord, trabajador_a):
         coord.trabajador_id = trabajador_a.id
         coord.area = 'Zona 1'
         db.session.commit()
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'area': 'Zona 2',
         })
         assert r.status_code == 200
@@ -237,10 +239,10 @@ class TestUserTrabajadorLink:
         assert body['area'] == 'Zona 2'
         assert body['trabajador_id'] == trabajador_a.id  # no se tocó
 
-    def test_listado_incluye_trabajador(self, client, db, admin, coord, trabajador_a):
+    def test_listado_incluye_trabajador(self, client, db, gestor, coord, trabajador_a):
         coord.trabajador_id = trabajador_a.id
         db.session.commit()
-        r = client.get('/api/users', headers=_hdr(admin))
+        r = client.get('/api/users', headers=_hdr(gestor))
         assert r.status_code == 200
         users = r.get_json()
         coord_dict = next(u for u in users if u['id'] == coord.id)

@@ -264,7 +264,7 @@ def api_change_own_password(user_id: int):
 
     if not is_strong_password(new_password):
         return jsonify({
-            'error': 'La contraseña nueva es débil. Mínimo 8 caracteres con mayúsculas, minúsculas, números y símbolos.',
+            'error': 'La contraseña nueva es débil. Mínimo 12 caracteres con mayúsculas, minúsculas, números y símbolos, y que no sea una contraseña común.',
         }), 400
     if current_password == new_password:
         return jsonify({'error': 'La nueva contraseña debe ser diferente a la actual'}), 400

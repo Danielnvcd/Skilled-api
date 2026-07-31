@@ -8,7 +8,7 @@ import hashlib
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.security import generate_password_hash
 
-from app.extensions import get_redis
+from app.extensions import redis_call
 from app.models import User
 
 
@@ -33,6 +33,10 @@ def _no_store_on_auth_responses(response):
 ACCESS_TOKEN_LIFETIME_MINUTES = 20      # mismo TTL que la sesión Flask clásica
 PRE_2FA_LIFETIME_SECONDS = 300          # ventana para completar 2FA tras password
 _RT_COOKIE = 'rt_api'                   # cookie del refresh token para el SPA
+# Scope de esa cookie. Solo la leen /refresh, /logout y /sessions/<id>, todos
+# bajo el url_prefix del blueprint — no hay razón para que viaje en cada request
+# de /api/*. Ver `_set_rt_cookie` para la migración desde el viejo path='/'.
+_RT_COOKIE_PATH = '/api/auth'
 
 # ── Tope de longitud de inputs sensibles ────────────────────────────────────
 # Evita DoS por hash bcrypt de payloads gigantes (cada check_password_hash es
@@ -68,7 +72,25 @@ _RT_ROTATION_GRACE_SECONDS = 10
 
 
 def _jwt_secret() -> str:
-    return current_app.config['SECRET_KEY']
+    """Llave de firma de los JWT.
+
+    Separación de llaves: si existe `JWT_SECRET_KEY` se usa esa; si no, cae a
+    `SECRET_KEY` (comportamiento histórico — los tokens ya emitidos siguen
+    validando, así que activarla es opcional y el arranque no cambia).
+
+    Por qué importa: `SECRET_KEY` firma TAMBIÉN la cookie de sesión de Flask y
+    los tokens CSRF de Flask-WTF. Una sola llave para tres propósitos significa
+    que cualquier filtración parcial (un traceback en debug, un dump de config,
+    un backup de .env) compromete los tres a la vez, y que rotarla por una
+    incidencia de CSRF obliga a desloguear a todo mundo. Con la llave separada
+    cada dominio se rota por su cuenta.
+
+    Para activarla: poner `JWT_SECRET_KEY=<valor aleatorio>` en el .env. OJO —
+    al cambiarla, todos los access tokens vivos (≤20 min) dejan de validar y
+    los clientes rotan vía refresh token; la cookie `rt_api` NO se ve afectada
+    porque el refresh token es un secreto aleatorio en BD, no un JWT.
+    """
+    return current_app.config.get('JWT_SECRET_KEY') or current_app.config['SECRET_KEY']
 
 
 # ── Serializers ─────────────────────────────────────────────────────────────
@@ -203,44 +225,47 @@ def _check_lockout(username):
     """Devuelve los segundos restantes de lockout, o None si la cuenta no está bloqueada."""
     if not _norm_user(username):
         return None
-    r = get_redis()
-    if not r:
-        return None
-    ttl = r.ttl(_lockout_key(username))
+    ttl = redis_call(lambda r: r.ttl(_lockout_key(username)))
     return ttl if (ttl is not None and ttl > 0) else None
 
 
 def _register_login_failure(username):
-    """Incrementa el contador de fallos. Al pasar el umbral, dispara lockout escalado."""
+    """Incrementa el contador de fallos. Al pasar el umbral, dispara lockout escalado.
+
+    Toda la secuencia va dentro de UN `redis_call`: son varias operaciones
+    encadenadas y no tiene sentido ejecutar media si la conexión se cae a la
+    mitad. Si falla, no se registra el fallo — el rate limit por IP y por
+    usuario del endpoint sigue siendo la red de seguridad.
+    """
     if not _norm_user(username):
         return
-    r = get_redis()
-    if not r:
-        return
-    fkey = _fails_key(username)
-    fails = r.incr(fkey)
-    if fails == 1:
-        r.expire(fkey, _LOGIN_FAILS_WINDOW)
-    if fails >= _LOGIN_FAILS_THRESHOLD:
-        lkey = _level_key(username)
-        try:
-            level = int(r.get(lkey) or 0)
-        except (TypeError, ValueError):
-            level = 0
-        duration = _LOCKOUT_DURATIONS[min(level, len(_LOCKOUT_DURATIONS) - 1)]
-        r.setex(_lockout_key(username), duration, '1')
-        r.setex(lkey, _LOCKOUT_LEVEL_TTL, level + 1)  # decae si pasan 24 h sin nuevos lockouts
-        r.delete(fkey)
+
+    def _registrar(r):
+        fkey = _fails_key(username)
+        fails = r.incr(fkey)
+        if fails == 1:
+            r.expire(fkey, _LOGIN_FAILS_WINDOW)
+        if fails >= _LOGIN_FAILS_THRESHOLD:
+            lkey = _level_key(username)
+            try:
+                level = int(r.get(lkey) or 0)
+            except (TypeError, ValueError):
+                level = 0
+            duration = _LOCKOUT_DURATIONS[min(level, len(_LOCKOUT_DURATIONS) - 1)]
+            r.setex(_lockout_key(username), duration, '1')
+            r.setex(lkey, _LOCKOUT_LEVEL_TTL, level + 1)  # decae si pasan 24 h sin nuevos lockouts
+            r.delete(fkey)
+
+    redis_call(_registrar)
 
 
 def _clear_login_failures(username):
     """Resetea contador, lockout y nivel tras un login exitoso."""
     if not _norm_user(username):
         return
-    r = get_redis()
-    if not r:
-        return
-    r.delete(_fails_key(username), _lockout_key(username), _level_key(username))
+    redis_call(lambda r: r.delete(
+        _fails_key(username), _lockout_key(username), _level_key(username),
+    ))
 
 
 def _format_ttl(seconds: int) -> str:

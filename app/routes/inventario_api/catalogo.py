@@ -116,7 +116,15 @@ def get_categorias_config():
     return jsonify([_categoria_config_to_dict(c) for c in rows])
 
 
-@bp.route('/categorias-config/<string:nombre>', methods=['PUT'])
+# `path` en vez de `string`: hay categorías con barra en el nombre
+# ("Tubería/Accesorios"). El convertidor `string` NO acepta barras, y como la
+# capa WSGI decodifica el %2F que manda el navegador ANTES del enrutado, la
+# ruta dejaba de coincidir y Flask respondía 404 desde el router — sin llegar
+# nunca al endpoint. `path` sí las acepta.
+#
+# Es seguro: `nombre` solo se usa para consultar la base de datos, nunca para
+# construir rutas de archivos, así que aceptar barras no abre path traversal.
+@bp.route('/categorias-config/<path:nombre>', methods=['PUT'])
 @_require_inventario_admin
 def upsert_categoria_config(nombre: str):
     """Crea o actualiza la config de la categoría con `nombre`. Si imagen_url
@@ -154,7 +162,7 @@ def upsert_categoria_config(nombre: str):
     return jsonify(_categoria_config_to_dict(cfg))
 
 
-@bp.route('/categorias-config/<string:nombre>', methods=['DELETE'])
+@bp.route('/categorias-config/<path:nombre>', methods=['DELETE'])
 @_require_inventario_admin
 def delete_categoria_config(nombre: str):
     """Elimina una categoría.
