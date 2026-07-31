@@ -89,6 +89,15 @@ def create_app():
     app.config['SESSION_COOKIE_SECURE'] = True  # Set True in prod only
 
     app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
+    # Headers X-RateLimit-*: permiten que el SPA avise ANTES de agotar el
+    # límite, en vez de estrellarse contra un 429. El cliente no puede llevar
+    # esa cuenta por su lado — las revalidaciones automáticas al recuperar el
+    # foco también consumen cupo, así que solo el servidor sabe el número real.
+    #
+    # OJO: al ser cross-origin (SPA en Vercel → API en skilledmx.cloud), estos
+    # headers NO son legibles desde JavaScript salvo que se declaren en
+    # `expose_headers` del CORS. Ver la configuración de CORS más abajo.
+    app.config['RATELIMIT_HEADERS_ENABLED'] = True
 
     app.config['MAIL_SERVER'] = 'smtp.gmail.com'
     app.config['MAIL_PORT'] = 587
@@ -165,7 +174,15 @@ def create_app():
         supports_credentials=True,
         methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
-        expose_headers=['Content-Disposition'],
+        # `expose_headers` es lo que hace que el navegador deje leer estos
+        # headers desde JS en una respuesta cross-origin. Sin esto, el SPA
+        # recibe la respuesta pero `response.headers` llega vacío para todo lo
+        # que no sea la lista blanca estándar de CORS.
+        expose_headers=[
+            'Content-Disposition',
+            'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset',
+            'Retry-After',
+        ],
         max_age=600,  # cachea el preflight 10 min (evita preflight en cada request)
     )
 
