@@ -149,9 +149,14 @@ def para_asignar():
     lo mínimo para identificar a la persona en un <select> —id, nº de empleado y
     nombre— sin datos sensibles, así que puede abrirse al rol inventario sin
     contradecir el gate de PII del listado completo.
+
+    `sistemas` entra por la misma razón: administra las cuentas de usuario y
+    necesita ligar una cuenta a su empleado (`trabajador_id`), pero NO debe ver
+    el padrón completo con sueldos y documentos. Ese rol tiene prohibido el
+    listado normal a propósito — ver `is_admin()` en routes/_api_helpers.py.
     """
     role = current_user().role
-    if role not in ('admin', 'super_admin', 'coordinador', 'inventario'):
+    if role not in ('admin', 'super_admin', 'coordinador', 'inventario', 'sistemas'):
         return jsonify({'error': 'Acceso denegado'}), 403
 
     per_page = min(request.args.get('per_page', 500, type=int), 5000)

@@ -377,3 +377,47 @@ class TestEventosSeguridad:
         db.session.commit()
         r = client.get('/api/sistemas/eventos-seguridad?limite=3', headers=_hdr(sistemas))
         assert len(r.get_json()) == 3
+
+
+# ─── Acceso a empleados: picker sí, padrón no ─────────────────────────────────
+
+class TestSistemasYDatosDeRRHH:
+    """`sistemas` administra cuentas, así que necesita ELEGIR a un empleado para
+    ligarlo (`trabajador_id`), pero no debe poder consultar el padrón.
+
+    La pantalla de Usuarios pedía el listado completo y recibía 403 al abrir el
+    modal de edición. El arreglo no fue abrir el padrón, sino usar el picker
+    ligero que ya existía para el rol `inventario` por la misma razón.
+    """
+
+    @pytest.fixture
+    def trabajador(self, db):
+        from app.models import Trabajador
+        t = Trabajador(no_empleado='SIS-001', nombre='Ana', nombre_apellidos='López',
+                       activo=True, tipo_nomina='Semanal',
+                       salario_real_pactado_x_sem=7000)
+        db.session.add(t); db.session.commit()
+        return t
+
+    def test_puede_usar_el_picker_ligero(self, client, sistemas, trabajador):
+        r = client.get('/api/trabajadores/para-asignar', headers=_hdr(sistemas))
+        assert r.status_code == 200, r.get_json()
+        items = r.get_json()['items']
+        assert any(i['no_empleado'] == 'SIS-001' for i in items)
+
+    def test_el_picker_no_expone_datos_sensibles(self, client, sistemas, trabajador):
+        """Lo que hace aceptable abrir este endpoint es justamente que NO trae
+        sueldo ni documentos. Si alguien agrega esos campos, este test cae."""
+        r = client.get('/api/trabajadores/para-asignar', headers=_hdr(sistemas))
+        campos = set(r.get_json()['items'][0].keys())
+        prohibidos = {'salario_real_pactado_x_sem', 'curp', 'rfc', 'nss',
+                      'area', 'puesto', 'tipo_pago', 'tipo_nomina'}
+        assert not (campos & prohibidos), f'el picker filtró PII: {campos & prohibidos}'
+
+    def test_sigue_sin_poder_ver_el_padron_completo(self, client, sistemas, trabajador):
+        """El listado normal expone sueldo, RFC y área: sigue siendo de RRHH."""
+        r = client.get('/api/trabajadores', headers=_hdr(sistemas))
+        assert r.status_code == 403
+
+    def test_sigue_sin_poder_ver_la_nomina(self, client, sistemas):
+        assert client.get('/api/dashboard', headers=_hdr(sistemas)).status_code == 403
