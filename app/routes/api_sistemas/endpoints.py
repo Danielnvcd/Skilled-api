@@ -28,110 +28,6 @@ from ._core import bp
 _INICIO_PROCESO = time.time()
 
 
-def _version_desplegada() -> dict:
-    """Commit y fecha del código que está corriendo.
-
-    Existe por una confusión real: estuvimos diagnosticando un fallo de
-    producción que en realidad era que el servidor corría una versión anterior.
-    Con esto se ve de un vistazo y se descarta en segundos.
-
-    Se calcula UNA vez al arrancar el worker (`_VERSION`), no en cada petición:
-    lanzar un subproceso de git por request sería un despropósito.
-
-    Orden de resolución, de más fiable a menos:
-      1. `APP_VERSION` / `APP_COMMIT` del entorno — lo que pondría un pipeline
-         de despliegue que ya no lleva `.git` al servidor.
-      2. `git rev-parse` sobre el repo, si existe y git está instalado.
-      3. Desconocido. Nunca lanza: no saber la versión no puede tirar el panel.
-    """
-    raiz = current_app.config.get('BASE_DIR')
-
-    # 1) Variables de entorno: lo más fiable en producción. Un despliegue puede
-    #    no llevar el repo, y aunque lo lleve, depender de `git` en tiempo de
-    #    ejecución es frágil (ver el motivo en el paso 2).
-    commit = os.environ.get('APP_COMMIT') or os.environ.get('APP_VERSION')
-    if commit:
-        return {
-            'commit': commit,
-            'fecha': os.environ.get('APP_COMMIT_FECHA'),
-            'asunto': None,
-            'origen': 'variable de entorno',
-            'detalle': None,
-        }
-
-    # 2) Archivo VERSION en la raíz. Lo escribe el despliegue con algo como
-    #    `git rev-parse --short HEAD > VERSION`. No necesita que el repo ni el
-    #    binario de git existan en el servidor.
-    try:
-        ruta_version = os.path.join(raiz or '.', 'VERSION')
-        if os.path.isfile(ruta_version):
-            with open(ruta_version, encoding='utf-8') as f:
-                contenido = f.read().strip()
-            if contenido:
-                partes = contenido.split('|')
-                return {
-                    'commit': partes[0].strip(),
-                    'fecha': partes[1].strip() if len(partes) > 1 else None,
-                    'asunto': partes[2].strip() if len(partes) > 2 else None,
-                    'origen': 'archivo VERSION',
-                    'detalle': None,
-                }
-    except Exception:
-        pass
-
-    # 3) Preguntarle a git. Funciona en desarrollo, pero en un servidor falla a
-    #    menudo por razones que NO son evidentes:
-    #
-    #      - «dubious ownership»: desde Git 2.35, si el repo pertenece a un
-    #        usuario distinto del que corre el proceso (típico: repo de root,
-    #        gunicorn como otro usuario), git se niega a operar. Por eso se pasa
-    #        `-c safe.directory` explícito.
-    #      - `git` fuera del PATH: systemd da un PATH mínimo, no el del login.
-    #
-    #    Cuando falla se devuelve el MOTIVO, no un simple «desconocido»: sin eso
-    #    el panel no ayuda a arreglarlo.
-    try:
-        import subprocess
-        salida = subprocess.run(
-            ['git', '-c', f'safe.directory={raiz}', 'log', '-1', '--format=%h|%cI|%s'],
-            cwd=raiz, capture_output=True, text=True, timeout=3,
-        )
-        if salida.returncode == 0 and salida.stdout.strip():
-            commit, fecha, asunto = (salida.stdout.strip().split('|', 2) + ['', ''])[:3]
-            return {'commit': commit, 'fecha': fecha, 'asunto': asunto,
-                    'origen': 'git', 'detalle': None}
-        motivo = (salida.stderr or '').strip().splitlines()
-        detalle = motivo[0][:200] if motivo else f'git terminó con código {salida.returncode}'
-    except FileNotFoundError:
-        detalle = 'el binario `git` no está disponible para el proceso (PATH de systemd)'
-    except subprocess.TimeoutExpired:
-        detalle = 'git no respondió en 3 s'
-    except Exception as e:
-        detalle = f'{type(e).__name__}: {e}'[:200]
-
-    return {
-        'commit': None,
-        'fecha': None,
-        'asunto': None,
-        'origen': 'desconocido',
-        # Se publica el motivo para que se pueda corregir en vez de adivinar.
-        'detalle': detalle,
-    }
-
-
-# Cache por worker: se resuelve en la primera consulta y no se vuelve a calcular.
-# No se hace al importar el módulo porque `_version_desplegada` necesita el
-# contexto de aplicación para leer BASE_DIR.
-_VERSION_CACHE = None
-
-
-def _obtener_version() -> dict:
-    global _VERSION_CACHE
-    if _VERSION_CACHE is None:
-        _VERSION_CACHE = _version_desplegada()
-    return _VERSION_CACHE
-
-
 @bp.route('/estado', methods=['GET'])
 @jwt_required
 @limiter.limit('60 per minute')
@@ -206,7 +102,6 @@ def estado():
             'entorno': os.environ.get('FLASK_ENV', 'desconocido'),
             'modo_socketio': os.environ.get('SOCKETIO_ASYNC_MODE', 'threading'),
         },
-        'version': _obtener_version(),
         # En producción corren 4 workers de gunicorn detrás de nginx, así que
         # `proceso` y `base_datos.pool` describen SOLO al worker que atendió
         # esta petición — el siguiente refresco puede caer en otro y mostrar
