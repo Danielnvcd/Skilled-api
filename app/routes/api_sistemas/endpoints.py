@@ -28,9 +28,66 @@ from ._core import bp
 _INICIO_PROCESO = time.time()
 
 
+def _version_desplegada() -> dict:
+    """Commit y fecha del código que está corriendo.
+
+    Existe por una confusión real: estuvimos diagnosticando un fallo de
+    producción que en realidad era que el servidor corría una versión anterior.
+    Con esto se ve de un vistazo y se descarta en segundos.
+
+    Se calcula UNA vez al arrancar el worker (`_VERSION`), no en cada petición:
+    lanzar un subproceso de git por request sería un despropósito.
+
+    Orden de resolución, de más fiable a menos:
+      1. `APP_VERSION` / `APP_COMMIT` del entorno — lo que pondría un pipeline
+         de despliegue que ya no lleva `.git` al servidor.
+      2. `git rev-parse` sobre el repo, si existe y git está instalado.
+      3. Desconocido. Nunca lanza: no saber la versión no puede tirar el panel.
+    """
+    commit = os.environ.get('APP_COMMIT') or os.environ.get('APP_VERSION')
+    fecha = os.environ.get('APP_COMMIT_FECHA')
+    origen = 'variable de entorno'
+
+    if not commit:
+        try:
+            import subprocess
+            raiz = current_app.config.get('BASE_DIR')
+            salida = subprocess.run(
+                ['git', 'log', '-1', '--format=%h|%cI|%s'],
+                cwd=raiz, capture_output=True, text=True, timeout=3,
+            )
+            if salida.returncode == 0 and salida.stdout.strip():
+                commit, fecha, asunto = (salida.stdout.strip().split('|', 2) + ['', ''])[:3]
+                origen = 'git'
+                return {'commit': commit, 'fecha': fecha, 'asunto': asunto, 'origen': origen}
+        except Exception:
+            # git ausente, timeout, o el despliegue no incluye el repo.
+            pass
+
+    return {
+        'commit': commit or None,
+        'fecha': fecha,
+        'asunto': None,
+        'origen': origen if commit else 'desconocido',
+    }
+
+
+# Cache por worker: se resuelve en la primera consulta y no se vuelve a calcular.
+# No se hace al importar el módulo porque `_version_desplegada` necesita el
+# contexto de aplicación para leer BASE_DIR.
+_VERSION_CACHE = None
+
+
+def _obtener_version() -> dict:
+    global _VERSION_CACHE
+    if _VERSION_CACHE is None:
+        _VERSION_CACHE = _version_desplegada()
+    return _VERSION_CACHE
+
+
 @bp.route('/estado', methods=['GET'])
 @jwt_required
-@limiter.limit('30 per minute')
+@limiter.limit('60 per minute')
 def estado():
     """Salud de la infraestructura: Redis, base de datos y proceso."""
     err = require_panel_sistemas()
@@ -102,6 +159,7 @@ def estado():
             'entorno': os.environ.get('FLASK_ENV', 'desconocido'),
             'modo_socketio': os.environ.get('SOCKETIO_ASYNC_MODE', 'threading'),
         },
+        'version': _obtener_version(),
         # En producción corren 4 workers de gunicorn detrás de nginx, así que
         # `proceso` y `base_datos.pool` describen SOLO al worker que atendió
         # esta petición — el siguiente refresco puede caer en otro y mostrar
@@ -123,7 +181,7 @@ def estado():
 
 @bp.route('/peticiones', methods=['GET'])
 @jwt_required
-@limiter.limit('30 per minute')
+@limiter.limit('60 per minute')
 def peticiones():
     """Últimas peticiones registradas + agregados por ruta.
 
@@ -136,12 +194,16 @@ def peticiones():
     if err:
         return err
 
-    from app.observabilidad import leer_peticiones, resumen
+    from app.observabilidad import leer_contadores, leer_peticiones, resumen
 
     try:
         limite = int(request.args.get('limite') or 200)
     except (TypeError, ValueError):
         limite = 200
+    try:
+        dias = int(request.args.get('dias') or 7)
+    except (TypeError, ValueError):
+        dias = 7
 
     eventos = leer_peticiones(limite)
 
@@ -154,12 +216,20 @@ def peticiones():
     for e in eventos:
         e['usuario'] = nombres.get(e.get('uid'))
 
-    return jsonify({'eventos': eventos, 'resumen': resumen(eventos)})
+    return jsonify({
+        # Muestra con detalle: el buffer circular. Va muestreado.
+        'eventos': eventos,
+        'resumen': resumen(eventos),
+        # Métricas exactas: contadores que se incrementan en TODA petición.
+        # Es lo que permite analizar de verdad — los conteos son reales, no
+        # una estimación sobre la muestra.
+        'contadores': leer_contadores(dias),
+    })
 
 
 @bp.route('/sesiones', methods=['GET'])
 @jwt_required
-@limiter.limit('30 per minute')
+@limiter.limit('60 per minute')
 def sesiones():
     """Sesiones activas de TODOS los usuarios, con su UA/IP de origen."""
     err = require_panel_sistemas()
@@ -268,7 +338,7 @@ _PATRONES_SEGURIDAD = (
 
 @bp.route('/eventos-seguridad', methods=['GET'])
 @jwt_required
-@limiter.limit('30 per minute')
+@limiter.limit('60 per minute')
 def eventos_seguridad():
     """Vista enfocada del AuditLog: solo lo relevante para seguridad.
 
