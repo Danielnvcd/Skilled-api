@@ -35,6 +35,11 @@ def create_app():
         raise RuntimeError("CRÍTICO: No se encontró SECRET_KEY en las variables de entorno. La aplicación no puede arrancar de forma segura.")
     
     app.config['SECRET_KEY'] = secret_key
+    # Llave dedicada para firmar JWT. Opcional: si no está, se usa SECRET_KEY
+    # (comportamiento previo, sin romper tokens ya emitidos). Ver el docstring
+    # de `_jwt_secret()` en app/routes/api_auth/_core.py para el porqué y para
+    # el procedimiento de rotación.
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY') or secret_key
     app.config['BASE_DIR'] = BASE_DIR
     app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
     
@@ -164,37 +169,29 @@ def create_app():
         max_age=600,  # cachea el preflight 10 min (evita preflight en cada request)
     )
 
+    # ── CSP para un backend API-only ────────────────────────────────────────
+    # Esta app ya NO sirve HTML a ningún navegador:
+    #   - `static_folder=None` (el SPA vive en Vercel y trae su propia CSP).
+    #   - Todas las respuestas de `/api/*` son JSON, PDF o Excel.
+    #   - Los `render_template` que quedan producen HTML que va DIRECTO a
+    #     xhtml2pdf (variable `html_salida`); nunca se devuelve al cliente.
+    #
+    # La CSP anterior era herencia de cuando el backend sí renderizaba las
+    # pantallas: permitía scripts de cdn.tailwindcss.com, unpkg, jsdelivr,
+    # cdnjs y varios hashes inline. Ninguno protege nada hoy, pero sí serían
+    # permisos reales si algún día se sirviera HTML por error o por una ruta
+    # nueva. Se reduce al mínimo: negar todo por defecto.
+    #
+    # OJO: si en el futuro este backend vuelve a servir una página HTML, esta
+    # política la romperá a propósito — hay que abrir explícitamente lo que esa
+    # página necesite, en vez de heredar una lista de CDNs sin revisar.
     csp = {
-        'default-src': '\'self\'',
-        'script-src': [
-            '\'self\'',
-            '\'sha256-GM7IIbUkSXDrnXMRMiFIDiOntytvSUDSsLtYDBaCqEQ=\'',
-            '\'sha256-f+AS27PYwphakMuSE5b0u2A4jlG7wBc1PJdgkKE33yM=\'',
-            '\'sha256-pxLKgbcWy2PhNHtY70b3+9xM1DaEg9wx0HuSIvhboP0=\'',
-            '\'sha256-LR1qZhcrwqC16k6pdfx3zpaEnV1gOIHJjkFpm3G3JgU=\'',
-            '\'sha256-HQDTABhTJR5g6ipLHPMSZNn4Zj+TfOpaKNRLQ4+8tH0=\'',  # Tailwind CDN inline script
-            'https://static.cloudflareinsights.com',
-            'https://cdnjs.cloudflare.com',
-            'https://cdn.jsdelivr.net',
-            'https://cdn.tailwindcss.com',
-            'https://unpkg.com',          # html5-qrcode CDN
-        ],
-        # SEGURIDAD: 'unsafe-inline' en style-src es necesario temporalmente porque varios
-        # templates usan atributos style="" inline en el HTML. Para eliminarlo hay que mover
-        # todos los estilos inline a archivos .css externos (tracked en issue de seguridad).
-        # Prioridad: media. No bloquea funcionalidad actual.
-        'style-src': ['\'self\'', '\'unsafe-inline\'', 'https://cdnjs.cloudflare.com', 'https://fonts.googleapis.com'],
-        'img-src': ['\'self\'', 'data:', 'blob:', 'https:'],
-        'font-src': ['\'self\'', 'https://cdnjs.cloudflare.com', 'https://fonts.gstatic.com'],
-        # blob: necesario para getUserMedia (cámara) y WebWorkers del QR scanner
-        # stream.mux.com: HLS de fondo en Login/Inicio del SPA React
-        # ws:/wss: en connect-src permiten el handshake de Socket.IO al mismo origen.
-        'connect-src': ['\'self\'', 'ws:', 'wss:', 'blob:', 'https://cloudflare.com', 'https://cdn.jsdelivr.net', 'https://stream.mux.com', 'https://*.mux.com'],
-        'media-src': ['\'self\'', 'blob:', 'https://stream.mux.com', 'https://*.mux.com'],  # stream de cámara + HLS de fondo
-        'worker-src': ['\'self\'', 'blob:'],           # WebWorker del scanner QR
-        'frame-src': ['\'self\'', 'https://www.youtube.com', 'https://youtube.com'],
-        # Bloquea que esta app sea embebida en iframes de otros dominios (anti-clickjacking)
+        'default-src': '\'none\'',
+        # Anti-clickjacking (redundante con X-Frame-Options, ver _security_headers).
         'frame-ancestors': '\'none\'',
+        # Sin <base> ni envío de formularios: no hay documentos que los usen.
+        'base-uri': '\'none\'',
+        'form-action': '\'none\'',
     }
     # HSTS: anuncia HTTPS-only por 1 año. force_https=False porque Cloudflare Tunnel
     # termina TLS; la app interna sigue HTTP localmente. Talisman manda STS igual.
@@ -226,7 +223,7 @@ def create_app():
         api_auth, api_trabajadores, api_proyectos, api_notificaciones, api_horas,
         api_prenomina, api_prestamos, api_ajustes, api_proyecto_total,
         api_historico, api_users, api_dashboard, api_bitacora, api_metricas,
-        api_search,
+        api_search, api_sistemas,
     )
 
     # ── API JWT (siempre activa — es lo que consume el SPA React en Vercel) ──
@@ -237,7 +234,7 @@ def create_app():
         api_auth, api_trabajadores, api_proyectos, api_notificaciones, api_horas,
         api_prenomina, api_prestamos, api_ajustes, api_proyecto_total,
         api_historico, api_users, api_dashboard, api_bitacora, api_metricas,
-        inventario_api, herramientas_api, api_search,
+        inventario_api, herramientas_api, api_search, api_sistemas,
     )
     for mod in _api_modules:
         csrf.exempt(mod.bp)
@@ -354,7 +351,11 @@ def create_app():
                 "[PERF] %s %s -> %s (%.0fms)",
                 request.method, request.path, response.status_code, elapsed_ms
             )
-        return response
+        # Buffer circular en Redis que alimenta el panel de sistemas. Va después
+        # del log para que, si algo fallara aquí, el registro de siempre ya haya
+        # ocurrido. Nunca toca la BD y nunca lanza — ver app/observabilidad.py.
+        from app.observabilidad import registrar_peticion
+        return registrar_peticion(response)
 
     with app.app_context():
         os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)

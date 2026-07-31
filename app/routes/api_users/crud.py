@@ -6,7 +6,7 @@ from app.extensions import db, limiter
 from app.models import RefreshToken, Trabajador, User
 from app.realtime import emit_to_role
 from app.routes._api_helpers import (
-    api_transactional, current_user, is_super_admin, require_admin,
+    api_transactional, current_user, is_super_admin, require_gestion_usuarios,
 )
 from app.routes.api_auth import jwt_required
 from app.utils import is_strong_password, log_action
@@ -17,7 +17,7 @@ from ._core import _ROLE_ORDER, _VALID_NEW_ROLES, _user_to_dict, bp
 @bp.route('', methods=['GET'])
 @jwt_required
 def listar():
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
     users = User.query.all()
@@ -30,7 +30,7 @@ def listar():
 @limiter.limit('10 per minute')
 @api_transactional('Error al crear el usuario')
 def crear():
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -42,6 +42,13 @@ def crear():
     if not username or not password or not role:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
 
+    # `super_admin` no está en _VALID_NEW_ROLES, así que este check ya impide
+    # que `sistemas` se fabrique la cuenta de recuperación y quede sin nadie
+    # por encima. Se deja explícito el mensaje para que quede claro en la UI.
+    if role == 'super_admin':
+        return jsonify({
+            'error': 'La cuenta super_admin no se crea desde aquí',
+        }), 403
     if role not in _VALID_NEW_ROLES:
         return jsonify({'error': 'Rol no válido'}), 400
 
@@ -50,7 +57,7 @@ def crear():
 
     if not is_strong_password(password):
         return jsonify({
-            'error': 'La contraseña es débil. Usa mínimo 8 caracteres con mayúsculas, minúsculas, números y símbolos.',
+            'error': 'La contraseña es débil. Usa mínimo 12 caracteres con mayúsculas, minúsculas, números y símbolos, y que no sea una contraseña común.',
         }), 400
 
     new_user = User(
@@ -61,7 +68,7 @@ def crear():
     db.session.add(new_user)
     db.session.commit()
     log_action(f"Creó usuario '{username}' con rol '{role}'")
-    emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+    emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
         'id': new_user.id, 'action': 'created',
     })
     return jsonify(_user_to_dict(new_user)), 201
@@ -80,7 +87,7 @@ def actualizar(user_id):
     y abrir caminos de escalación. Si necesitas mover a alguien de rol, elimina
     y recrea la cuenta con el rol correcto.
     """
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -134,7 +141,7 @@ def actualizar(user_id):
 
     db.session.commit()
     log_action(f"Actualizó perfil del usuario '{user.username}'")
-    emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+    emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
         'id': user.id, 'action': 'updated',
     })
     return jsonify(_user_to_dict(user))
@@ -152,7 +159,7 @@ def eliminar(user_id):
     sacarlo de todas sus sesiones al instante. Su historial queda intacto y la
     cuenta puede reactivarse después.
     """
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -188,7 +195,7 @@ def eliminar(user_id):
             force_logout_user(user.id)
         except Exception as e:
             current_app.logger.warning('force_logout_user falló al desactivar usuario: %s', e)
-        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+        emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
             'id': user.id, 'action': 'deactivated',
         })
         return jsonify({'ok': True})
@@ -204,7 +211,7 @@ def eliminar(user_id):
 def reactivar(user_id):
     """Reactiva una cuenta previamente desactivada. El usuario deberá iniciar
     sesión de nuevo (sus sesiones fueron revocadas al desactivarlo)."""
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -223,7 +230,7 @@ def reactivar(user_id):
         user.activo = True
         db.session.commit()
         log_action(f"Reactivó usuario '{user.username}'")
-        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+        emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
             'id': user.id, 'action': 'reactivated',
         })
         return jsonify(_user_to_dict(user))

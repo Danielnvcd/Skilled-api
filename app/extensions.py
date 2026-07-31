@@ -99,11 +99,94 @@ def get_redis():
         redis_url = os.environ.get('REDIS_URL')
         if redis_url:
             try:
-                _redis_client = redis.from_url(redis_url, decode_responses=True)
+                _redis_client = redis.from_url(
+                    redis_url,
+                    decode_responses=True,
+                    # ── Timeouts: obligatorios, no opcionales ──────────────
+                    # Por defecto redis-py espera INDEFINIDAMENTE. Con eso, un
+                    # Redis "vivo pero colgado" (partición de red, swap, una
+                    # tormenta de evicciones) no lanza ninguna excepción: la
+                    # llamada simplemente nunca vuelve.
+                    #
+                    # `redis_call` degrada ante ERRORES, pero no puede hacer
+                    # nada contra un CUELGUE — no hay nada que atrapar. Y como
+                    # Redis se consulta en el camino de toda petición
+                    # autenticada (`_is_jti_revoked`) y de todo registro de
+                    # observabilidad, un cuelgue arrastraría a la API entera
+                    # hasta que gunicorn matara a los workers.
+                    #
+                    # Con timeout, un cuelgue se convierte en TimeoutError, que
+                    # `redis_call` sí sabe degradar. 2 s es holgadísimo contra
+                    # un Redis local (lo normal es <1 ms) y aun así acota el
+                    # daño a algo imperceptible.
+                    socket_connect_timeout=2,
+                    socket_timeout=2,
+                    # Revalida conexiones ociosas antes de usarlas: evita
+                    # gastar un intento en un socket que el sistema ya cerró.
+                    health_check_interval=30,
+                    retry_on_timeout=False,
+                )
                 _redis_client.ping()
             except Exception:
                 _redis_client = None
     return _redis_client
+
+
+def redis_call(operacion, default=None):
+    """Ejecuta una operación contra Redis tolerando que el servidor se caiga.
+
+    ── El problema que resuelve ────────────────────────────────────────────────
+    Todo el módulo de auth estaba escrito así:
+
+        r = get_redis()
+        if not r:
+            return <default>       # degradación cuando NO hay Redis
+        return r.get(...)          # ← sin protección
+
+    Ese guard solo cubre "Redis nunca estuvo disponible al arrancar": ahí
+    `get_redis()` devuelve None y se degrada bien. Pero si Redis estaba VIVO y
+    se cae después, el singleton ya tiene un cliente — no es None, pasa el
+    guard — y la llamada lanza ConnectionError/TimeoutError.
+
+    Como `_is_jti_revoked()` se invoca desde `jwt_required` en CADA request
+    autenticada y la excepción no se atrapaba en ningún lado, el resultado era
+    que una caída de Redis tumbaba la API entera: todas las requests caían al
+    handler global y respondían 500. La degradación que los comentarios del
+    módulo prometían nunca se activaba en ese escenario.
+
+    ── Cómo lo resuelve ────────────────────────────────────────────────────────
+    `operacion` recibe el cliente y hace la llamada. Si algo falla, devolvemos
+    exactamente el mismo `default` que la rama "no hay Redis" — es decir, una
+    caída en caliente se comporta igual que un arranque sin Redis, que es el
+    camino de degradación que el módulo ya tenía pensado y probado.
+
+    Además descartamos el cliente muerto para que la siguiente llamada
+    reconecte sola cuando Redis vuelva, sin reiniciar la app.
+
+    Uso:
+        redis_call(lambda r: r.get(f'jwt_revoked:{jti}'), default=False)
+    """
+    global _redis_client
+    r = get_redis()
+    if r is None:
+        return default
+    try:
+        return operacion(r)
+    except Exception:
+        # Cliente muerto: lo tiramos para forzar reconexión en la próxima
+        # llamada. No relanzamos — una incidencia de Redis degrada defensas,
+        # pero jamás debe convertirse en una caída total de la API.
+        _redis_client = None
+        try:
+            import logging
+            logging.getLogger(__name__).warning(
+                'Redis no respondió; degradando esta operación al default (%r). '
+                'Mientras dure, se pierden: blacklist de jti, lockout escalado, '
+                'anti-replay de TOTP y consumo del stepToken.', default,
+            )
+        except Exception:
+            pass
+        return default
 
 def get_real_client_ip_flask() -> str:
     """

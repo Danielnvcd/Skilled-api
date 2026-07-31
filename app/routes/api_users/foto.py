@@ -8,7 +8,7 @@ from flask import current_app, jsonify, request
 from app.extensions import db, limiter
 from app.models import User
 from app.realtime import emit_to_role
-from app.routes._api_helpers import require_admin
+from app.routes._api_helpers import require_gestion_usuarios
 from app.routes.api_auth import jwt_required
 from app.utils import allowed_image_file, image_to_webp, log_action
 
@@ -23,7 +23,7 @@ def subir_foto(user_id):
     `foto_perfil` o `profile_pic`. Reusa la misma política que `/auth/profile`:
     valida que sea imagen real, genera filename único con uuid, borra la foto
     anterior si no es la default."""
-    err = require_admin('Solo admin puede administrar usuarios')
+    err = require_gestion_usuarios()
     if err:
         return err
 
@@ -62,7 +62,7 @@ def subir_foto(user_id):
     try:
         db.session.commit()
         log_action(f"Actualizó la foto del usuario '{user.username}'")
-        emit_to_role(['admin', 'super_admin'], 'usuario:changed', {
+        emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
             'id': user.id, 'action': 'foto',
         })
         return jsonify(_user_to_dict(user))

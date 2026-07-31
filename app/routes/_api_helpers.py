@@ -2,12 +2,21 @@
 
 Centraliza patrones que estaban duplicados en 10+ archivos:
 
-  current_user()        usuario autenticado actual (alias del legacy `_u()`)
-  is_admin()            True si rol ∈ {admin, super_admin}
-  is_super_admin()      True si rol == super_admin
-  require_admin()       devuelve (resp, code) si NO es admin; None si pasa
-  require_roles(*roles) idem pero para sets arbitrarios de roles
-  api_transactional     decorador: rollback + log + 500 ante excepciones no HTTP
+  current_user()             usuario autenticado actual (alias del legacy `_u()`)
+  is_admin()                 True si rol ∈ {admin, super_admin} → operación RRHH
+  is_super_admin()           True si rol == super_admin
+  is_sistemas()              True si rol == sistemas
+  puede_gestionar_sistema()  True si rol ∈ {sistemas, super_admin}
+  require_admin()            devuelve (resp, code) si NO es admin; None si pasa
+  require_roles(*roles)      idem pero para sets arbitrarios de roles
+  require_gestion_usuarios() gate de alta/baja de cuentas (rol `sistemas`)
+  require_panel_sistemas()   idem + exige 2FA activo (panel de sistemas)
+  api_transactional          decorador: rollback + log + 500 ante excepciones no HTTP
+
+Los dos ejes de permiso son deliberadamente independientes:
+  - `admin`/`super_admin` → datos del negocio (nómina, empleados, préstamos).
+  - `sistemas`/`super_admin` → el sistema (cuentas, sesiones, servidor).
+Solo `super_admin` cruza ambos, y existe como cuenta de recuperación.
 
 Todas asumen que el endpoint ya pasó por `@jwt_required` (de api_auth), que
 deja el User cargado en `flask.g._jwt_user`. Si se llaman sin JWT activo,
@@ -37,11 +46,76 @@ def current_user() -> User:
 
 
 def is_admin() -> bool:
+    """True si el rol da acceso a la operación de RRHH/nómina.
+
+    OJO — `sistemas` NO entra aquí a propósito. Ese rol administra el SISTEMA
+    (usuarios, sesiones, estado del servidor, eventos de seguridad), no los
+    datos de nómina: sueldos, préstamos, expedientes de empleados. Es la
+    separación clásica entre quien opera la infraestructura y quien puede leer
+    la información sensible del negocio.
+
+    Que un rol pueda crear cuentas no debe implicar que pueda leer los sueldos.
+    Si se quisiera lo contrario, el cambio es agregar 'sistemas' a esta tupla —
+    pero entonces una sola cuenta comprometida expone también toda la nómina.
+    """
     return current_user().role in ('admin', 'super_admin')
 
 
 def is_super_admin() -> bool:
     return current_user().role == 'super_admin'
+
+
+def is_sistemas() -> bool:
+    return current_user().role == 'sistemas'
+
+
+# Roles que administran el sistema: el rol dedicado `sistemas` y `super_admin`
+# como salida de emergencia (si la cuenta de sistemas queda bloqueada, sin esto
+# nadie podría crear usuarios ni destrabar nada).
+_ROLES_GESTION = ('sistemas', 'super_admin')
+
+
+def puede_gestionar_sistema() -> bool:
+    return current_user().role in _ROLES_GESTION
+
+
+def require_gestion_usuarios(message: str = 'Solo el rol sistemas puede administrar usuarios'):
+    """Gate para el alta/baja/edición de usuarios y el panel de sistemas.
+
+    Sustituye a `require_admin()` en `api_users`: la gestión de cuentas salió
+    de admin (que quedó para RRHH) y vive en el rol `sistemas`.
+    """
+    if not puede_gestionar_sistema():
+        return jsonify({'error': message}), 403
+    return None
+
+
+def require_panel_sistemas():
+    """Gate del panel de sistemas: rol correcto **y** 2FA activo.
+
+    Por qué el 2FA es obligatorio justo aquí y no en el resto de la app: este
+    rol puede crear cuentas y revocar sesiones, o sea que puede fabricarse un
+    acceso administrativo. Es el objetivo más valioso del sistema, así que una
+    contraseña filtrada no puede ser suficiente para entrar.
+
+    Se verifica en el ENDPOINT, no en el login: el usuario puede iniciar sesión
+    normalmente y el SPA lo manda a inscribir su TOTP con el flag
+    `requiere_2fa` que devolvemos aquí. Así nadie queda fuera de la aplicación
+    por no tener el segundo factor todavía — solo fuera del panel.
+    """
+    err = require_gestion_usuarios('Solo el rol sistemas puede entrar al panel')
+    if err:
+        return err
+    u = current_user()
+    if not u.totp_secret:
+        return jsonify({
+            'error': (
+                'Este panel requiere autenticación de dos factores. '
+                'Actívala en Mi Perfil para continuar.'
+            ),
+            'requiere_2fa': True,
+        }), 403
+    return None
 
 
 def require_admin(message: str = 'Acceso denegado'):

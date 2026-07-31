@@ -245,7 +245,10 @@ def list_categorias_h():
     return jsonify([_categoria_to_dict(c) for c in cats])
 
 
-@bp.route('/herramientas-categorias/<string:nombre>', methods=['PUT'])
+# `path` y no `string`: una categoría con barra en el nombre haría que la ruta
+# no coincidiera y Flask devolviera 404 desde el router. Mismo caso que en
+# inventario_api/catalogo.py — ver el comentario extenso allí.
+@bp.route('/herramientas-categorias/<path:nombre>', methods=['PUT'])
 @_require_inventario_admin
 def upsert_categoria_h(nombre: str):
     nombre = (nombre or '').strip()

@@ -1,19 +1,26 @@
 """Tests del API JWT `/api/users/*` — administración de usuarios.
 
+El actor de estos tests es el fixture `gestor`, con rol `sistemas`. La gestión
+de cuentas salió de `admin` (que quedó para RRHH) cuando se separaron los dos
+ejes de permiso. Que un admin de RRHH ya NO pueda entrar aquí se prueba en
+tests/test_api_sistemas.py::TestGestionUsuariosMovida.
+
 Cobertura:
-  - GET    /                       listar (orden: super_admin > admin > coord …)
-  - POST   /                       crear (admin)
+  - GET    /                       listar (orden: super_admin > sistemas > coord …)
+  - POST   /                       crear (gestor)
   - PUT    /<id>                   actualizar perfil + trabajador_id link
   - DELETE /<id>                   eliminar (con candados)
   - DELETE /<id>/sessions          forzar logout (revoca RTs + ++password_version)
-  - POST   /<id>/password          reset de contraseña por admin
+  - POST   /<id>/password          reset de contraseña por gestor
 
 Reglas no obvias que cubrimos:
-  - Solo admin/super_admin entran (`require_admin`).
+  - Solo sistemas/super_admin entran (`require_gestion_usuarios`).
   - Usuario literal "admin" NO puede ser eliminado ni que un tercero le
     cambie la contraseña.
-  - Un admin NO puede eliminar/revocar-sesiones/resetear-password de OTRO
-    admin: eso es privilegio de super_admin (anti-escalación lateral).
+  - `sistemas` SÍ puede revocar sesiones y resetear la contraseña de un admin
+    (contener una cuenta comprometida es para lo que existe el rol), pero NO
+    puede tocar una cuenta `super_admin` ni crear una: esa es la última línea
+    de recuperación y debe quedar alguien por encima.
   - Auto-DELETE bloqueado (no puedes eliminar tu propia cuenta).
   - Liga `trabajador_id` es 1:1: si otro user ya está ligado al mismo
     Trabajador → 409.
@@ -40,9 +47,16 @@ def _hdr(user):
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def admin(db):
-    u = User(username='usr_admin', password_hash=generate_password_hash('Pass123!'),
-              role='admin', password_version=1)
+def gestor(db):
+    """El actor que administra cuentas.
+
+    Era `admin` hasta que los dos ejes de permiso se separaron: `admin` quedó
+    para RRHH (nómina, empleados) y la gestión de cuentas se movió al rol
+    `sistemas`. Que un admin de RRHH YA NO pueda entrar aquí se prueba en
+    tests/test_api_sistemas.py::TestGestionUsuariosMovida.
+    """
+    u = User(username='usr_sistemas', password_hash=generate_password_hash('Pass123!'),
+             role='sistemas', password_version=1)
     db.session.add(u); db.session.commit()
     return u
 
@@ -58,7 +72,7 @@ def super_admin(db):
 @pytest.fixture
 def admin_literal(db):
     """Usuario cuyo username es exactamente "admin" — protegido contra
-    eliminación y reset de contraseña por terceros."""
+    eliminación y reset de contraseña por terceros, sea cual sea su rol."""
     u = User(username='admin', password_hash=generate_password_hash('Pass123!'),
               role='admin', password_version=1)
     db.session.add(u); db.session.commit()
@@ -104,8 +118,8 @@ class TestAuth:
         r = client.get('/api/users', headers=_hdr(coord))
         assert r.status_code == 403
 
-    def test_admin_200(self, client, admin):
-        r = client.get('/api/users', headers=_hdr(admin))
+    def test_admin_200(self, client, gestor):
+        r = client.get('/api/users', headers=_hdr(gestor))
         assert r.status_code == 200
 
 
@@ -115,7 +129,7 @@ class TestAuth:
 
 class TestListar:
 
-    def test_listar_orden_por_rol(self, client, admin, super_admin, coord):
+    def test_listar_orden_por_rol(self, client, gestor, super_admin, coord):
         # Crear también un usuario con rol inventario para validar orden completo
         from werkzeug.security import generate_password_hash as gph
         from app.extensions import db as _db
@@ -123,16 +137,17 @@ class TestListar:
                    role='inventario', password_version=1)
         _db.session.add(inv); _db.session.commit()
 
-        r = client.get('/api/users', headers=_hdr(admin))
+        r = client.get('/api/users', headers=_hdr(gestor))
         assert r.status_code == 200
         roles = [u['role'] for u in r.get_json()]
-        # super_admin antes que admin, admin antes que coordinador,
-        # coordinador antes que inventario
+        # Orden por privilegio: super_admin > sistemas > coordinador > inventario.
+        # `sistemas` se insertó justo debajo de super_admin porque administra
+        # las cuentas de todos los demás.
         idx_super = roles.index('super_admin')
-        idx_admin = roles.index('admin')
+        idx_sistemas = roles.index('sistemas')
         idx_coord = roles.index('coordinador')
         idx_inv = roles.index('inventario')
-        assert idx_super < idx_admin < idx_coord < idx_inv
+        assert idx_super < idx_sistemas < idx_coord < idx_inv
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -141,8 +156,8 @@ class TestListar:
 
 class TestCrear:
 
-    def test_admin_crea_usuario(self, client, admin, db):
-        r = client.post('/api/users', headers=_hdr(admin), json={
+    def test_admin_crea_usuario(self, client, gestor, db):
+        r = client.post('/api/users', headers=_hdr(gestor), json={
             'username': 'nuevo_coord',
             'password': 'StrongPass1!',
             'role': 'coordinador',
@@ -161,35 +176,41 @@ class TestCrear:
         })
         assert r.status_code == 403
 
-    def test_campos_faltantes_400(self, client, admin):
-        r = client.post('/api/users', headers=_hdr(admin), json={
+    def test_campos_faltantes_400(self, client, gestor):
+        r = client.post('/api/users', headers=_hdr(gestor), json={
             'username': 'incompleto',
         })
         assert r.status_code == 400
 
-    def test_rol_no_valido_400(self, client, admin):
-        r = client.post('/api/users', headers=_hdr(admin), json={
+    def test_rol_no_valido_400(self, client, gestor):
+        r = client.post('/api/users', headers=_hdr(gestor), json={
             'username': 'x', 'password': 'StrongPass1!', 'role': 'hacker',
         })
         assert r.status_code == 400
 
-    def test_no_se_puede_crear_super_admin_400(self, client, admin):
-        # super_admin no está en _VALID_NEW_ROLES — solo se crea por seeding
-        r = client.post('/api/users', headers=_hdr(admin), json={
-            'username': 'pretender', 'password': 'StrongPass1!',
+    def test_no_se_puede_crear_super_admin_403(self, client, gestor):
+        """super_admin es la cuenta de recuperación: no se crea desde la API.
+
+        Si `sistemas` pudiera fabricarse una, no quedaría ningún control por
+        encima suyo. Responde 403 (no 400) porque no es un dato mal formado
+        sino una operación prohibida para este rol.
+        """
+        r = client.post('/api/users', headers=_hdr(gestor), json={
+            'username': 'pretender', 'password': 'StrongPass1234!',
             'role': 'super_admin',
         })
-        assert r.status_code == 400
+        assert r.status_code == 403
+        assert User.query.filter_by(username='pretender').first() is None
 
-    def test_username_duplicado_409(self, client, admin):
-        r = client.post('/api/users', headers=_hdr(admin), json={
-            'username': admin.username,
+    def test_username_duplicado_409(self, client, gestor):
+        r = client.post('/api/users', headers=_hdr(gestor), json={
+            'username': gestor.username,
             'password': 'StrongPass1!', 'role': 'coordinador',
         })
         assert r.status_code == 409
 
-    def test_password_debil_400(self, client, admin):
-        r = client.post('/api/users', headers=_hdr(admin), json={
+    def test_password_debil_400(self, client, gestor):
+        r = client.post('/api/users', headers=_hdr(gestor), json={
             'username': 'tester', 'password': '12345',  # sin mayúsculas, etc.
             'role': 'coordinador',
         })
@@ -202,8 +223,8 @@ class TestCrear:
 
 class TestActualizar:
 
-    def test_actualizar_perfil(self, client, admin, coord, db):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_actualizar_perfil(self, client, gestor, coord, db):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'full_name': 'Carmen Coordinadora',
             'area': 'Construcción',
             'position': 'Coordinadora',
@@ -215,14 +236,14 @@ class TestActualizar:
         assert coord.full_name == 'Carmen Coordinadora'
         assert coord.area == 'Construcción'
 
-    def test_actualizar_inexistente_404(self, client, admin):
-        r = client.put('/api/users/99999', headers=_hdr(admin), json={'full_name': 'X'})
+    def test_actualizar_inexistente_404(self, client, gestor):
+        r = client.put('/api/users/99999', headers=_hdr(gestor), json={'full_name': 'X'})
         assert r.status_code == 404
 
-    def test_role_no_se_puede_cambiar_via_put(self, client, admin, coord, db):
+    def test_role_no_se_puede_cambiar_via_put(self, client, gestor, coord, db):
         # El PUT acepta el payload pero ignora `role` silenciosamente
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
-            'role': 'admin',  # ← intento de escalación
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
+            'role': 'gestor',  # ← intento de escalación
             'full_name': 'Sigue coord',
         })
         assert r.status_code == 200
@@ -230,8 +251,8 @@ class TestActualizar:
         assert coord.role == 'coordinador'  # no cambió
         assert coord.full_name == 'Sigue coord'  # los otros campos sí
 
-    def test_link_trabajador_ok(self, client, admin, coord, trab, db):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_link_trabajador_ok(self, client, gestor, coord, trab, db):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': trab.id,
         })
         assert r.status_code == 200
@@ -239,33 +260,33 @@ class TestActualizar:
         assert body['trabajador_id'] == trab.id
         assert body['trabajador_no_empleado'] == 'EMP-U1'
 
-    def test_desvincula_trabajador_con_null(self, client, admin, coord, trab, db):
+    def test_desvincula_trabajador_con_null(self, client, gestor, coord, trab, db):
         coord.trabajador_id = trab.id
         db.session.commit()
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': None,
         })
         assert r.status_code == 200
         assert r.get_json()['trabajador_id'] is None
 
-    def test_link_trabajador_inexistente_404(self, client, admin, coord):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_link_trabajador_inexistente_404(self, client, gestor, coord):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': 99999,
         })
         assert r.status_code == 404
 
-    def test_link_trabajador_no_numerico_400(self, client, admin, coord):
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+    def test_link_trabajador_no_numerico_400(self, client, gestor, coord):
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': 'abc',
         })
         assert r.status_code == 400
 
     def test_link_trabajador_ya_ligado_a_otro_user_409(
-        self, client, admin, coord, otro_admin, trab, db,
+        self, client, gestor, coord, otro_admin, trab, db,
     ):
         otro_admin.trabajador_id = trab.id
         db.session.commit()
-        r = client.put(f'/api/users/{coord.id}', headers=_hdr(admin), json={
+        r = client.put(f'/api/users/{coord.id}', headers=_hdr(gestor), json={
             'trabajador_id': trab.id,
         })
         assert r.status_code == 409
@@ -277,8 +298,8 @@ class TestActualizar:
 
 class TestEliminar:
 
-    def test_eliminar_usuario_coord(self, client, admin, coord, db):
-        r = client.delete(f'/api/users/{coord.id}', headers=_hdr(admin))
+    def test_eliminar_usuario_coord(self, client, gestor, coord, db):
+        r = client.delete(f'/api/users/{coord.id}', headers=_hdr(gestor))
         assert r.status_code == 200
         assert r.get_json()['ok'] is True
         # Borrado lógico: el usuario NO se borra físicamente (tiene FKs en otras
@@ -287,21 +308,21 @@ class TestEliminar:
         assert eliminado is not None
         assert eliminado.activo is False
 
-    def test_no_eliminar_propia_cuenta_400(self, client, admin):
-        r = client.delete(f'/api/users/{admin.id}', headers=_hdr(admin))
+    def test_no_eliminar_propia_cuenta_400(self, client, gestor):
+        r = client.delete(f'/api/users/{gestor.id}', headers=_hdr(gestor))
         assert r.status_code == 400
-        assert User.query.get(admin.id) is not None
+        assert User.query.get(gestor.id) is not None
 
     def test_no_eliminar_usuario_admin_literal_400(
-        self, client, admin, admin_literal,
+        self, client, gestor, admin_literal,
     ):
-        r = client.delete(f'/api/users/{admin_literal.id}', headers=_hdr(admin))
+        r = client.delete(f'/api/users/{admin_literal.id}', headers=_hdr(gestor))
         assert r.status_code == 400
 
     def test_admin_no_puede_eliminar_super_admin_403(
-        self, client, admin, super_admin,
+        self, client, gestor, super_admin,
     ):
-        r = client.delete(f'/api/users/{super_admin.id}', headers=_hdr(admin))
+        r = client.delete(f'/api/users/{super_admin.id}', headers=_hdr(gestor))
         assert r.status_code == 403
 
     def test_super_admin_si_puede_eliminar_super_admin(
@@ -317,8 +338,8 @@ class TestEliminar:
         assert desactivado is not None
         assert desactivado.activo is False
 
-    def test_eliminar_inexistente_404(self, client, admin):
-        r = client.delete('/api/users/99999', headers=_hdr(admin))
+    def test_eliminar_inexistente_404(self, client, gestor):
+        r = client.delete('/api/users/99999', headers=_hdr(gestor))
         assert r.status_code == 404
 
 
@@ -328,23 +349,23 @@ class TestEliminar:
 
 class TestReactivar:
 
-    def test_reactivar_usuario_desactivado(self, client, admin, coord, db):
+    def test_reactivar_usuario_desactivado(self, client, gestor, coord, db):
         # Primero desactivar
-        r = client.delete(f'/api/users/{coord.id}', headers=_hdr(admin))
+        r = client.delete(f'/api/users/{coord.id}', headers=_hdr(gestor))
         assert r.status_code == 200
         assert User.query.get(coord.id).activo is False
         # Luego reactivar
-        r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(admin))
+        r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(gestor))
         assert r.status_code == 200
         assert r.get_json()['activo'] is True
         assert User.query.get(coord.id).activo is True
 
-    def test_reactivar_cuenta_ya_activa_400(self, client, admin, coord):
-        r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(admin))
+    def test_reactivar_cuenta_ya_activa_400(self, client, gestor, coord):
+        r = client.post(f'/api/users/{coord.id}/reactivar', headers=_hdr(gestor))
         assert r.status_code == 400
 
     def test_reactivar_requiere_admin_403(self, client, coord, db):
-        # Un coordinador (no admin) no puede reactivar cuentas: require_admin → 403.
+        # Un coordinador (no gestor) no puede reactivar cuentas: require_admin → 403.
         inactivo = User(username='coord2', password_hash=generate_password_hash('Pass123!'),
                         role='coordinador', password_version=1, activo=False)
         db.session.add(inactivo); db.session.commit()
@@ -373,10 +394,10 @@ class TestRevocarSesiones:
         db.session.add(t); db.session.commit()
         return t
 
-    def test_revocar_sesiones_de_coord(self, client, admin, coord, db):
+    def test_revocar_sesiones_de_coord(self, client, gestor, coord, db):
         self._rt(db, coord); self._rt(db, coord)
         pv_antes = coord.password_version
-        r = client.delete(f'/api/users/{coord.id}/sessions', headers=_hdr(admin))
+        r = client.delete(f'/api/users/{coord.id}/sessions', headers=_hdr(gestor))
         assert r.status_code == 200
         body = r.get_json()
         assert body['ok'] is True
@@ -388,37 +409,56 @@ class TestRevocarSesiones:
         activos = RefreshToken.query.filter_by(user_id=coord.id, revoked=False).count()
         assert activos == 0
 
-    def test_admin_no_puede_revocar_sesiones_de_otro_admin_403(
-        self, client, admin, otro_admin,
+    def test_sistemas_si_puede_revocar_sesiones_de_un_admin(
+        self, client, gestor, otro_admin,
     ):
+        """Cambio de contrato respecto al modelo anterior.
+
+        Antes un admin no podía tocar a otro admin (anti-escalación lateral
+        entre pares). Ahora quien administra cuentas es `sistemas`, un rol
+        distinto, y poder desconectar a un admin comprometido es justamente
+        para lo que existe: si esto siguiera bloqueado, un incidente con la
+        cuenta de RRHH se quedaría sin quién lo contenga.
+
+        Lo que SÍ sigue protegido es `super_admin` — ver el test de abajo.
+        """
         r = client.delete(
             f'/api/users/{otro_admin.id}/sessions',
-            headers=_hdr(admin),
+            headers=_hdr(gestor),
+        )
+        assert r.status_code == 200, r.get_json()
+
+    def test_sistemas_no_puede_revocar_sesiones_de_super_admin_403(
+        self, client, gestor, super_admin,
+    ):
+        r = client.delete(
+            f'/api/users/{super_admin.id}/sessions',
+            headers=_hdr(gestor),
         )
         assert r.status_code == 403
 
     def test_super_admin_si_puede_revocar_sesiones_de_admin(
-        self, client, super_admin, admin, db,
+        self, client, super_admin, gestor, db,
     ):
-        self._rt(db, admin)
+        self._rt(db, gestor)
         r = client.delete(
-            f'/api/users/{admin.id}/sessions',
+            f'/api/users/{gestor.id}/sessions',
             headers=_hdr(super_admin),
         )
         assert r.status_code == 200
 
     def test_admin_puede_revocar_sus_propias_sesiones(
-        self, client, admin, db,
+        self, client, gestor, db,
     ):
-        self._rt(db, admin)
+        self._rt(db, gestor)
         r = client.delete(
-            f'/api/users/{admin.id}/sessions',
-            headers=_hdr(admin),
+            f'/api/users/{gestor.id}/sessions',
+            headers=_hdr(gestor),
         )
         assert r.status_code == 200
 
-    def test_revocar_inexistente_404(self, client, admin):
-        r = client.delete('/api/users/99999/sessions', headers=_hdr(admin))
+    def test_revocar_inexistente_404(self, client, gestor):
+        r = client.delete('/api/users/99999/sessions', headers=_hdr(gestor))
         assert r.status_code == 404
 
 
@@ -428,77 +468,94 @@ class TestRevocarSesiones:
 
 class TestCambiarPassword:
 
-    def test_admin_resetea_password_de_coord(self, client, admin, coord, db):
+    def test_admin_resetea_password_de_coord(self, client, gestor, coord, db):
         pv_antes = coord.password_version
-        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(admin), json={
-            'new_password': 'NuevaPass1!',
+        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(gestor), json={
+            'new_password': 'NuevaPass123!',
         })
         assert r.status_code == 200
         db.session.refresh(coord)
-        assert check_password_hash(coord.password_hash, 'NuevaPass1!')
+        assert check_password_hash(coord.password_hash, 'NuevaPass123!')
         # password_version incrementa → invalida JWT vivos
         assert coord.password_version == pv_antes + 1
 
-    def test_acepta_alias_newPassword_camelCase(self, client, admin, coord, db):
-        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(admin), json={
-            'newPassword': 'OtraPass1!',
+    def test_acepta_alias_newPassword_camelCase(self, client, gestor, coord, db):
+        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(gestor), json={
+            'newPassword': 'OtraPass1234!',
         })
         assert r.status_code == 200
         db.session.refresh(coord)
-        assert check_password_hash(coord.password_hash, 'OtraPass1!')
+        assert check_password_hash(coord.password_hash, 'OtraPass1234!')
 
-    def test_password_vacia_400(self, client, admin, coord):
-        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(admin), json={
+    def test_password_vacia_400(self, client, gestor, coord):
+        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(gestor), json={
             'new_password': '',
         })
         assert r.status_code == 400
 
-    def test_password_debil_400(self, client, admin, coord):
-        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(admin), json={
+    def test_password_debil_400(self, client, gestor, coord):
+        r = client.post(f'/api/users/{coord.id}/password', headers=_hdr(gestor), json={
             'new_password': 'abc',
         })
         assert r.status_code == 400
 
     def test_admin_no_puede_resetear_password_de_admin_literal_403(
-        self, client, admin, admin_literal,
+        self, client, gestor, admin_literal,
     ):
         r = client.post(
             f'/api/users/{admin_literal.id}/password',
-            headers=_hdr(admin),
+            headers=_hdr(gestor),
             json={'new_password': 'StrongPass1!'},
         )
         assert r.status_code == 403
 
-    def test_admin_no_puede_resetear_password_de_otro_admin_403(
-        self, client, admin, otro_admin,
+    def test_sistemas_si_puede_resetear_password_de_un_admin(
+        self, client, gestor, otro_admin,
     ):
+        """Igual que con las sesiones: resetear la contraseña de un usuario es
+        la operación de soporte más común y ahora le corresponde a `sistemas`.
+
+        No es una vía de escalación: el reseteo NO borra el `totp_secret` del
+        usuario (ver el comentario en api_users/seguridad.py), así que no
+        alcanza para entrar a una cuenta ajena que tenga 2FA.
+        """
         r = client.post(
             f'/api/users/{otro_admin.id}/password',
-            headers=_hdr(admin),
-            json={'new_password': 'StrongPass1!'},
+            headers=_hdr(gestor),
+            json={'new_password': 'StrongPass1234!'},
+        )
+        assert r.status_code == 200, r.get_json()
+
+    def test_sistemas_no_puede_resetear_password_de_super_admin_403(
+        self, client, gestor, super_admin,
+    ):
+        r = client.post(
+            f'/api/users/{super_admin.id}/password',
+            headers=_hdr(gestor),
+            json={'new_password': 'StrongPass1234!'},
         )
         assert r.status_code == 403
 
     def test_super_admin_si_puede_resetear_password_de_admin(
-        self, client, super_admin, admin,
+        self, client, super_admin, gestor,
     ):
         r = client.post(
-            f'/api/users/{admin.id}/password',
+            f'/api/users/{gestor.id}/password',
             headers=_hdr(super_admin),
             json={'new_password': 'StrongPass1!'},
         )
         assert r.status_code == 200
 
-    def test_admin_puede_cambiar_su_propia_password(self, client, admin):
+    def test_admin_puede_cambiar_su_propia_password(self, client, gestor):
         r = client.post(
-            f'/api/users/{admin.id}/password',
-            headers=_hdr(admin),
-            json={'new_password': 'MiNueva1!'},
+            f'/api/users/{gestor.id}/password',
+            headers=_hdr(gestor),
+            json={'new_password': 'MiNuevaPass1!'},
         )
         assert r.status_code == 200
 
-    def test_password_de_inexistente_404(self, client, admin):
-        r = client.post('/api/users/99999/password', headers=_hdr(admin), json={
+    def test_password_de_inexistente_404(self, client, gestor):
+        r = client.post('/api/users/99999/password', headers=_hdr(gestor), json={
             'new_password': 'StrongPass1!',
         })
         assert r.status_code == 404
