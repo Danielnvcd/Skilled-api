@@ -4,13 +4,13 @@ Registra:
   /asignaciones-herramienta/                       POST, GET
   /asignaciones-herramienta/<int:aid>/devolver     PATCH
 """
-import datetime
 
 from flask import jsonify, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.realtime import emit_to_role
+from app.models._base import _now_utc
 from app.models import (
     Trabajador,
     HerramientaUnidad, AsignacionHerramienta,
@@ -68,7 +68,7 @@ def crear_asignacion():
         trabajador_id=trab.id,
         solicitud_id=data.get('solicitud_id'),
         proyecto=data.get('proyecto'),
-        fecha_entrega=datetime.datetime.utcnow(),
+        fecha_entrega=_now_utc(),
         fecha_devolucion_prevista=data.get('fecha_devolucion_prevista'),
         estado='ACTIVA',
         condicion_entrega=data.get('condicion_entrega', 'BUENA'),
@@ -157,7 +157,7 @@ def devolver_asignacion(aid: int):
     nuevo_estado = data['nuevo_estado_unidad']
 
     asig.estado = 'DEVUELTA'
-    asig.fecha_devolucion_real = datetime.datetime.utcnow()
+    asig.fecha_devolucion_real = _now_utc()
     asig.condicion_devolucion = data['condicion_devolucion']
     asig.observaciones_devolucion = data.get('observaciones_devolucion')
     asig.recibido_por_id = user.id

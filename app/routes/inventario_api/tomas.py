@@ -3,12 +3,12 @@
 Snapshot de stock por almacén → captura física → cierre que genera AJUSTEs
 automáticos contra `_perform_movimiento`. PDF de acta para firmar.
 """
-import datetime
 from decimal import Decimal
 
 from flask import jsonify, request, send_file
 
 from app.extensions import db
+from app.models._base import _now_utc
 from app.models import (
     Almacen, Producto, StockPorAlmacen,
     TomaInventario, TomaInventarioDetalle, ESTADOS_TOMA,
@@ -178,7 +178,7 @@ def patch_toma_detalle(toma_id: int, det_id: int):
             return jsonify({'detail': 'cantidad_fisica no puede ser negativa'}), 422
         det.cantidad_fisica = cant
         det.capturado_por_id = request.current_user.id
-        det.capturado_en = datetime.datetime.utcnow()
+        det.capturado_en = _now_utc()
 
     db.session.commit()
     db.session.refresh(det)
@@ -223,7 +223,7 @@ def patch_toma_detalle_por_codigo(toma_id: int):
 
     det.cantidad_fisica = cant
     det.capturado_por_id = request.current_user.id
-    det.capturado_en = datetime.datetime.utcnow()
+    det.capturado_en = _now_utc()
     db.session.commit()
     db.session.refresh(det)
     emit_to_role(_INV_ROLES, 'toma:changed', {
@@ -322,7 +322,7 @@ def cerrar_toma(toma_id: int):
         }), 409
 
     t.estatus = 'CERRADA'
-    t.fecha_cierre = datetime.datetime.utcnow()
+    t.fecha_cierre = _now_utc()
     t.cerrada_por_id = user.id
     _audit(user, f"Toma #{t.id} cerrada — {ajustes_creados} ajustes generados")
     db.session.commit()  # único commit: los N ajustes + el cierre, atómicos
@@ -344,7 +344,7 @@ def cancelar_toma(toma_id: int):
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma ya está {t.estatus.lower()}'}), 409
     t.estatus = 'CANCELADA'
-    t.fecha_cierre = datetime.datetime.utcnow()
+    t.fecha_cierre = _now_utc()
     t.cerrada_por_id = request.current_user.id
     _audit(request.current_user, f"Toma #{t.id} cancelada")
     db.session.commit()

@@ -4,13 +4,13 @@ Registra:
   /mantenimientos-herramienta/                       POST, GET
   /mantenimientos-herramienta/<int:mid>/cerrar       PATCH
 """
-import datetime
 from decimal import Decimal
 
 from flask import jsonify, request
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.realtime import emit_to_role
+from app.models._base import _now_utc
 from app.models import (
     HerramientaUnidad, MantenimientoHerramienta,
     ESTADOS_MANTENIMIENTO,
@@ -51,7 +51,7 @@ def crear_mantenimiento():
     asig_activa = next((a for a in unidad.asignaciones if a.estado == 'ACTIVA'), None)
     if asig_activa:
         asig_activa.estado = 'VENCIDA'
-        asig_activa.fecha_devolucion_real = datetime.datetime.utcnow()
+        asig_activa.fecha_devolucion_real = _now_utc()
         asig_activa.observaciones_devolucion = '(Cerrada automáticamente por envío a mantenimiento)'
         asig_activa.recibido_por_id = user.id
 
@@ -60,7 +60,7 @@ def crear_mantenimiento():
         tipo=data['tipo'],
         motivo=data['motivo'],
         proveedor=data.get('proveedor'),
-        fecha_inicio=datetime.datetime.utcnow(),
+        fecha_inicio=_now_utc(),
         costo=Decimal(str(data['costo'])) if data.get('costo') is not None else None,
         observaciones=data.get('observaciones'),
         estado='ABIERTO',
@@ -141,7 +141,7 @@ def cerrar_mantenimiento(mid: int):
     nuevo_estado = data['estado_final_unidad']
 
     mant.estado = 'CERRADO'
-    mant.fecha_fin = datetime.datetime.utcnow()
+    mant.fecha_fin = _now_utc()
     mant.cerrado_por_id = user.id
     mant.estado_final_unidad = nuevo_estado
     if data.get('costo_real') is not None:
@@ -151,7 +151,7 @@ def cerrar_mantenimiento(mid: int):
 
     unidad.estado = nuevo_estado
     if nuevo_estado == 'DADA_DE_BAJA':
-        unidad.fecha_baja = datetime.datetime.utcnow()
+        unidad.fecha_baja = _now_utc()
         unidad.motivo_baja = f"Mantenimiento #{mid}: irrecuperable"
 
     crear_evento_herramienta(

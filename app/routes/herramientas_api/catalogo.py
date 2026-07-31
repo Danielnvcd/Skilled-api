@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.realtime import emit_to_role
+from app.models._base import _now_utc
 from app.models import (
     Herramienta, HerramientaUnidad, HerramientaCategoria,
     AsignacionHerramienta, IncidenciaHerramienta, SolicitudBajaHerramienta,
@@ -297,7 +298,7 @@ def stats_herramientas():
     solicitudes_baja_pend = SolicitudBajaHerramienta.query.filter(
         SolicitudBajaHerramienta.estado == 'PENDIENTE'
     ).count()
-    ahora = datetime.datetime.utcnow()
+    ahora = _now_utc()
     en_3_dias = ahora + datetime.timedelta(days=3)
     proximas_devolver = (
         AsignacionHerramienta.query

@@ -7,13 +7,13 @@ Registra:
   /solicitudes-baja-herramienta/<int:sid>/ejecutar     POST
   /herramientas-unidades/<int:uid>/dar-baja            POST   (atajo admin)
 """
-import datetime
 
 from flask import jsonify, request
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.realtime import emit_to_role
+from app.models._base import _now_utc
 from app.models import (
     HerramientaUnidad, SolicitudBajaHerramienta,
     ESTADOS_SOLICITUD_BAJA,
@@ -69,7 +69,7 @@ def crear_solicitud_baja():
         solicitante_id=user.id,
         motivo=data['motivo'],
         estado='PENDIENTE',
-        fecha_solicitud=datetime.datetime.utcnow(),
+        fecha_solicitud=_now_utc(),
     )
     db.session.add(sol)
     db.session.flush()
@@ -127,7 +127,7 @@ def autorizar_baja(sid: int):
     user = request.current_user
     sol.estado = 'APROBADA'
     sol.autorizado_por_id = user.id
-    sol.fecha_autorizacion = datetime.datetime.utcnow()
+    sol.fecha_autorizacion = _now_utc()
     if data.get('observaciones'):
         sol.observaciones = data['observaciones']
     unidad = HerramientaUnidad.query.filter(HerramientaUnidad.id == sol.unidad_id).first()
@@ -161,7 +161,7 @@ def rechazar_baja(sid: int):
     user = request.current_user
     sol.estado = 'RECHAZADA'
     sol.autorizado_por_id = user.id
-    sol.fecha_autorizacion = datetime.datetime.utcnow()
+    sol.fecha_autorizacion = _now_utc()
     if data.get('observaciones'):
         sol.observaciones = data['observaciones']
     unidad = HerramientaUnidad.query.filter(HerramientaUnidad.id == sol.unidad_id).first()
@@ -201,7 +201,7 @@ def ejecutar_baja(sid: int):
     user = request.current_user
     estado_anterior = unidad.estado
     unidad.estado = 'DADA_DE_BAJA'
-    unidad.fecha_baja = datetime.datetime.utcnow()
+    unidad.fecha_baja = _now_utc()
     unidad.motivo_baja = (sol.motivo or '')[:250]
     unidad.asignado_trabajador_id = None
 
@@ -209,13 +209,13 @@ def ejecutar_baja(sid: int):
     asig = next((a for a in unidad.asignaciones if a.estado == 'ACTIVA'), None)
     if asig:
         asig.estado = 'VENCIDA'
-        asig.fecha_devolucion_real = datetime.datetime.utcnow()
+        asig.fecha_devolucion_real = _now_utc()
         asig.observaciones_devolucion = '(Cerrada automáticamente por baja)'
         asig.recibido_por_id = user.id
 
     sol.estado = 'EJECUTADA'
     sol.ejecutado_por_id = user.id
-    sol.fecha_ejecucion = datetime.datetime.utcnow()
+    sol.fecha_ejecucion = _now_utc()
 
     crear_evento_herramienta(
         unidad, 'BAJA_EJECUTADA', user,
@@ -265,9 +265,9 @@ def baja_directa(uid: int):
         estado='EJECUTADA',
         autorizado_por_id=user.id,
         ejecutado_por_id=user.id,
-        fecha_solicitud=datetime.datetime.utcnow(),
-        fecha_autorizacion=datetime.datetime.utcnow(),
-        fecha_ejecucion=datetime.datetime.utcnow(),
+        fecha_solicitud=_now_utc(),
+        fecha_autorizacion=_now_utc(),
+        fecha_ejecucion=_now_utc(),
         observaciones='Baja directa por inventario/admin',
     )
     db.session.add(sol)
@@ -275,7 +275,7 @@ def baja_directa(uid: int):
 
     estado_anterior = unidad.estado
     unidad.estado = 'DADA_DE_BAJA'
-    unidad.fecha_baja = datetime.datetime.utcnow()
+    unidad.fecha_baja = _now_utc()
     unidad.motivo_baja = motivo[:250]
     unidad.asignado_trabajador_id = None
 

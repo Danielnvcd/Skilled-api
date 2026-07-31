@@ -7,6 +7,7 @@ from flask import jsonify, request
 from sqlalchemy.orm import selectinload
 
 from app.extensions import db, limiter, get_real_client_ip_flask
+from app.models._base import _now_utc
 from app.models import (
     AsignacionHerramienta, Herramienta, HerramientaUnidad, MovimientoInventario,
     Producto, SolicitudMaterial, SolicitudMaterialDetalle, Trabajador,
@@ -273,7 +274,7 @@ def _aplicar_entregas_herramienta(lineas: list[_LineaAEntregar], sol: SolicitudM
                 trabajador_id=trabajador.id,
                 solicitud_id=sol.id,
                 proyecto=(sol.proyecto or None),
-                fecha_entrega=datetime.datetime.utcnow(),
+                fecha_entrega=_now_utc(),
                 fecha_devolucion_prevista=fecha_devolucion,
                 estado='ACTIVA',
                 condicion_entrega='BUENA',
