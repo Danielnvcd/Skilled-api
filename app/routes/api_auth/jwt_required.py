@@ -39,7 +39,7 @@ def jwt_required(fn):
         except (TypeError, ValueError, KeyError):
             return jsonify({'error': 'Token inválido'}), 401
 
-        user = User.query.get(uid)
+        user = db.session.get(User, uid)
         if not user:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         # Invalidar JWT si la contraseña cambió desde que se emitió.

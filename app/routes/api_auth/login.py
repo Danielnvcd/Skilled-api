@@ -204,7 +204,7 @@ def api_verify_2fa():
             'error': f'Demasiados intentos 2FA fallidos. Intenta de nuevo en {_format_ttl(lock_ttl)}.',
         }), 423
 
-    user = User.query.get(uid)
+    user = db.session.get(User, uid)
     if not user or not user.totp_secret:
         return jsonify({'error': 'Sesión inválida. Inicia sesión de nuevo.'}), 401
 
@@ -426,7 +426,7 @@ def api_refresh():
     # RT, se trata como race (pestaña vecina) y NO como replay malicioso.
     _mark_rt_just_rotated(tok.id)
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if user is None:
         resp = jsonify({'error': 'Usuario no encontrado'})
         _clear_rt_cookie(resp)
@@ -499,7 +499,7 @@ def api_logout():
                 db.session.rollback()
         if tok:
             session_closed = True
-            user = User.query.get(tok.user_id)
+            user = db.session.get(User, tok.user_id)
             if user:
                 g._jwt_user = user
 

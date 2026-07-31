@@ -11,6 +11,7 @@ from app.routes._api_helpers import require_admin
 from app.routes.api_auth import jwt_required
 
 from ._core import IP_GEO_CACHE, _log_to_dict, bp
+from app.extensions import db
 
 
 @bp.route('', methods=['GET'])
@@ -77,7 +78,7 @@ def detalle(log_id: int):
     if err:
         return err
 
-    log = AuditLog.query.get(log_id)
+    log = db.session.get(AuditLog, log_id)
     if not log:
         return jsonify({'error': 'Registro no encontrado'}), 404
 

@@ -167,7 +167,7 @@ def bloqueos():
             uid = int(crudo)
         except (TypeError, ValueError):
             continue
-        u = User.query.get(uid)
+        u = db.session.get(User, uid)
         salida.append({
             'tipo': '2fa',
             'identificador': str(uid),
@@ -227,7 +227,7 @@ def liberar_bloqueo(tipo: str, identificador: str):
             f'twofa_fails:{uid}',
             f'twofa_lockout_level:{uid}',
         ]
-        u = User.query.get(uid)
+        u = db.session.get(User, uid)
         etiqueta = u.username if u else f'#{uid}'
     else:
         return jsonify({'error': 'Tipo de bloqueo no válido'}), 400

@@ -48,7 +48,7 @@ def agregar_descuento(periodo_id):
     if denied:
         return denied
 
-    periodo = AjustePeriodo.query.get_or_404(periodo_id)
+    periodo = db.get_or_404(AjustePeriodo, periodo_id)
     if periodo.estado != 'ABIERTO':
         return jsonify({'error': 'Este periodo ya está cerrado'}), 400
 
@@ -116,7 +116,7 @@ def eliminar_descuento(descuento_id):
     if denied:
         return denied
 
-    desc = AjusteDescuento.query.get_or_404(descuento_id)
+    desc = db.get_or_404(AjusteDescuento, descuento_id)
     if desc.periodo.estado != 'ABIERTO':
         return jsonify({'error': 'No se pueden eliminar descuentos de un periodo cerrado'}), 400
     if getattr(desc, 'cobrado', False):

@@ -88,7 +88,7 @@ def create_toma():
 
     if not almacen_id:
         return jsonify({'detail': 'almacen_id es requerido'}), 422
-    alm = Almacen.query.get(almacen_id)
+    alm = db.session.get(Almacen, almacen_id)
     if not alm or not alm.activo:
         return jsonify({'detail': 'Almacén no encontrado o inactivo'}), 404
 
@@ -149,7 +149,7 @@ def list_tomas():
 @bp.route('/tomas/<int:toma_id>', methods=['GET'])
 @_require_inventario_admin
 def get_toma(toma_id: int):
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     return jsonify(_toma_to_dict(t, include_detalles=True))
 
 
@@ -158,7 +158,7 @@ def get_toma(toma_id: int):
 def patch_toma_detalle(toma_id: int, det_id: int):
     """Captura `cantidad_fisica` en una línea. Body: `{cantidad_fisica}`.
     Acepta null para limpiar la captura."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma {t.estatus.lower()} — no se puede modificar'}), 409
     det = TomaInventarioDetalle.query.filter_by(id=det_id, toma_id=t.id).first_or_404()
@@ -193,7 +193,7 @@ def patch_toma_detalle(toma_id: int, det_id: int):
 def patch_toma_detalle_por_codigo(toma_id: int):
     """Atajo para PWA scanner: captura por código de producto.
     Body: `{codigo, cantidad_fisica}`. Devuelve el detalle actualizado."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma {t.estatus.lower()} — no se puede modificar'}), 409
 
@@ -242,7 +242,7 @@ def cerrar_toma(toma_id: int):
     El llamador puede pasar `{omitir_no_capturados: true}` (default) o false
     para forzar que las no capturadas se traten como cantidad_fisica=0 (riesgoso).
     """
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma ya está {t.estatus.lower()}'}), 409
 
@@ -340,7 +340,7 @@ def cerrar_toma(toma_id: int):
 @_require_inventario_admin
 def cancelar_toma(toma_id: int):
     """Cancela una toma sin aplicar ajustes."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     if t.estatus != 'ABIERTA':
         return jsonify({'detail': f'Toma ya está {t.estatus.lower()}'}), 409
     t.estatus = 'CANCELADA'
@@ -392,7 +392,7 @@ def _conteo_para_acta(t: TomaInventario):
 @_require_inventario_admin
 def get_toma_pdf(toma_id: int):
     """PDF de acta de toma con diferencias y firmas."""
-    t = TomaInventario.query.get_or_404(toma_id)
+    t = db.get_or_404(TomaInventario, toma_id)
     detalles_out, resumen = _conteo_para_acta(t)
 
     pdf = renderizar_pdf(

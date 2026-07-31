@@ -32,7 +32,7 @@ def admin_revocar_sesiones(user_id):
     if err:
         return err
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 
@@ -67,7 +67,7 @@ def cambiar_password(user_id):
     if err:
         return err
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 

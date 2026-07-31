@@ -108,7 +108,7 @@ def listar_credenciales():
 def guardar_credenciales(id):
     if not is_admin():
         return jsonify({'error': 'Solo admin puede editar credenciales'}), 403
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     try:

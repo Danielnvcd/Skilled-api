@@ -305,7 +305,7 @@ def get_proyecto_existencias(proyecto_id: int):
     """
     from app.models import Almacen, StockAlmacenProyecto
 
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
 

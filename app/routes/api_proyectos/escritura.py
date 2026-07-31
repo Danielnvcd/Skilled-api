@@ -134,7 +134,7 @@ def actualizar(id):
     if denied:
         return denied
 
-    p = Proyecto.query.get_or_404(id)
+    p = db.get_or_404(Proyecto, id)
     data = request.get_json(silent=True) or {}
 
     nuevo_numero = (data.get('numero_proyecto') or '').strip()

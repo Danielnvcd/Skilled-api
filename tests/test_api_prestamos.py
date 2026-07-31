@@ -31,6 +31,7 @@ from werkzeug.security import generate_password_hash
 
 from app.models import AbonoPrestamo, Prenomina, Prestamo, Trabajador, User
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 def _hdr(user):
@@ -318,7 +319,7 @@ class TestCrear:
                         json=self._payload(pr_trab))
         assert r.status_code == 201, r.get_json()
         pid = r.get_json()['id']
-        p = Prestamo.query.get(pid)
+        p = flask_db.session.get(Prestamo, pid)
         assert p.monto_total == Decimal('6000')
         assert p.monto_restante == Decimal('6000')
         assert p.estado == 'ACTIVO'

@@ -27,7 +27,7 @@ _NOTA_ROLES = ['admin', 'super_admin', 'coordinador']
 
 
 def _get_trabajador_autorizado(id):
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return None, (jsonify({'error': 'No encontrado'}), 404)
     if not _authorized(t):

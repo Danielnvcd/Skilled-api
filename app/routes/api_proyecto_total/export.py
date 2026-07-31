@@ -22,7 +22,7 @@ def exportar_excel(proyecto_id):
     if err:
         return err
 
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return jsonify({'error': 'Proyecto no encontrado'}), 404
 

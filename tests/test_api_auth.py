@@ -784,7 +784,7 @@ class TestRefresh:
         # los `revoked=True` viejos en el mismo commit del rollover.
         # (Si no se borrase, quedaría con `revoked=True` — ambas formas son
         # equivalentes para invalidar la sesión vieja.)
-        viejo = RefreshToken.query.get(viejo_id)
+        viejo = flask_db.session.get(RefreshToken, viejo_id)
         assert viejo is None or viejo.revoked is True
         # Hay un RT nuevo activo del mismo usuario
         nuevos = RefreshToken.query.filter_by(user_id=au_admin.id, revoked=False).all()

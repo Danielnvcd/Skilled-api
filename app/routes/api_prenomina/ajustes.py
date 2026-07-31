@@ -78,7 +78,7 @@ def agregar_descuento():
     if monto <= 0 or monto > _MONTO_MAX:
         return jsonify({'error': f'monto fuera de rango (0 < monto ≤ {_MONTO_MAX})'}), 400
 
-    prenomina = Prenomina.query.get_or_404(prenomina_id)
+    prenomina = db.get_or_404(Prenomina, prenomina_id)
     if prenomina.estado != 'ABIERTA':
         return jsonify({'error': 'Solo se pueden editar prenóminas ABIERTAS'}), 400
 
@@ -124,7 +124,7 @@ def eliminar_descuento(id):
     if denied:
         return denied
 
-    desc = DescuentoPrenomina.query.get_or_404(id)
+    desc = db.get_or_404(DescuentoPrenomina, id)
     prenomina = desc.prenomina
     if prenomina.estado != 'ABIERTA':
         return jsonify({'error': 'Solo se pueden editar prenóminas ABIERTAS'}), 400
@@ -174,7 +174,7 @@ def agregar_deposito():
     if monto <= 0 or monto > _MONTO_MAX:
         return jsonify({'error': f'monto fuera de rango (0 < monto ≤ {_MONTO_MAX})'}), 400
 
-    prenomina = Prenomina.query.get_or_404(prenomina_id)
+    prenomina = db.get_or_404(Prenomina, prenomina_id)
     if prenomina.estado != 'ABIERTA':
         return jsonify({'error': 'Solo se pueden editar prenóminas ABIERTAS'}), 400
 
@@ -212,7 +212,7 @@ def eliminar_deposito(id):
     if denied:
         return denied
 
-    dep = DepositoExtra.query.get_or_404(id)
+    dep = db.get_or_404(DepositoExtra, id)
     prenomina = dep.prenomina
     if prenomina.estado != 'ABIERTA':
         return jsonify({'error': 'Solo se pueden editar prenóminas ABIERTAS'}), 400
@@ -258,7 +258,7 @@ def _patch_monto(field_name: str, payload_key: str):
     if monto < 0:
         return jsonify({'error': 'El monto no puede ser negativo'}), 400
 
-    prenomina = Prenomina.query.get_or_404(prenomina_id)
+    prenomina = db.get_or_404(Prenomina, prenomina_id)
     if prenomina.estado != 'ABIERTA':
         return jsonify({'error': 'Solo se pueden editar prenóminas ABIERTAS'}), 400
 

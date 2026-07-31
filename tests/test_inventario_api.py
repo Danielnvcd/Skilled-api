@@ -39,7 +39,7 @@ def _login(client, user_id: int, role: str = None, username: str = None):
     `role` y `username` se ignoran — el JWT toma el rol real del User en BD; los
     parámetros se conservan solo para no romper las llamadas existentes.
     """
-    user = User.query.get(user_id)
+    user = flask_db.session.get(User, user_id)
     assert user is not None, f"_login: user_id={user_id} no existe en BD"
     token = _encode_access_token(user)
     client.environ_base['HTTP_AUTHORIZATION'] = f'Bearer {token}'
@@ -1556,7 +1556,7 @@ class TestMovimientoPartes:
         assert body['entrega_nombre'] == 'Almacén Central'
         assert body['recibe_nombre'] == t.nombre_completo
         assert body['recibe_trabajador_id'] == t.id
-        mov = MovimientoInventario.query.get(body['id'])
+        mov = flask_db.session.get(MovimientoInventario, body['id'])
         assert mov.recibe_trabajador_id == t.id
         assert mov.entrega_nombre == 'Almacén Central'
 
@@ -1867,12 +1867,12 @@ class TestCierreTomaAtomico:
         assert not isinstance(resp, tuple), getattr(resp, 'json', resp)
 
         # Dentro de la transacción el descuento ya se ve...
-        assert Producto.query.get(prod.id).stock_actual == 6
+        assert flask_db.session.get(Producto, prod.id).stock_actual == 6
 
         # ...pero deshacer el savepoint lo revierte: no hubo commit interno.
         punto.rollback()
         self._db.session.expire_all()
-        assert Producto.query.get(prod.id).stock_actual == 10, (
+        assert flask_db.session.get(Producto, prod.id).stock_actual == 10, (
             'el ajuste sobrevivió al rollback — _perform_movimiento commiteó por dentro'
         )
         bucket = StockAlmacenProyecto.query.filter_by(
@@ -1900,7 +1900,7 @@ class TestCierreTomaAtomico:
         cuerpo = resp.get_json()
         assert cuerpo['errores'], 'debe reportar qué línea falló'
         assert cuerpo['errores'][0]['producto_id'] == bloqueado.id
-        assert TomaInventario.query.get(toma_id).estatus == 'ABIERTA'
+        assert flask_db.session.get(TomaInventario, toma_id).estatus == 'ABIERTA'
 
     def test_cierre_sin_fallos_aplica_todo(self, client):
         """Camino feliz: sin errores, los ajustes SÍ se aplican y la toma cierra."""
@@ -1924,9 +1924,9 @@ class TestCierreTomaAtomico:
         assert resp.get_json()['ajustes_creados'] == 1  # solo `a` tenía diferencia
 
         self._db.session.expire_all()
-        assert Producto.query.get(a.id).stock_actual == 7
-        assert Producto.query.get(b.id).stock_actual == 8
-        assert TomaInventario.query.get(toma_id).estatus == 'CERRADA'
+        assert flask_db.session.get(Producto, a.id).stock_actual == 7
+        assert flask_db.session.get(Producto, b.id).stock_actual == 8
+        assert flask_db.session.get(TomaInventario, toma_id).estatus == 'CERRADA'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -335,7 +335,7 @@ def get_disponibilidad_buckets():
         return jsonify({'detail': 'Almacén no encontrado'}), 404
 
     proyecto_id = request.args.get('proyecto_id', type=int)
-    if proyecto_id and not Proyecto.query.get(proyecto_id):
+    if proyecto_id and not db.session.get(Proyecto, proyecto_id):
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
 
     filas = (

@@ -23,6 +23,7 @@ from app.models import (
     SolicitudCompra,
 )
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 def _hdr(user):
@@ -115,7 +116,7 @@ def test_recepcion_parcial_y_total(client, inv_user, producto, almacen, db):
     assert data['estatus'] == 'ORDENADA'   # parcial sobre PENDIENTE → avanza
 
     db.session.expire_all()
-    assert float(Producto.query.get(producto.id).stock_actual) == stock_inicial + 5
+    assert float(flask_db.session.get(Producto, producto.id).stock_actual) == stock_inicial + 5
     assert MovimientoInventario.query.filter_by(producto_id=producto.id, tipo='ENTRADA').count() == 1
 
     # Recepción del resto del producto + el ítem libre → RECIBIDA.
@@ -129,7 +130,7 @@ def test_recepcion_parcial_y_total(client, inv_user, producto, almacen, db):
     assert r.status_code == 200, r.get_json()
     assert r.get_json()['estatus'] == 'RECIBIDA'
     db.session.expire_all()
-    assert float(Producto.query.get(producto.id).stock_actual) == stock_inicial + 8
+    assert float(flask_db.session.get(Producto, producto.id).stock_actual) == stock_inicial + 8
 
 
 @pytest.fixture
@@ -220,7 +221,7 @@ def test_cancelar(client, inv_user, producto):
     sol = _crear(client, inv_user, producto).get_json()
     r = client.delete(f"/api/v1/solicitudes-compra/{sol['id']}", headers=_hdr(inv_user))
     assert r.status_code == 200
-    assert SolicitudCompra.query.get(sol['id']).estatus == 'CANCELADA'
+    assert flask_db.session.get(SolicitudCompra, sol['id']).estatus == 'CANCELADA'
     # Ya cancelada → no aparece en productos-activos.
     r = client.get('/api/v1/solicitudes-compra/productos-activos', headers=_hdr(inv_user))
     assert all(a['producto_id'] != producto.id for a in r.get_json())

@@ -137,10 +137,10 @@ def detalle_periodo(periodo_id):
     if denied:
         return denied
 
-    periodo = AjustePeriodo.query.options(
+    periodo = db.get_or_404(AjustePeriodo, periodo_id, options=[
         selectinload(AjustePeriodo.trabajadores_periodo).selectinload(AjusteTrabajadorPeriodo.trabajador),
         selectinload(AjustePeriodo.descuentos).selectinload(AjusteDescuento.trabajador),
-    ).get_or_404(periodo_id)
+    ])
 
     descuentos_por_trab = {}
     for d in periodo.descuentos:
@@ -199,7 +199,7 @@ def cerrar_periodo(periodo_id):
     if denied:
         return denied
 
-    periodo = AjustePeriodo.query.get_or_404(periodo_id)
+    periodo = db.get_or_404(AjustePeriodo, periodo_id)
     if periodo.estado != 'ABIERTO':
         return jsonify({'error': 'Este periodo ya está cerrado'}), 400
 
@@ -231,7 +231,7 @@ def excel_periodo(periodo_id):
 
     import pandas as pd
 
-    periodo = AjustePeriodo.query.get_or_404(periodo_id)
+    periodo = db.get_or_404(AjustePeriodo, periodo_id)
 
     trabajadores_periodo = AjusteTrabajadorPeriodo.query.filter_by(periodo_id=periodo.id).all()
     ajustes = (

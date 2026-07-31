@@ -98,7 +98,7 @@ def _resolver_lineas(proyecto_id: int, lineas: list, origen: str, modo: str) -> 
                 plan.append(fila)
                 continue
         else:
-            almacen = Almacen.query.get(almacen_default) if almacen_default else None
+            almacen = db.session.get(Almacen, almacen_default) if almacen_default else None
         if not almacen:
             fila['motivo'] = 'No se indicó bodega y no hay una bodega predeterminada'
             plan.append(fila)
@@ -165,7 +165,7 @@ def _resolver_lineas(proyecto_id: int, lineas: list, origen: str, modo: str) -> 
 
 def _leer_peticion(proyecto_id: int):
     """Valida proyecto, cuerpo y opciones comunes a los tres endpoints."""
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return None, (jsonify({'detail': 'Proyecto no encontrado'}), 404)
 

@@ -35,7 +35,7 @@ def abonar(id):
     if monto <= 0:
         return jsonify({'error': 'El monto debe ser mayor a cero'}), 400
 
-    p = Prestamo.query.get_or_404(id)
+    p = db.get_or_404(Prestamo, id)
     if p.estado == 'LIQUIDADO':
         return jsonify({'error': 'Préstamo ya liquidado'}), 400
 
@@ -77,7 +77,7 @@ def liquidar(id):
     if denied:
         return denied
 
-    p = Prestamo.query.get_or_404(id)
+    p = db.get_or_404(Prestamo, id)
     saldo = to_dec(p.monto_restante)
 
     try:

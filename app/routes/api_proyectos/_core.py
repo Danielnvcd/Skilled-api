@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify
 from sqlalchemy.orm import joinedload
 
 from app.models import Proyecto, Trabajador, User
+from app.extensions import db
 
 
 bp = Blueprint('api_proyectos', __name__, url_prefix='/api/proyectos')
@@ -97,7 +98,7 @@ def _validar_coordinador(coord_id):
     coordinar un proyecto. Devuelve (User|None, error_response|None)."""
     if coord_id is None:
         return None, None
-    sup = User.query.get(coord_id)
+    sup = db.session.get(User, coord_id)
     if not sup:
         return None, (jsonify({'error': 'El coordinador indicado no existe'}), 400)
     if sup.role not in _VALID_COORD_ROLES:

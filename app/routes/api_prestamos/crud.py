@@ -192,7 +192,7 @@ def editar(id):
     if denied:
         return denied
 
-    p = Prestamo.query.get_or_404(id)
+    p = db.get_or_404(Prestamo, id)
     if p.estado == 'LIQUIDADO':
         return jsonify({'error': 'No se puede editar un préstamo liquidado'}), 400
 

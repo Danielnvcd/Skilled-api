@@ -144,7 +144,7 @@ def plantilla_asignacion(proyecto_id: int):
     """Descarga la plantilla de asignación de ESTE proyecto."""
     from flask import send_file
 
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
 
@@ -178,7 +178,7 @@ def importar_asignacion(proyecto_id: int):
     """
     import io as _io
 
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
 

@@ -38,6 +38,7 @@ from app.models import (
     Proyecto, RegistroDiarioHoras, ReporteSemanal, Trabajador, User,
 )
 from app.routes.api_auth import _encode_access_token
+from app.extensions import db as flask_db
 
 
 def _hdr(user):
@@ -288,7 +289,7 @@ class TestCrearReporte:
         assert r.status_code == 201, r.get_json()
         body = r.get_json()
         assert body['estado'] == 'BORRADOR'
-        rep = ReporteSemanal.query.get(body['id'])
+        rep = flask_db.session.get(ReporteSemanal, body['id'])
         assert rep.proyecto_id == proyecto_coord.id
 
     def test_coord_abre_proyecto_propio(self, client, h_coord, proyecto_coord):
@@ -865,7 +866,7 @@ class TestEliminar:
     def test_eliminar_ok(self, client, h_admin, registro):
         r = client.delete(f'/api/horas/registros/{registro.id}', headers=_hdr(h_admin))
         assert r.status_code == 200
-        assert RegistroDiarioHoras.query.get(registro.id) is None
+        assert flask_db.session.get(RegistroDiarioHoras, registro.id) is None
 
     def test_eliminar_inexistente_404(self, client, h_admin):
         r = client.delete('/api/horas/registros/99999', headers=_hdr(h_admin))

@@ -27,7 +27,7 @@ def subir_foto(user_id):
     if err:
         return err
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 

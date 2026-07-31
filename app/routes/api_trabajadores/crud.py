@@ -335,7 +335,7 @@ def crear():
 @bp.route('/<int:id>', methods=['PUT', 'POST'])
 @jwt_required
 def actualizar(id):
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(t):
@@ -392,7 +392,7 @@ def actualizar(id):
 def dar_baja(id):
     if not is_admin():
         return jsonify({'error': 'Solo admin puede dar de baja'}), 403
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     try:
@@ -415,7 +415,7 @@ def dar_baja(id):
 def reactivar(id):
     if not is_admin():
         return jsonify({'error': 'Solo admin puede reactivar'}), 403
-    t = Trabajador.query.get(id)
+    t = db.session.get(Trabajador, id)
     if not t:
         return jsonify({'error': 'No encontrado'}), 404
     try:

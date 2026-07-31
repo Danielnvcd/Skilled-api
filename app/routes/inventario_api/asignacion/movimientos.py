@@ -131,7 +131,7 @@ def devolver_material(proyecto_id: int):
     `destino_proyecto_id` ausente o null = General. Siempre es una REASIGNACION,
     nunca una salida: el material no se va del almacén, solo cambia de etiqueta.
     """
-    proyecto = Proyecto.query.get(proyecto_id)
+    proyecto = db.session.get(Proyecto, proyecto_id)
     if not proyecto:
         return jsonify({'detail': 'Proyecto no encontrado'}), 404
 
@@ -142,7 +142,7 @@ def devolver_material(proyecto_id: int):
 
     destino_id = data.get('destino_proyecto_id')
     if destino_id:
-        destino = Proyecto.query.get(destino_id)
+        destino = db.session.get(Proyecto, destino_id)
         if not destino:
             return jsonify({'detail': 'Proyecto destino no encontrado'}), 404
         if destino.id == proyecto.id:

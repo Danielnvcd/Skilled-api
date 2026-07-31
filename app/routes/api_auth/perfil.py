@@ -99,7 +99,7 @@ def api_get_user(user_id: int):
     HIGH-01 fix: si el solicitante es admin o es el propio usuario, ve todo.
     Otros usuarios reciben la vista pública (sin role/2FA/last_seen).
     """
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'error': 'Usuario no encontrado'}), 404
     is_self = (user.id == g._jwt_user.id)
@@ -111,7 +111,7 @@ def api_get_user(user_id: int):
 @jwt_required
 def api_get_user_foto(user_id: int):
     """Sirve la foto de perfil con autenticación JWT (Bearer en Authorization)."""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user or not user.profile_pic or user.profile_pic == 'default.png':
         return jsonify({'error': 'Sin foto'}), 404
     filename = user.profile_pic

@@ -174,7 +174,7 @@ def inventario_estante(qr_code: str):
 @_require_inventario
 def estante_productos(estante_id: int):
     """Lista de productos asignados a un estante (por id, para la UI de admin)."""
-    est = Estante.query.get_or_404(estante_id)
+    est = db.get_or_404(Estante, estante_id)
     productos = (
         Producto.query
         .join(ProductoEstante, ProductoEstante.producto_id == Producto.id)
@@ -190,7 +190,7 @@ def estante_productos(estante_id: int):
 def set_estante_productos(estante_id: int):
     """Reemplaza la lista de productos asignados al estante.
     Body: `{producto_ids: [int]}`. Idempotente."""
-    est = Estante.query.get_or_404(estante_id)
+    est = db.get_or_404(Estante, estante_id)
     body = request.get_json(silent=True) or {}
     ids = body.get('producto_ids')
     if not isinstance(ids, list):
@@ -334,7 +334,7 @@ def set_estante_layout(estante_id: int):
         total = en_otros + item['cantidad']
         disponible = stock_almacen.get(pid, Decimal('0'))
         if total > disponible:
-            prod = Producto.query.get(pid)
+            prod = db.session.get(Producto, pid)
             etiqueta = f"{prod.codigo} — {prod.descripcion}" if prod else f"#{pid}"
             errores.append(
                 f"{etiqueta}: quieres colocar {item['cantidad']} aquí + {en_otros} en otros "
