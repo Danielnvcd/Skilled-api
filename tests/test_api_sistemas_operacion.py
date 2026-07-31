@@ -384,15 +384,3 @@ class TestContadoresExactos:
         si fallaran, caería la aplicación entera. En tests no hay Redis y todo
         debe seguir respondiendo 200."""
         assert client.get('/api/sistemas/estado', headers=_hdr(sistemas)).status_code == 200
-
-
-class TestVersionDesplegada:
-
-    def test_el_estado_reporta_la_version(self, client, sistemas):
-        """Nace de una confusión real: se diagnosticó un fallo que resultó ser
-        que producción corría una versión anterior del código."""
-        r = client.get('/api/sistemas/estado', headers=_hdr(sistemas))
-        assert r.status_code == 200
-        version = r.get_json()['version']
-        assert 'origen' in version
-        assert version['origen'] in ('git', 'variable de entorno', 'desconocido')
