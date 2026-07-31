@@ -3,12 +3,10 @@
 Snapshot de stock por almacén → captura física → cierre que genera AJUSTEs
 automáticos contra `_perform_movimiento`. PDF de acta para firmar.
 """
-import io
-import os
 import datetime
 from decimal import Decimal
 
-from flask import jsonify, request, send_file, render_template, current_app
+from flask import jsonify, request, send_file
 
 from app.extensions import db
 from app.models import (
@@ -23,6 +21,7 @@ from ._core import (
     _es_error_de_lock,
     _require_inventario_admin,
     _audit,
+    renderizar_pdf,
     _INV_ROLES,
 )
 from .movimientos import _perform_movimiento
@@ -353,46 +352,50 @@ def cancelar_toma(toma_id: int):
     return jsonify(_toma_to_dict(t))
 
 
+def _conteo_para_acta(t: TomaInventario):
+    """Líneas y resumen de la toma para el acta PDF, ordenadas por código.
+
+    Una línea sin `cantidad_fisica` es "no capturada" (nadie la contó) y no
+    cuenta como diferencia; con física, la diferencia es física − sistema.
+    """
+    detalles = []
+    capturadas = con_diferencia = no_capturadas = 0
+    for d in sorted(t.detalles, key=lambda x: (x.producto.codigo if x.producto else '')):
+        cant_sistema = float(d.cantidad_sistema or 0)
+        cant_fisica = None if d.cantidad_fisica is None else float(d.cantidad_fisica)
+        if cant_fisica is None:
+            no_capturadas += 1
+            diferencia = None
+        else:
+            capturadas += 1
+            diferencia = cant_fisica - cant_sistema
+            if abs(diferencia) > 1e-9:
+                con_diferencia += 1
+        detalles.append({
+            'codigo': d.producto.codigo if d.producto else '—',
+            'descripcion': d.producto.descripcion if d.producto else '—',
+            'unidad': d.producto.unidad if d.producto else None,
+            'sistema': cant_sistema,
+            'fisico': cant_fisica,
+            'diff': diferencia if diferencia is not None else 0,
+        })
+    resumen = {
+        'total': len(detalles),
+        'capturadas': capturadas,
+        'con_diferencia': con_diferencia,
+        'no_capturadas': no_capturadas,
+    }
+    return detalles, resumen
+
+
 @bp.route('/tomas/<int:toma_id>/pdf', methods=['GET'])
 @_require_inventario_admin
 def get_toma_pdf(toma_id: int):
     """PDF de acta de toma con diferencias y firmas."""
-    try:
-        from xhtml2pdf import pisa
-    except ImportError:
-        return jsonify({'detail': 'xhtml2pdf no instalado'}), 500
-
     t = TomaInventario.query.get_or_404(toma_id)
-    detalles_out = []
-    capturadas = 0
-    con_diff = 0
-    no_cap = 0
-    for d in sorted(t.detalles, key=lambda x: (x.producto.codigo if x.producto else '')):
-        cant_fis = None if d.cantidad_fisica is None else float(d.cantidad_fisica)
-        cant_sis = float(d.cantidad_sistema or 0)
-        if cant_fis is None:
-            no_cap += 1
-            diff = None
-        else:
-            capturadas += 1
-            diff = cant_fis - cant_sis
-            if abs(diff) > 1e-9:
-                con_diff += 1
-        detalles_out.append({
-            'codigo': d.producto.codigo if d.producto else '—',
-            'descripcion': d.producto.descripcion if d.producto else '—',
-            'unidad': d.producto.unidad if d.producto else None,
-            'sistema': cant_sis,
-            'fisico': cant_fis,
-            'diff': diff if diff is not None else 0,
-        })
+    detalles_out, resumen = _conteo_para_acta(t)
 
-    # API-only: `static_folder=None`. Resolvemos el logo contra BASE_DIR.
-    base_dir = current_app.config.get('BASE_DIR') or os.path.dirname(current_app.root_path)
-    logo_path = os.path.join(base_dir, 'static', 'imagenes', 'skilled (1).png')
-    if not os.path.exists(logo_path):
-        logo_path = None
-    html_salida = render_template(
+    pdf = renderizar_pdf(
         'toma_inventario_pdf.html',
         toma=t,
         almacen_nombre=t.almacen.nombre if t.almacen else None,
@@ -401,22 +404,14 @@ def get_toma_pdf(toma_id: int):
         estatus=t.estatus,
         fecha_inicio=t.fecha_inicio.strftime('%Y-%m-%d %H:%M') if t.fecha_inicio else '',
         detalles=detalles_out,
-        resumen={
-            'total': len(detalles_out),
-            'capturadas': capturadas,
-            'con_diferencia': con_diff,
-            'no_capturadas': no_cap,
-        },
-        logo_path=logo_path if os.path.exists(logo_path) else None,
+        resumen=resumen,
     )
-    buf = io.BytesIO()
-    status = pisa.CreatePDF(io.BytesIO(html_salida.encode('utf-8')), dest=buf)
-    if status.err:
+    if pdf is None:
         return jsonify({'detail': 'Error generando PDF'}), 500
-    buf.seek(0)
+
     # El no-cache de PDFs lo aplica el after_request central (_security_headers).
     return send_file(
-        buf,
+        pdf,
         mimetype='application/pdf',
         as_attachment=False,
         download_name=f'toma-{t.id}.pdf',
