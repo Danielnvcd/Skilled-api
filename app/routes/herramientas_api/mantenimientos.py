@@ -16,13 +16,15 @@ from app.models import (
     ESTADOS_MANTENIMIENTO,
     crear_evento_herramienta,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario_admin,
-    _parse_or_422, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    MantenimientoCreateSchema, MantenimientoCierreSchema,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario_admin,
+    _parse_or_422,
+    _audit,
+    MantenimientoCreateSchema,
+    MantenimientoCierreSchema,
     _mantenimiento_to_dict,
 )
 

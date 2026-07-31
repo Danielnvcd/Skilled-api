@@ -21,14 +21,21 @@ from app.models import (
     AsignacionHerramienta, IncidenciaHerramienta, SolicitudBajaHerramienta,
     ESTADOS_UNIDAD,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario, _require_inventario_admin,
-    _parse_or_422, _int_arg, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    HerramientaCreateSchema, HerramientaUpdateSchema, CategoriaUpsertSchema,
-    _herramienta_to_dict, _asignacion_to_dict, _categoria_to_dict,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario,
+    _require_inventario_admin,
+    _parse_or_422,
+    _int_arg,
+    _audit,
+    HerramientaCreateSchema,
+    HerramientaUpdateSchema,
+    CategoriaUpsertSchema,
+    _herramienta_to_dict,
+    _asignacion_to_dict,
+    _categoria_to_dict,
 )
 
 

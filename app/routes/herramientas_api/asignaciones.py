@@ -18,13 +18,16 @@ from app.models import (
     ESTADOS_ASIGNACION,
     crear_evento_herramienta,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario_admin,
-    _parse_or_422, _int_arg, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    AsignacionCreateSchema, DevolucionSchema,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario_admin,
+    _parse_or_422,
+    _int_arg,
+    _audit,
+    AsignacionCreateSchema,
+    DevolucionSchema,
     _asignacion_to_dict,
 )
 

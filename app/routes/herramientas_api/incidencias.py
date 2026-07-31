@@ -16,14 +16,17 @@ from app.models import (
     ESTADOS_INCIDENCIA,
     crear_evento_herramienta, crear_notif_inventario,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario_admin,
-    _parse_or_422, _audit,
-)
 from ._core import (
-    bp, _HERR_ROLES,
-    IncidenciaCreateSchema, IncidenciaAtenderSchema,
-    _incidencia_to_dict, _puede_ver_unidad,
+    bp,
+    _HERR_ROLES,
+    _require_login,
+    _require_inventario_admin,
+    _parse_or_422,
+    _audit,
+    IncidenciaCreateSchema,
+    IncidenciaAtenderSchema,
+    _incidencia_to_dict,
+    _puede_ver_unidad,
 )
 
 

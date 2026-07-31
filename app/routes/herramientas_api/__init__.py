@@ -3,7 +3,7 @@
 Hermano de `inventario_api` (materiales). Originalmente un solo archivo
 de ~1600 líneas; dividido por dominios:
 
-  _core.py         bp + schemas + serializers + helpers (QR, fotos, eventos)
+  _core/           bp, permisos, schemas, serializers, uploads y códigos
   catalogo.py      catálogo de tipos + categorías + stats dashboard
   unidades.py      CRUD de unidades + eventos + QR
   asignaciones.py  asignación a trabajadores + devolución
@@ -11,6 +11,10 @@ de ~1600 líneas; dividido por dominios:
   incidencias.py   incidencias reportadas + atención
   bajas.py         solicitudes de baja + baja directa
   multimedia.py    fotos/evidencias adjuntas a unidades
+
+Herramientas comparte roles y bitácora con Inventario y reusa sus guards. Ese
+acoplamiento entra por UN solo lugar, `_core/permisos.py`: los módulos de rutas
+importan todo de `._core` y no conocen `inventario_api`.
 
 Importar este paquete registra TODOS los endpoints en `bp` (efecto colateral
 de los `@bp.route(...)` en cada submódulo). El blueprint se registra desde

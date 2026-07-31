@@ -13,13 +13,15 @@ from app.extensions import db, limiter, get_real_client_ip_flask
 from app.models import (
     HerramientaUnidad, EventoHerramienta, MediaHerramienta,
 )
-from app.routes.inventario_api import (
-    _require_login, _require_inventario, _audit,
-)
 from ._core import (
     bp,
-    _media_to_dict, _puede_ver_unidad,
-    _validar_imagen_archivo, _upload_dir,
+    _require_login,
+    _require_inventario,
+    _audit,
+    _media_to_dict,
+    _puede_ver_unidad,
+    _validar_imagen_archivo,
+    _upload_dir,
 )
 
 
