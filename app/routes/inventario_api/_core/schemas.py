@@ -159,13 +159,52 @@ class MovimientoCreateSchema(_BaseSchema):
     proyecto_origen_id = fields.Int(load_default=None, allow_none=True)
     proyecto_destino_id = fields.Int(load_default=None, allow_none=True)
     motivo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
-    # Partes del movimiento para el vale/PDF (feature "vale de movimiento"): quién
+    # Partes del movimiento para el comprobante/PDF: quién
     # ENTREGA y quién RECIBE. Cada parte = trabajador del sistema (…_trabajador_id)
     # o nombre libre (…_nombre). Opcionales: no bloquean el flujo actual.
     entrega_trabajador_id = fields.Int(load_default=None, allow_none=True)
     entrega_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
     recibe_trabajador_id = fields.Int(load_default=None, allow_none=True)
     recibe_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+
+
+class MovimientoLoteItemSchema(_BaseSchema):
+    """Una línea del lote: solo lo que cambia de un producto a otro."""
+    producto_id = fields.Int(required=True)
+    cantidad = fields.Float(required=True, validate=validate.Range(min=-100_000, max=100_000))
+
+
+class MovimientoLoteSchema(_BaseSchema):
+    """N movimientos del MISMO tipo, bodega, proyecto y partes, en UNA petición.
+
+    Existe porque la alternativa —que el cliente mande N veces POST
+    /movimientos/— tiene tres problemas que no se arreglan desde el navegador:
+    no es atómica (un fallo a media lista deja stock movido y el resto no),
+    consume N veces el rate limit del endpoint, y produce N comprobantes PDF para lo
+    que el almacenista entiende como UNA entrega.
+
+    Los campos compartidos van arriba y solo `items` varía por producto: en un
+    lote, tipo/bodega/proyecto/quién recibe son los mismos por definición.
+    """
+    tipo = fields.Str(required=True, validate=validate.OneOf(['ENTRADA', 'SALIDA', 'AJUSTE', 'TRASPASO', 'REASIGNACION']))
+    almacen_origen_id = fields.Int(load_default=None, allow_none=True)
+    almacen_destino_id = fields.Int(load_default=None, allow_none=True)
+    estante_id = fields.Int(load_default=None, allow_none=True)
+    proyecto_id = fields.Int(load_default=None, allow_none=True)
+    proyecto_origen_id = fields.Int(load_default=None, allow_none=True)
+    proyecto_destino_id = fields.Int(load_default=None, allow_none=True)
+    motivo = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=250))
+    entrega_trabajador_id = fields.Int(load_default=None, allow_none=True)
+    entrega_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+    recibe_trabajador_id = fields.Int(load_default=None, allow_none=True)
+    recibe_nombre = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=200))
+    # Tope alineado con el del comprobante en lote: más líneas de las que caben en un
+    # comprobante que alguien va a firmar no sirven para nada.
+    items = fields.List(
+        fields.Nested(MovimientoLoteItemSchema),
+        required=True,
+        validate=validate.Length(min=1, max=100),
+    )
 
 
 class AjusteBucketItemSchema(_BaseSchema):

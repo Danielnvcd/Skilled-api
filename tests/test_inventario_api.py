@@ -1622,6 +1622,268 @@ class TestMovimientoPartes:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 12b. MOVIMIENTOS EN LOTE (atómicos) + VALE DE VARIAS LÍNEAS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestMovimientosLote:
+    """El lote es todo-o-nada: es lo único que distingue a este endpoint de
+    mandar N veces POST /movimientos/, así que es lo que más se prueba aquí."""
+
+    @pytest.fixture(autouse=True)
+    def _seed(self, db):
+        self._bodega = Almacen(nombre='Bodega Lote', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(self._bodega); db.session.commit()
+
+    def _producto(self, db, stock=100):
+        from decimal import Decimal
+        p = Producto(codigo=f'LT-{uuid.uuid4().hex[:6]}', descripcion='Material lote',
+                     categoria='T', unidad='pza', stock_actual=Decimal(str(stock)),
+                     stock_minimo=0)
+        db.session.add(p); db.session.flush()
+        db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=self._bodega.id,
+                                            proyecto_id=None, cantidad=Decimal(str(stock))))
+        db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=self._bodega.id,
+                                       cantidad=Decimal(str(stock))))
+        db.session.commit()
+        return p
+
+    def test_salida_en_lote_descuenta_todas_las_lineas(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a, b = self._producto(db, 100), self._producto(db, 50)
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA',
+            'almacen_origen_id': self._bodega.id,
+            'motivo': 'Consumo obra',
+            'items': [{'producto_id': a.id, 'cantidad': 10},
+                      {'producto_id': b.id, 'cantidad': 5}],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['total'] == 2
+        assert len(body['ids']) == 2
+        assert float(flask_db.session.get(Producto, a.id).stock_actual) == 90
+        assert float(flask_db.session.get(Producto, b.id).stock_actual) == 45
+
+    def test_una_linea_invalida_rechaza_el_lote_completo(self, client, inv_admin, db):
+        """Una línea mala tumba la tanda entera y se dice cuál fue.
+
+        Lo que NO se puede afirmar aquí es que el stock de la línea buena quedó
+        intacto: en SQLite el driver no emite BEGIN, así que el `rollback()` del
+        endpoint no revierte nada y el stock se queda movido. En Postgres —el
+        motor de producción— sí revierte, que es de lo que depende el mismo
+        patrón de savepoints del cierre de tomas físicas. Esa asimetría del
+        conftest es conocida y es la razón de que el resto de la suite tampoco
+        pruebe rollbacks a través de un endpoint.
+        """
+        _login(client, inv_admin.id, 'admin')
+        a, b = self._producto(db, 100), self._producto(db, 3)
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA',
+            'almacen_origen_id': self._bodega.id,
+            'items': [{'producto_id': a.id, 'cantidad': 10},
+                      {'producto_id': b.id, 'cantidad': 999}],   # excede
+        })
+        assert resp.status_code == 409, resp.get_json()
+        errores = resp.get_json()['errores']
+        assert [e['producto_id'] for e in errores] == [b.id]
+        assert 'Stock insuficiente' in errores[0]['detail']
+        # La respuesta no promete movimientos, y la línea que falló no dejó
+        # rastro ni tocó su bucket.
+        assert 'ids' not in resp.get_json()
+        assert float(flask_db.session.get(Producto, b.id).stock_actual) == 3
+        assert MovimientoInventario.query.filter(
+            MovimientoInventario.producto_id == b.id).count() == 0
+
+    def test_lote_persiste_las_partes_en_cada_movimiento(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a, b = self._producto(db, 20), self._producto(db, 20)
+        t = Trabajador(no_empleado=f'LT-{uuid.uuid4().hex[:5]}', nombre='Ana',
+                       nombre_apellidos='Ruiz', activo=True)
+        db.session.add(t); db.session.commit()
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA',
+            'almacen_origen_id': self._bodega.id,
+            'entrega_nombre': 'Almacén Central',
+            'recibe_trabajador_id': t.id,
+            'items': [{'producto_id': a.id, 'cantidad': 1},
+                      {'producto_id': b.id, 'cantidad': 2}],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        for mov in resp.get_json()['movimientos']:
+            assert mov['entrega_nombre'] == 'Almacén Central'
+            assert mov['recibe_trabajador_id'] == t.id
+
+    def test_trabajador_inactivo_tumba_el_lote_completo(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a = self._producto(db, 20)
+        t = Trabajador(no_empleado=f'LT-{uuid.uuid4().hex[:5]}', nombre='Baja',
+                       nombre_apellidos='Inactivo', activo=False)
+        db.session.add(t); db.session.commit()
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA',
+            'almacen_origen_id': self._bodega.id,
+            'recibe_trabajador_id': t.id,
+            'items': [{'producto_id': a.id, 'cantidad': 1}],
+        })
+        assert resp.status_code == 409, resp.get_json()
+        assert float(flask_db.session.get(Producto, a.id).stock_actual) == 20
+
+    def test_producto_repetido_422(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a = self._producto(db, 20)
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA',
+            'almacen_origen_id': self._bodega.id,
+            'items': [{'producto_id': a.id, 'cantidad': 1},
+                      {'producto_id': a.id, 'cantidad': 2}],
+        })
+        assert resp.status_code == 422
+        assert float(flask_db.session.get(Producto, a.id).stock_actual) == 20
+
+    def test_items_vacio_422(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA', 'almacen_origen_id': self._bodega.id, 'items': [],
+        })
+        assert resp.status_code == 422
+
+    def test_entrada_en_lote_suma(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a = self._producto(db, 10)
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'ENTRADA',
+            'almacen_destino_id': self._bodega.id,
+            'items': [{'producto_id': a.id, 'cantidad': 7}],
+        })
+        assert resp.status_code == 200, resp.get_json()
+        assert float(flask_db.session.get(Producto, a.id).stock_actual) == 17
+
+    def test_vale_de_lote_es_un_solo_pdf(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a, b = self._producto(db, 30), self._producto(db, 30)
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA',
+            'almacen_origen_id': self._bodega.id,
+            'recibe_nombre': 'Cuadrilla 3',
+            'items': [{'producto_id': a.id, 'cantidad': 2},
+                      {'producto_id': b.id, 'cantidad': 3}],
+        })
+        ids = resp.get_json()['ids']
+        pdf = client.get(f'/api/v1/movimientos/vale?ids={",".join(map(str, ids))}')
+        assert pdf.status_code == 200
+        assert pdf.mimetype == 'application/pdf'
+        assert pdf.data[:4] == b'%PDF'
+
+    def test_vale_rechaza_mezclar_tipos(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a = self._producto(db, 30)
+        ent = client.post('/api/v1/movimientos/', json={
+            'tipo': 'ENTRADA', 'producto_id': a.id, 'cantidad': 5,
+            'almacen_destino_id': self._bodega.id,
+        }).get_json()['id']
+        sal = client.post('/api/v1/movimientos/', json={
+            'tipo': 'SALIDA', 'producto_id': a.id, 'cantidad': 1,
+            'almacen_origen_id': self._bodega.id,
+        }).get_json()['id']
+        resp = client.get(f'/api/v1/movimientos/vale?ids={ent},{sal}')
+        assert resp.status_code == 422
+
+    def test_vale_404_si_algun_id_no_existe(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        assert client.get('/api/v1/movimientos/vale?ids=999999').status_code == 404
+
+    def test_vale_sin_ids_422(self, client, inv_admin):
+        _login(client, inv_admin.id, 'admin')
+        assert client.get('/api/v1/movimientos/vale').status_code == 422
+
+    def test_lote_requiere_rol_inventario(self, client, db):
+        u = User(username=f'nadie-{uuid.uuid4().hex[:6]}',
+                 password_hash=generate_password_hash('x'), role='trabajador')
+        db.session.add(u); db.session.commit()
+        _login(client, u.id, 'trabajador')
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'SALIDA', 'almacen_origen_id': self._bodega.id,
+            'items': [{'producto_id': 1, 'cantidad': 1}],
+        })
+        assert resp.status_code == 403
+
+
+class TestCantidadCeroRechazada:
+    """Un AJUSTE de 0 no mueve stock pero dejaba un renglón vacío en el kardex.
+    Era el único tipo que se colaba: el guard de «cantidad positiva» no lo mira
+    porque AJUSTE es justamente el que admite negativos.
+
+    Se prueban los TRES caminos públicos porque cada uno arma el payload por su
+    cuenta —el individual y el lote por schema, el rápido a mano— y la regla vive
+    en `_perform_movimiento` precisamente para que ninguno pueda desviarse.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _seed(self, db):
+        self._bodega = Almacen(nombre='Bodega Cero', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(self._bodega); db.session.commit()
+
+    def _producto(self, db):
+        from decimal import Decimal
+        p = Producto(codigo=f'CERO-{uuid.uuid4().hex[:6]}', descripcion='Material',
+                     categoria='T', unidad='pza', stock_actual=Decimal('10'), stock_minimo=0)
+        db.session.add(p); db.session.flush()
+        db.session.add(StockAlmacenProyecto(producto_id=p.id, almacen_id=self._bodega.id,
+                                            proyecto_id=None, cantidad=Decimal('10')))
+        db.session.add(StockPorAlmacen(producto_id=p.id, almacen_id=self._bodega.id,
+                                       cantidad=Decimal('10')))
+        db.session.commit()
+        return p
+
+    def test_ajuste_cero_rechazado_individual(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post('/api/v1/movimientos/', json={
+            'tipo': 'AJUSTE', 'producto_id': p.id, 'cantidad': 0,
+            'almacen_destino_id': self._bodega.id, 'motivo': 'x',
+        })
+        assert resp.status_code == 422, resp.get_json()
+        # Lo que importa no es el 422 sino que no quede rastro del no-movimiento.
+        assert MovimientoInventario.query.filter(
+            MovimientoInventario.producto_id == p.id).count() == 0
+
+    def test_ajuste_cero_rechazado_en_lote(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post('/api/v1/movimientos/lote', json={
+            'tipo': 'AJUSTE', 'almacen_destino_id': self._bodega.id, 'motivo': 'x',
+            'items': [{'producto_id': p.id, 'cantidad': 0}],
+        })
+        assert resp.status_code == 409, resp.get_json()
+        assert MovimientoInventario.query.filter(
+            MovimientoInventario.producto_id == p.id).count() == 0
+
+    def test_ajuste_cero_rechazado_en_rapido(self, client, inv_admin, db):
+        """El rápido arma el payload a mano, sin schema: si la regla viviera en
+        el schema y no en `_perform_movimiento`, este camino seguiría colándose."""
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post('/api/v1/movimientos/rapido', json={
+            'producto_qr': p.codigo, 'tipo': 'AJUSTE', 'cantidad': 0,
+        })
+        assert resp.status_code == 422, resp.get_json()
+        assert MovimientoInventario.query.filter(
+            MovimientoInventario.producto_id == p.id).count() == 0
+
+    def test_cantidad_valida_sigue_pasando(self, client, inv_admin, db):
+        """Guard del guard: el rechazo del 0 no puede llevarse por delante los
+        AJUSTE negativos, que son el caso legítimo (mermas)."""
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db)
+        resp = client.post('/api/v1/movimientos/', json={
+            'tipo': 'AJUSTE', 'producto_id': p.id, 'cantidad': -3,
+            'almacen_origen_id': self._bodega.id, 'motivo': 'merma',
+        })
+        assert resp.status_code == 200, resp.get_json()
+        assert float(flask_db.session.get(Producto, p.id).stock_actual) == 7
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # 13. EDITOR DE STOCK POR BUCKET (ajustar-buckets → AJUSTES)
 # ═══════════════════════════════════════════════════════════════════════════════
 

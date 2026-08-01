@@ -14,7 +14,7 @@ haciendo `from ._core import ...` sin enterarse del reparto.
   stock.py        buckets por proyecto, caches y consumo/depósito de existencias
   reservas.py     apartado por solicitudes APROBADAS (Producto.stock_reservado)
   resolvers.py    resolución de almacén / proyecto / trabajador desde el payload
-  pdf.py          render de PDFs (xhtml2pdf) compartido por vales y reportes
+  pdf.py          render de PDFs (xhtml2pdf) compartido por comprobantes y reportes
 
 Las rutas NO viven aquí (salvo /health, que es trivial): están en los submódulos
 por dominio (productos, almacenes, movimientos, solicitudes, catalogo…).
@@ -62,6 +62,7 @@ from .schemas import (
     EstanteLayoutSchema,
     EstanteUpdateSchema,
     MovimientoCreateSchema,
+    MovimientoLoteSchema,
     ProductoCreateSchema,
     ProductoUpdateSchema,
     ProyectoPlanUpsertSchema,
@@ -116,7 +117,7 @@ __all__ = [
     'ProductoCreateSchema', 'ProductoUpdateSchema',
     'AlmacenCreateSchema', 'AlmacenUpdateSchema',
     'EstanteCreateSchema', 'EstanteUpdateSchema', 'EstanteLayoutSchema',
-    'MovimientoCreateSchema', 'AjusteBucketsSchema',
+    'MovimientoCreateSchema', 'MovimientoLoteSchema', 'AjusteBucketsSchema',
     'SolicitudCreateSchema', 'SolicitudUpdateEstadoSchema',
     'SolicitudDetallePatchSchema', 'EntregarSolicitudSchema',
     'EntregaDirectaSchema', 'CategoriaConfigUpsertSchema',

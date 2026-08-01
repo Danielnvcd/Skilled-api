@@ -94,7 +94,7 @@ def _movimiento_to_dict(m: MovimientoInventario) -> dict:
         'proyecto_destino': m.proyecto_destino.numero_proyecto if m.proyecto_destino else None,
         'usuario_id': m.usuario_id,
         'motivo': m.motivo,
-        # Partes del vale (None si no se capturaron / movimiento interno).
+        # Partes del comprobante (None si no se capturaron / movimiento interno).
         'entrega_trabajador_id': m.entrega_trabajador_id,
         'recibe_trabajador_id': m.recibe_trabajador_id,
         'entrega_nombre': m.entrega_display,

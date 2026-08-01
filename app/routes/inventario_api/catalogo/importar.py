@@ -791,8 +791,9 @@ def importar_materiales():
             # stock_por_almacen consistente (producto nuevo = un solo bucket).
             #
             # A diferencia del resto del módulo, aquí NO se usan `_depositar()` +
-            # `_recalcular_caches()`: esos hacen SELECT ... FOR UPDATE y dos
-            # recálculos por producto, o sea ~5 consultas por fila — en una carga
+            # `_recalcular_caches()`: ambos hacen SELECT ... FOR UPDATE (el del
+            # bucket y el del cache) y dos recálculos por producto, o sea ~5
+            # consultas por fila — en una carga
             # de miles de altas serían decenas de miles de viajes a la base. Y no
             # aportan nada: el producto acaba de nacer en ESTA transacción, así
             # que nadie más puede tener su bucket, no hay fila previa que releer

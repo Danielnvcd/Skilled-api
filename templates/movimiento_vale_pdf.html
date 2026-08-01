@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Vale {{ folio }}</title>
+  <title>Comprobante {{ folio }}</title>
   <style>
     @page { size: letter; margin: 1.4cm 1.6cm; }
     body { font-family: Helvetica, Arial, sans-serif; color: #111; margin: 0; padding: 0; font-size: 10pt; }
@@ -35,6 +35,7 @@
     .prod-desc { font-size: 12pt; font-weight: bold; color: #111827; }
     .prod-meta { font-size: 8pt; color: #6B7280; margin-top: 2px; }
     .sku-pill { background-color: #F3F4F6; color: #6B7280; padding: 1px 6px; font-size: 8pt; font-weight: bold; text-transform: uppercase; }
+    .folio-linea { color: #9CA3AF; font-size: 8pt; font-weight: bold; }
     .cable-tag { color: #92400E; font-weight: bold; font-size: 8pt; }
     .cant-big { font-size: 16pt; font-weight: bold; color: #4F46E5; }
 
@@ -61,11 +62,12 @@
         {% else %}
           <span class="logo-text">SKIL<span class="logo-text-accent">LED</span></span>
         {% endif %}
-        <div class="logo-sub">Vale de Movimiento de Inventario</div>
+        <div class="logo-sub">Comprobante de Movimiento de Inventario</div>
       </td>
       <td class="folio-cell">
         <div class="folio-num">{{ folio }}</div>
         <div class="folio-date">{{ fecha }}</div>
+        {% if folio_detalle %}<div class="folio-date">{{ folio_detalle }}</div>{% endif %}
       </td>
     </tr>
   </table>
@@ -74,23 +76,29 @@
 
   <div class="tipo-box">{{ tipo_label }}</div>
 
+  {# Una caja por línea. Con un solo producto se ve exactamente igual que el
+     comprobante de siempre; con varios, la tanda queda como una lista firmable en un
+     único comprobante en vez de N PDFs sueltos. #}
+  {% for l in lineas %}
   <div class="prod-box">
     <table style="width:100%;"><tr>
       <td style="vertical-align:middle;">
-        <div class="prod-desc">{{ producto_descripcion }}</div>
+        <div class="prod-desc">{{ l.descripcion }}</div>
         <div class="prod-meta">
-          <span class="sku-pill">{{ producto_codigo }}</span>
-          {% if cable_tipo or cable_calibre %}
-            &nbsp; <span class="cable-tag">Cable: {{ cable_tipo or '—' }} · {{ cable_calibre or '—' }} mm²/AWG</span>
+          <span class="sku-pill">{{ l.codigo }}</span>
+          {% if lineas|length > 1 %}&nbsp; <span class="folio-linea">{{ l.folio }}</span>{% endif %}
+          {% if l.cable_tipo or l.cable_calibre %}
+            &nbsp; <span class="cable-tag">Cable: {{ l.cable_tipo or '—' }} · {{ l.cable_calibre or '—' }} mm²/AWG</span>
           {% endif %}
         </div>
       </td>
       <td style="text-align:right; vertical-align:middle; width:120px;">
-        <span class="cant-big">{{ cantidad }}</span>
-        <div class="prod-meta">{{ unidad }}</div>
+        <span class="cant-big">{{ l.cantidad }}</span>
+        <div class="prod-meta">{{ l.unidad }}</div>
       </td>
     </tr></table>
   </div>
+  {% endfor %}
 
   <table class="info-table">
     <tr>

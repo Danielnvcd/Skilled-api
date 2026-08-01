@@ -1,4 +1,4 @@
-"""Generación de PDFs del módulo de Inventario (vales, solicitudes, tomas, OC).
+"""Generación de PDFs del módulo de Inventario (comprobantes, solicitudes, tomas, OC).
 
 Los cuatro generadores del módulo repetían el mismo preámbulo: importar pisa,
 resolver el logo contra BASE_DIR, renderizar el template, correr `CreatePDF` y
@@ -48,6 +48,6 @@ def renderizar_pdf(template: str, **contexto) -> io.BytesIO | None:
 
 def cantidad_legible(v):
     """Cantidad para impresión: entera si no tiene decimales, si no a 2 dígitos.
-    Evita imprimir '3.0 pza' en los vales."""
+    Evita imprimir '3.0 pza' en los comprobantes."""
     v = float(v or 0)
     return int(v) if v % 1 == 0 else round(v, 2)
