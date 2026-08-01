@@ -2329,6 +2329,50 @@ class TestDeshacerImportacion:
         assert MovimientoInventario.query.filter_by(producto_id=p1.id).count() == movs_antes
         assert Producto.query.filter_by(codigo='UND-MOV-2').first() is None
 
+    def test_la_guarda_de_borrado_se_lee_del_esquema(self, client, inv_admin, db):
+        """Las tablas que impiden borrar un producto se descubren del metadata,
+        no de una lista escrita a mano: si mañana se agrega una que referencie
+        productos, el deshacer la respeta sola. Si esta detección devolviera
+        vacío, deshacer borraría productos en uso sin avisar."""
+        from app.routes.inventario_api.catalogo.historial import (
+            _NOMBRE_TABLA, _TABLAS_LIMPIABLES, _referencias_a_productos,
+        )
+        refs = _referencias_a_productos()
+        nombres = {t.name for t, _ in refs}
+        assert nombres, 'la detección no encontró ninguna tabla: la guarda no existiría'
+        # Las que representan uso real del producto deben estar cubiertas.
+        assert 'movimientos_inventario' in nombres
+        assert 'solicitudes_material_detalle' in nombres
+        # Y las que el deshacer sí puede vaciar NO deben bloquear el borrado.
+        assert not (nombres & _TABLAS_LIMPIABLES)
+        # Los nombres del diccionario deben existir de verdad en el esquema: uno
+        # mal escrito no rompe nada, pero el aviso mostraría "solicitudes_x_det".
+        assert set(_NOMBRE_TABLA).issubset(nombres), (
+            f'nombres que ya no calzan con el esquema: {set(_NOMBRE_TABLA) - nombres}')
+
+    def test_deshacer_explica_por_que_no_borro(self, client, inv_admin, db):
+        """El aviso debe nombrar el uso concreto que salvó al producto."""
+        _login(client, inv_admin.id, 'admin')
+        alm = Almacen(nombre=f'UND-EXP-{uuid.uuid4().hex[:4]}', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(alm); db.session.commit()
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-EXP-1', 'Descripción': 'Con uso', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Stock Inicial': 5, 'Almacén': alm.nombre,
+        }])
+        p = Producto.query.filter_by(codigo='UND-EXP-1').first()
+        r = client.post('/api/v1/movimientos/', json={
+            'tipo': 'ENTRADA', 'producto_id': p.id, 'almacen_destino_id': alm.id,
+            'cantidad': 1, 'motivo': 'compra',
+        })
+        assert r.status_code == 200, r.get_json()
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        notas = resp.get_json()['notas']
+        assert any('movimientos' in n for n in notas), notas
+        assert not any('_detalle' in n or '_inventario' in n for n in notas), (
+            f'el aviso está mostrando nombres de tabla en crudo: {notas}')
+
     def test_no_se_puede_deshacer_dos_veces(self, client, inv_admin, db):
         _login(client, inv_admin.id, 'admin')
         body = self._importar(client, [{
