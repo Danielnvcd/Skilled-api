@@ -18,10 +18,10 @@ from app.realtime import emit_to_role
 
 from .._core import (
     bp,
-    _es_error_de_lock, respuesta_lock,
+    _es_error_de_lock, respuesta_lock, MENSAJE_LOCK,
     _require_inventario_admin,
     _parse_or_422, _int_arg,
-    MovimientoCreateSchema,
+    MovimientoCreateSchema, MovimientoLoteSchema,
     _movimiento_to_dict,
     _audit,
     _almacen_default_id,
@@ -131,11 +131,20 @@ def _perform_movimiento(data: dict, user, autocommit: bool = True):
     proyecto_origen_id = data.get('proyecto_origen_id')
     proyecto_destino_id = data.get('proyecto_destino_id')
 
-    # Partes del vale (quién entrega / quién recibe). Opcionales; se validan antes
+    # Partes del comprobante (quién entrega / quién recibe). Opcionales; se validan antes
     # de tocar stock para fallar limpio con 422 sin dejar la transacción a medias.
     partes, err_partes = _resolver_partes(data)
     if err_partes:
         return err_partes
+
+    # Un movimiento de 0 no es un movimiento: no altera stock y solo deja un
+    # renglón vacío en el kardex. En AJUSTE además pasaba de largo —es el único
+    # tipo que admite negativos, así que el guard de abajo no lo veía— y llegaba
+    # a `_depositar`, que crea el bucket en 0 al bloquearlo. Se rechaza aquí, el
+    # único punto por el que pasan TODOS los caminos (individual, lote, rápido y
+    # el cierre de tomas), para que ninguno acepte lo que otro rechaza.
+    if cantidad_raw == 0:
+        return jsonify({'detail': 'La cantidad no puede ser 0'}), 422
 
     # ENTRADA/SALIDA/TRASPASO/REASIGNACION requieren cantidad estrictamente
     # positiva. AJUSTE permite negativo (mermas) — lo controla la lógica de stock.
@@ -393,6 +402,97 @@ def _perform_movimiento(data: dict, user, autocommit: bool = True):
     else:
         db.session.flush()  # el caller commitea; flush da id al movimiento
     return jsonify(_movimiento_to_dict(nuevo_mov))
+
+
+@bp.route('/movimientos/lote', methods=['POST'])
+@limiter.limit(
+    # Una tanda = UNA petición, así que el límite se cuenta por tanda y no por
+    # línea: mover 30 productos ya no consume 30 del cupo de /movimientos/.
+    "10/minute",
+    key_func=lambda: f"ip:{get_real_client_ip_flask()}",
+)
+@_require_inventario_admin
+def create_movimientos_lote():
+    """Registra N movimientos del mismo tipo/bodega/proyecto de forma ATÓMICA.
+
+    Todos o ninguno. Cada línea va en su savepoint —igual que el cierre de una
+    toma física— para poder recolectar TODOS los errores y decirle al usuario
+    qué productos fallaron, en vez de morir en el primero; si al final hubo
+    alguno, el rollback deshace también las líneas que sí habían pasado.
+
+    Sin esto, el cliente tenía que mandar N peticiones: un fallo a media lista
+    dejaba stock movido sin forma de saber dónde se quedó, y reintentar volvía
+    a aplicar lo que ya se había aplicado.
+    """
+    data, err = _parse_or_422(MovimientoLoteSchema(), request.get_json(silent=True))
+    if err: return err
+    items = data.pop('items')
+
+    # Un mismo producto dos veces en la tanda casi siempre es un cliente con un
+    # bug (una lista sin deduplicar), y aplicarlo dos veces es justo el error
+    # que más caro sale: doble salida silenciosa.
+    ids = [it['producto_id'] for it in items]
+    duplicados = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicados:
+        return jsonify({
+            'detail': f'Productos repetidos en el lote: {duplicados}. Manda una sola línea por producto.',
+        }), 422
+
+    user = request.current_user
+    creados = []
+    errores = []
+    for it in items:
+        linea = {**data, 'producto_id': it['producto_id'], 'cantidad': it['cantidad']}
+        punto = db.session.begin_nested()
+        try:
+            resp = _perform_movimiento(linea, user, autocommit=False)
+        except Exception as exc:
+            punto.rollback()
+            # Un lock ocupado es un fallo esperado: se reporta como línea con
+            # problema y la tanda sigue recolectando el resto de errores.
+            if _es_error_de_lock(exc):
+                errores.append({'producto_id': it['producto_id'], 'detail': MENSAJE_LOCK})
+                continue
+            # Cualquier otra excepción es un bug, no un rechazo de negocio: los
+            # rechazos ya vienen por la rama de tuplas de abajo. Devolver
+            # `str(exc)` filtraba el mensaje crudo del driver (SQL, nombres de
+            # tabla y constraint) y disfrazaba un 500 de 409, que es justo lo
+            # que `transaccion_de_stock` evita en el resto del módulo.
+            db.session.rollback()
+            raise
+        # `_perform_movimiento` devuelve la Response a secas si todo fue bien, y
+        # una tupla (response, status) cuando rechazó la línea.
+        if isinstance(resp, tuple):
+            body_resp, status = resp
+            if status >= 400:
+                punto.rollback()
+                errores.append({
+                    'producto_id': it['producto_id'],
+                    'detail': (body_resp.get_json() or {}).get('detail', 'Movimiento rechazado'),
+                })
+                continue
+            resp = body_resp
+        punto.commit()   # libera el savepoint; sigue dentro de la transacción
+        creados.append(resp.get_json())
+
+    if errores:
+        db.session.rollback()   # ahora sí deshace: nada se había commiteado
+        return jsonify({
+            'detail': f'No se registró ningún movimiento: {len(errores)} línea(s) con problema',
+            'errores': errores,
+        }), 409
+
+    _audit(user, f"Lote {data['tipo']} — {len(creados)} movimientos")
+    db.session.commit()   # único commit: las N líneas, atómicas
+    # Las líneas no emitieron (autocommit=False), así que se avisa una vez aquí.
+    emit_to_role(_INV_ROLES, 'movimiento:changed', {
+        'origen': 'lote', 'tipo': data['tipo'], 'total': len(creados),
+    })
+    return jsonify({
+        'movimientos': creados,
+        'ids': [m['id'] for m in creados],
+        'total': len(creados),
+    })
 
 
 @bp.route('/movimientos/rapido', methods=['POST'])

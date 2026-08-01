@@ -1,5 +1,5 @@
 """Resolución de entidades referenciadas en los payloads (almacén, proyecto,
-partes de un vale).
+partes de un comprobante).
 
 Reglas de resolución que estaban copiadas entre `solicitudes`, `movimientos`,
 `compras` y `productos`. Cada helper levanta `ErrorDeNegocio` con el mismo
@@ -52,7 +52,7 @@ def resolver_proyecto(proyecto_id: int | None, numero_proyecto: str) -> Proyecto
 def resolver_trabajador_activo(trabajador_id: int, etiqueta: str = '') -> Trabajador:
     """Trabajador activo por id. Levanta `ErrorDeNegocio` 422 si no existe o está
     dado de baja. `etiqueta` prefija el mensaje cuando la parte tiene un rol en
-    el vale ('Entrega', 'Recibe'); sin etiqueta el mensaje va suelto."""
+    el comprobante ('Entrega', 'Recibe'); sin etiqueta el mensaje va suelto."""
     trab = Trabajador.query.filter(
         Trabajador.id == trabajador_id,
         Trabajador.activo == True,  # noqa: E712

@@ -314,7 +314,7 @@ class MovimientoInventario(db.Model):
     motivo = db.Column(db.String(250), nullable=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     fecha = db.Column(db.DateTime, default=_now_utc, index=True)
-    # Partes del movimiento (feature "vale de movimiento"): quién ENTREGA y quién
+    # Partes del movimiento: quién ENTREGA y quién
     # RECIBE la mercancía, para el comprobante PDF y la trazabilidad. Cada parte
     # puede ser un trabajador del sistema (FK) o un nombre libre — mismo patrón
     # que el solicitante real de una entrega directa (ver SolicitudMaterial).

@@ -190,7 +190,22 @@ def _recalcular_caches(producto: Producto, almacen_id: int):
     """Recalcula, en cascada, los dos caches tras mutar stock_almacen_proyecto:
       1. stock_por_almacen(producto, almacen) = Σ buckets de proyecto del almacén.
       2. Producto.stock_actual = Σ almacenes (vía `_recalcular_cache_stock`).
-    Se llama dentro de la misma transacción que modificó los buckets."""
+    Se llama dentro de la misma transacción que modificó los buckets.
+
+    El lock del cache se toma ANTES de sumar los buckets, y ese orden es la
+    razón de ser de esta función: dos transacciones que tocan buckets DISTINTOS
+    del mismo (producto, almacén) no se bloquean entre sí —son filas distintas
+    de stock_almacen_proyecto—, así que ambas llegaban aquí, cada una sumaba sin
+    ver el bucket no commiteado de la otra, y la última en commitear dejaba el
+    cache sin el movimiento de la primera. Un lost update clásico: la fuente de
+    verdad quedaba bien y `stock_por_almacen` / `Producto.stock_actual` —lo que
+    ve el usuario— se desviaban en silencio. Bloquear el cache primero serializa
+    ese tramo: la segunda transacción recibe el 409 'reintenta' del NOWAIT, que
+    es lo que ya hace el resto del módulo.
+    """
+    # `_lock_stock` hace FOR UPDATE NOWAIT y crea la fila en 0 si no existe
+    # (tolerando la carrera del INSERT vía `_crear_o_releer`).
+    fila = _lock_stock(producto.id, almacen_id)
     total_alm = _dec(
         db.session.query(db.func.coalesce(db.func.sum(StockAlmacenProyecto.cantidad), 0))
         .filter(
@@ -199,20 +214,7 @@ def _recalcular_caches(producto: Producto, almacen_id: int):
         )
         .scalar()
     )
-    fila = (
-        db.session.query(StockPorAlmacen)
-        .filter(
-            StockPorAlmacen.producto_id == producto.id,
-            StockPorAlmacen.almacen_id == almacen_id,
-        )
-        .first()
-    )
-    if fila is None:
-        db.session.add(StockPorAlmacen(
-            producto_id=producto.id, almacen_id=almacen_id, cantidad=total_alm,
-        ))
-    else:
-        fila.cantidad = total_alm
+    fila.cantidad = total_alm
     db.session.flush()  # que el sum de _recalcular_cache_stock vea el cache nuevo
     _recalcular_cache_stock(producto)
 

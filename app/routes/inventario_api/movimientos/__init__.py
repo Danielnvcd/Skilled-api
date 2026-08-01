@@ -1,7 +1,7 @@
 """Movimientos de inventario: ENTRADA, SALIDA, AJUSTE, TRASPASO, REASIGNACION.
 
   registro.py  listado, alta (`_perform_movimiento`) y movimiento rápido de PWA
-  vale.py      vale PDF de un movimiento ya registrado
+  vale.py      comprobante PDF de uno o varios movimientos ya registrados
 
 `tomas` importa `_perform_movimiento` desde aquí para generar los AJUSTES del
 cierre dentro de su propia transacción.

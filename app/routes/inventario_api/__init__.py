@@ -6,7 +6,7 @@ núcleo compartido vive en `_core/`:
   _core/                bp, guards, schemas, serializers, stock, reservas, PDF
   productos/            catálogo: consultas, escritura, existencias, kardex
   almacenes/            bodegas y estantes (rejilla de celdas, QR)
-  movimientos/          registro de movimientos (`_perform_movimiento`) y vale PDF
+  movimientos/          registro de movimientos (`_perform_movimiento`) y comprobante PDF
   solicitudes/          ciclo completo: alta, estado, entrega, entrega directa, PDF
   compras/              procura: alta, recepción → ENTRADA, PDF de la orden
   catalogo/             proyectos, categorías e importación/exportación Excel
