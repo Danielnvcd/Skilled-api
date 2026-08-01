@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import (
-    ImportacionCatalogo, ImportacionCatalogoCambio, MovimientoInventario,
+    ImportacionCatalogo, ImportacionCatalogoCambio,
     Producto, ProductoEstante, StockAlmacenProyecto, StockPorAlmacen,
 )
 from app.realtime import emit_to_role
@@ -29,15 +29,71 @@ from .._core import (
 from .importar import _mismo_valor, _valor_restaurado
 
 
+# Tablas que un "deshacer" SÍ puede vaciar junto con el producto: son parte del
+# alta misma (dónde quedó su stock, en qué estante se puso) y no información que
+# alguien más haya generado. Todo lo demás cuenta como uso posterior y protege al
+# producto de ser borrado.
+_TABLAS_LIMPIABLES = {
+    'stock_almacen_proyecto',
+    'stock_por_almacen',
+    'producto_estante',
+    'importaciones_catalogo_cambios',
+}
+
+# Nombre legible de las tablas que bloquean el borrado, para explicárselo al
+# usuario. Si aparece una tabla nueva sin traducir, se usa su nombre tal cual:
+# el aviso será menos bonito, pero nunca falso.
+_NOMBRE_TABLA = {
+    'movimientos_inventario': 'movimientos',
+    'solicitudes_material_detalle': 'solicitudes de material',
+    'solicitudes_compra_detalle': 'solicitudes de compra',
+    'tomas_inventario_detalle': 'tomas físicas',
+    'notificacion_umbral': 'alertas de mínimo',
+    'proyecto_material_plan': 'planes de material',
+}
+
+
+def _referencias_a_productos():
+    """Tablas que apuntan a `productos.id`, leídas del esquema real.
+
+    Se descubren del metadata en vez de escribirlas a mano: si mañana se agrega
+    una tabla que referencie productos, el deshacer la tomará en cuenta sola. Con
+    una lista fija, esa tabla nueva pasaría desapercibida y el borrado fallaría
+    por integridad en producción.
+    """
+    refs = []
+    for tabla in db.metadata.tables.values():
+        if tabla.name in _TABLAS_LIMPIABLES or tabla.name == 'productos':
+            continue
+        for fk in tabla.foreign_keys:
+            if fk.column.table.name == 'productos':
+                refs.append((tabla, fk.parent))
+    return refs
+
+
+def _productos_en_uso(producto_ids: list[int]) -> dict[int, set[str]]:
+    """{producto_id: {'movimientos', 'solicitudes de material'…}} para los que
+    están referenciados en algún lado. Una consulta por tabla, no por producto."""
+    en_uso: dict[int, set[str]] = {}
+    for tabla, columna in _referencias_a_productos():
+        filas = db.session.execute(
+            db.select(columna).where(columna.in_(producto_ids)).distinct()
+        ).all()
+        etiqueta = _NOMBRE_TABLA.get(tabla.name, tabla.name)
+        for (pid,) in filas:
+            if pid is not None:
+                en_uso.setdefault(pid, set()).add(etiqueta)
+    return en_uso
+
+
 def _borrar_en_bloque(producto_ids: list[int]):
     """Borra productos y lo que cuelga de ellos con sentencias en bloque.
 
     Se hace a mano, sin `session.delete()`, porque el ORM cargaría las
     colecciones de cada producto (stock, estantes, movimientos) para aplicar sus
     cascadas: una consulta por colección y por producto. Aquí solo se llega con
-    altas recién importadas y sin movimientos, así que basta con vaciar sus
-    tablas hijas conocidas; cualquier otra referencia hace saltar el
-    IntegrityError que el llamador usa para caer al camino producto por producto.
+    altas que el chequeo previo declaró libres de uso; el savepoint del llamador
+    sigue como red por si algo se coló entre la comprobación y el borrado.
     """
     filtro = {'synchronize_session': False}
     StockAlmacenProyecto.query.filter(
@@ -165,18 +221,13 @@ def deshacer_importacion(importacion_id: int):
     # mismo N+1 que se quitó del importador; aquí se evita igual.
     ids = [c.producto_id for c in cambios if c.producto_id]
     productos_por_id: dict[int, Producto] = {}
-    con_movimientos: set[int] = set()
+    en_uso: dict[int, set[str]] = {}
     LOTE_IDS = 900
     for i in range(0, len(ids), LOTE_IDS):
         trozo = ids[i:i + LOTE_IDS]
         for p in Producto.query.filter(Producto.id.in_(trozo)).all():
             productos_por_id[p.id] = p
-        con_movimientos.update(
-            pid for (pid,) in db.session.query(MovimientoInventario.producto_id)
-            .filter(MovimientoInventario.producto_id.in_(trozo))
-            .distinct()
-            .all()
-        )
+        en_uso.update(_productos_en_uso(trozo))
 
     for c in cambios:
         prod = productos_por_id.get(c.producto_id) if c.producto_id else None
@@ -201,17 +252,23 @@ def deshacer_importacion(importacion_id: int):
                 restaurados += 1
             continue
 
-        # ── Alta: solo se borra si nadie la tocó ─────────────────────────────
-        tiene_movimientos = prod.id in con_movimientos
+        # ── Alta: solo se borra si nadie la usó ──────────────────────────────
+        # "Usada" = referenciada desde cualquier otra tabla (movimientos,
+        # solicitudes, compras, tomas…) o con el stock ya movido. En ese caso se
+        # da de baja lógica: borrarla arrastraría registros de otros —
+        # `Producto.movimientos` incluso tiene cascade delete-orphan.
+        usos = en_uso.get(prod.id)
         stock_esperado = c.stock_inicial or 0
-        stock_actual_ok = _mismo_valor(prod.stock_actual, stock_esperado)
+        stock_movido = not _mismo_valor(prod.stock_actual, stock_esperado)
 
-        if tiene_movimientos or not stock_actual_ok:
+        if usos or stock_movido:
             prod.activo = False
             desactivados += 1
+            motivo = (f'ya tiene {", ".join(sorted(usos))}' if usos
+                      else 'su stock ya se movió')
             notas.append(
-                f'{c.codigo}: ya tenía movimientos o su stock cambió — se desactivó '
-                'en vez de borrarse, para no perder el histórico'
+                f'{c.codigo}: {motivo} — se desactivó en vez de borrarse, '
+                'para no perder el histórico'
             )
             continue
 
