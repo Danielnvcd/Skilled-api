@@ -83,6 +83,8 @@ from app.models.inventario import (
     Almacen,
     CategoriaConfig,
     Estante,
+    ImportacionCatalogo,
+    ImportacionCatalogoCambio,
     MovimientoInventario,
     NotificacionUmbral,
     Producto,
@@ -161,6 +163,7 @@ __all__ = [
     'StockPorAlmacen', 'StockAlmacenProyecto',
     'TomaInventario', 'TomaInventarioDetalle',
     'ProductoEstante', 'MovimientoInventario', 'CategoriaConfig',
+    'ImportacionCatalogo', 'ImportacionCatalogoCambio',
     'ESTADOS_TOMA',
     # solicitudes
     'SolicitudMaterial', 'SolicitudMaterialDetalle',

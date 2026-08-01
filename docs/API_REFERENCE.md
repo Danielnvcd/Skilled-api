@@ -269,8 +269,14 @@ cambiar la password de un admin NO resetea su 2FA.
 | GET | `/productos/<id>/stocks` | inv-admin | Desglose de stock por almacén |
 | GET | `/productos/<id>/disponibilidad` | inv-admin | Stock real / reservado / disponible |
 | GET | `/productos/<id>/kardex` | inv-admin | Historial cronológico con saldo corrido |
-| GET | `/productos/plantilla-importar` | inv-lectura | Excel plantilla de carga masiva |
-| POST | `/productos/importar` | inv-admin, RL | Importación masiva desde Excel |
+| GET | `/productos/plantilla-importar` | inv-lectura | Excel plantilla de carga masiva. `?almacen_id=&proyecto_id=` (opcionales) prellenan el destino del stock inicial en cada fila; ambas columnas traen lista desplegable con lo existente |
+| GET | `/productos/exportar` | inv-admin | Catálogo activo en Excel, solo columnas de catálogo (sin stock, mínimo, almacén ni proyecto) para editar y reimportar |
+| POST | `/productos/importar` | inv-admin, RL | Importación masiva desde Excel. Con `previsualizar=1` recorre el archivo y devuelve el plan (nuevos, cambios campo por campo, errores, posibles duplicados) **sin escribir nada** |
+| GET | `/productos/importaciones` | inv-admin | Últimos lotes de importación (`?limit=`, def. 20) |
+| GET | `/productos/importaciones/<id>` | inv-admin | Detalle del lote: creados y campos cambiados con su valor anterior |
+| POST | `/productos/importaciones/<id>/deshacer` | inv-admin | Revierte el lote. Solo deshace lo que sigue igual que como lo dejó: lo editado después se respeta, y las altas que ya tuvieron movimientos se desactivan en vez de borrarse |
+| POST | `/productos/minimos/sugerencia` | inv-admin | Stock mínimo sugerido por consumo (`producto_ids`, `dias_consumo`, `dias_cobertura`) |
+| PATCH | `/productos/minimos` | inv-admin | Fija el stock mínimo de varios productos (`items[]` o `producto_ids[]` + `stock_minimo`) |
 
 ### Almacenes y estantes
 

@@ -54,6 +54,11 @@ def create_producto():
         cable_calibre=cable_calibre,
         stock_actual=stock_inicial,
         stock_minimo=Decimal(str(data['stock_minimo'])),
+        # El precio venía en el schema y lo manda el SPA, pero no se estaba
+        # guardando al crear: el alta a mano perdía el precio (quedaba en 0) y
+        # solo se podía capturar volviendo a editar el producto. La importación
+        # sí lo guardaba, así que los dos caminos daban resultados distintos.
+        precio_unitario=Decimal(str(data['precio_unitario'])),
         imagen_url=data.get('imagen_url') or None,
         proveedor_default_nombre=(data.get('proveedor_default_nombre') or None),
         proveedor_default_contacto=(data.get('proveedor_default_contacto') or None),

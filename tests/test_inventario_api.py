@@ -436,6 +436,25 @@ class TestProductosCable:
         assert resp2.get_json()['unidad'] == 'M'
         assert resp2.get_json()['cable_calibre'] == '10'
 
+    def test_crear_producto_guarda_el_precio(self, client, inv_admin, db):
+        """El precio capturado al ALTA debe guardarse.
+
+        Se perdía: el SPA lo mandaba y el schema lo aceptaba, pero el alta no lo
+        asignaba y el producto quedaba en 0 hasta volver a editarlo — mientras
+        que la importación por Excel sí lo guardaba. De ese precio salen los
+        costos por proyecto, así que un 0 silencioso desalinea los reportes.
+        """
+        _login(client, inv_admin.id, 'admin')
+        resp = client.post('/api/v1/productos/', json={
+            'codigo': 'PRECIO-1', 'descripcion': 'Tornillo', 'categoria': 'Tornillería',
+            'unidad': 'pza', 'stock_actual': 0, 'stock_minimo': 0,
+            'precio_unitario': 37.25,
+        })
+        assert resp.status_code == 200, resp.get_json()
+        assert float(resp.get_json()['precio_unitario']) == pytest.approx(37.25, abs=0.001)
+        p = Producto.query.filter_by(codigo='PRECIO-1').first()
+        assert float(p.precio_unitario) == pytest.approx(37.25, abs=0.001)
+
     def test_update_parcial_de_cable_conserva_datos(self, client, inv_admin, db):
         """Editar solo el precio de un cable NO debe borrar Tipo/Tamaño ni fallar
         por 'faltan datos de cable'."""
@@ -2022,3 +2041,960 @@ class TestCategoriaConBarraEnElNombre:
         assert r.status_code == 404
         assert r.get_json() is not None, 'el 404 vino del router, no del endpoint'
         assert 'detail' in r.get_json()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 20. EXPORT DE CATÁLOGO Y PLANTILLA CON DESTINO (almacén / proyecto)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestMinimosMasivos:
+    """El stock mínimo se puede fijar en masa y sugerir desde el consumo real."""
+
+    def _producto(self, db, codigo, unidad='pza', minimo=0):
+        from decimal import Decimal
+        p = Producto(codigo=codigo, descripcion=f'Prod {codigo}', categoria='ZZ Min',
+                     unidad=unidad, stock_actual=Decimal('100'),
+                     stock_minimo=Decimal(str(minimo)))
+        db.session.add(p); db.session.commit()
+        return p
+
+    def test_fijar_el_mismo_minimo_a_varios(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a = self._producto(db, 'MIN-1')
+        b = self._producto(db, 'MIN-2')
+        resp = client.patch('/api/v1/productos/minimos',
+                            json={'producto_ids': [a.id, b.id], 'stock_minimo': 12})
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['actualizados'] == 2 and body['errores'] == []
+        db.session.refresh(a); db.session.refresh(b)
+        assert float(a.stock_minimo) == 12.0 and float(b.stock_minimo) == 12.0
+
+    def test_minimos_distintos_por_producto(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        a = self._producto(db, 'MIN-3')
+        b = self._producto(db, 'MIN-4')
+        resp = client.patch('/api/v1/productos/minimos', json={'items': [
+            {'id': a.id, 'stock_minimo': 5},
+            {'id': b.id, 'stock_minimo': 9},
+        ]})
+        assert resp.status_code == 200, resp.get_json()
+        db.session.refresh(a); db.session.refresh(b)
+        assert float(a.stock_minimo) == 5.0 and float(b.stock_minimo) == 9.0
+
+    def test_no_toca_el_stock_real(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-5')
+        client.patch('/api/v1/productos/minimos',
+                     json={'producto_ids': [p.id], 'stock_minimo': 3})
+        db.session.refresh(p)
+        assert float(p.stock_actual) == 100.0
+
+    def test_rechaza_decimales_en_unidad_entera(self, client, inv_admin, db):
+        """Misma regla que el alta manual y que la importación."""
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-6', unidad='pza', minimo=1)
+        resp = client.patch('/api/v1/productos/minimos',
+                            json={'producto_ids': [p.id], 'stock_minimo': 2.5})
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['actualizados'] == 0 and len(body['errores']) == 1
+        db.session.refresh(p)
+        assert float(p.stock_minimo) == 1.0
+
+    def test_acepta_decimales_en_unidad_continua(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-7', unidad='Mts')
+        resp = client.patch('/api/v1/productos/minimos',
+                            json={'producto_ids': [p.id], 'stock_minimo': 2.5})
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['actualizados'] == 1
+
+    def test_sugerencia_usa_el_consumo_real(self, client, inv_admin, db):
+        """30 unidades salidas en 30 días = 1/día → 15 días de cobertura = 15."""
+        import datetime
+        from decimal import Decimal
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-8')
+        alm = Almacen(nombre=f'MIN-BOD-{uuid.uuid4().hex[:4]}', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(alm); db.session.commit()
+        db.session.add(MovimientoInventario(
+            tipo='SALIDA', producto_id=p.id, almacen_origen_id=alm.id,
+            cantidad=Decimal('30'), usuario_id=inv_admin.id,
+            fecha=datetime.datetime.now() - datetime.timedelta(days=5),
+        ))
+        db.session.commit()
+
+        resp = client.post('/api/v1/productos/minimos/sugerencia', json={
+            'producto_ids': [p.id], 'dias_consumo': 30, 'dias_cobertura': 15,
+        })
+        assert resp.status_code == 200, resp.get_json()
+        item = resp.get_json()['items'][0]
+        assert item['consumo_diario'] == pytest.approx(1.0, abs=0.01)
+        assert item['sugerido'] == pytest.approx(15.0, abs=0.01)
+        assert item['sin_consumo'] is False
+
+    def test_sugerencia_marca_los_que_no_se_mueven(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-9')
+        resp = client.post('/api/v1/productos/minimos/sugerencia',
+                           json={'producto_ids': [p.id]})
+        assert resp.status_code == 200, resp.get_json()
+        item = resp.get_json()['items'][0]
+        assert item['sin_consumo'] is True and item['sugerido'] == 0
+
+    def test_sugerencia_redondea_hacia_arriba_en_piezas(self, client, inv_admin, db):
+        """1.2 piezas de mínimo no existe: se pide 2."""
+        import datetime
+        from decimal import Decimal
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-10')
+        db.session.add(MovimientoInventario(
+            tipo='SALIDA', producto_id=p.id, cantidad=Decimal('12'),
+            usuario_id=inv_admin.id, fecha=datetime.datetime.now() - datetime.timedelta(days=2),
+        ))
+        db.session.commit()
+        resp = client.post('/api/v1/productos/minimos/sugerencia', json={
+            'producto_ids': [p.id], 'dias_consumo': 30, 'dias_cobertura': 3,
+        })
+        item = resp.get_json()['items'][0]
+        assert item['consumo_diario'] == pytest.approx(0.4, abs=0.01)
+        assert item['sugerido'] == 2  # ceil(1.2)
+
+    def test_valida_parametros(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        p = self._producto(db, 'MIN-11')
+        assert client.post('/api/v1/productos/minimos/sugerencia',
+                           json={'producto_ids': []}).status_code == 422
+        assert client.post('/api/v1/productos/minimos/sugerencia',
+                           json={'producto_ids': [p.id], 'dias_consumo': 5000}).status_code == 422
+        assert client.patch('/api/v1/productos/minimos', json={}).status_code == 422
+
+    def test_quien_no_escribe_inventario_no_puede(self, client, inv_solicitante, db):
+        """Mismo guard que el resto de la escritura del catálogo: inventario y
+        admin sí; un solicitante de material, no."""
+        _login(client, inv_solicitante.id, 'solicitante_material')
+        p = self._producto(db, 'MIN-12')
+        resp = client.patch('/api/v1/productos/minimos',
+                            json={'producto_ids': [p.id], 'stock_minimo': 5})
+        assert resp.status_code == 403
+        resp = client.post('/api/v1/productos/minimos/sugerencia',
+                           json={'producto_ids': [p.id]})
+        assert resp.status_code == 403
+
+
+class TestDeshacerImportacion:
+    """Una importación aplicada se puede revertir, sin pisar trabajo posterior."""
+
+    def _importar(self, client, filas):
+        import io as _io
+        resp = client.post(
+            '/api/v1/productos/importar',
+            data={'archivo': (_io.BytesIO(_build_import_xlsx(filas)), 'carga.xlsx')},
+            content_type='multipart/form-data')
+        assert resp.status_code == 200, resp.get_json()
+        return resp.get_json()
+
+    def test_importar_registra_el_lote(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-1', 'Descripción': 'Tornillo', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Stock Inicial': 5,
+        }])
+        assert body['importacion_id']
+        lista = client.get('/api/v1/productos/importaciones').get_json()
+        assert lista[0]['id'] == body['importacion_id']
+        assert lista[0]['archivo'] == 'carga.xlsx'
+        assert lista[0]['creados'] == 1
+        assert lista[0]['puede_deshacerse'] is True
+
+    def test_deshacer_borra_los_productos_creados(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        alm = Almacen(nombre='UND-BOD', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(alm); db.session.commit()
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-2', 'Descripción': 'Tuerca', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Stock Inicial': 8, 'Almacén': 'UND-BOD',
+        }])
+        p = Producto.query.filter_by(codigo='UND-2').first()
+        assert p is not None
+        pid = p.id
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        r = resp.get_json()
+        assert r['eliminados'] == 1 and r['desactivados'] == 0
+        assert Producto.query.filter_by(codigo='UND-2').first() is None
+        # El stock que había depositado también se retira.
+        assert StockAlmacenProyecto.query.filter_by(producto_id=pid).first() is None
+        assert StockPorAlmacen.query.filter_by(producto_id=pid).first() is None
+
+    def test_deshacer_restaura_los_campos_actualizados(self, client, inv_admin, db):
+        from decimal import Decimal
+        p = Producto(codigo='UND-3', descripcion='Cinta vieja', categoria='ZZ Und',
+                     unidad='pza', stock_actual=Decimal('4'), stock_minimo=Decimal('1'),
+                     precio_unitario=Decimal('10'))
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-3', 'Descripción': 'Cinta nueva', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Precio Unitario': 99, 'Stock Mínimo': 7,
+        }])
+        db.session.refresh(p)
+        assert p.descripcion == 'Cinta nueva' and float(p.precio_unitario) == 99.0
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['restaurados'] == 1
+        db.session.refresh(p)
+        assert p.descripcion == 'Cinta vieja'
+        assert float(p.precio_unitario) == 10.0
+        assert float(p.stock_minimo) == 1.0
+
+    def test_deshacer_respeta_lo_editado_despues(self, client, inv_admin, db):
+        """Si alguien editó el campo DESPUÉS de importar, deshacer no lo pisa."""
+        from decimal import Decimal
+        p = Producto(codigo='UND-4', descripcion='Original', categoria='ZZ Und', unidad='pza',
+                     stock_actual=Decimal('1'), stock_minimo=0, precio_unitario=Decimal('5'))
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-4', 'Descripción': 'Importado', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Precio Unitario': 50,
+        }])
+        # Edición manual posterior: manda sobre el deshacer.
+        r = client.put(f'/api/v1/productos/{p.id}', json={'precio_unitario': 77})
+        assert r.status_code == 200, r.get_json()
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['campos_omitidos'] >= 1
+        db.session.refresh(p)
+        assert float(p.precio_unitario) == 77.0   # respetado
+        assert p.descripcion == 'Original'        # sí revertido
+
+    def test_deshacer_desactiva_si_el_producto_ya_se_movio(self, client, inv_admin, db):
+        """Un alta que ya tuvo movimientos no se borra: se da de baja lógica."""
+        _login(client, inv_admin.id, 'admin')
+        alm = Almacen(nombre='UND-BOD2', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(alm); db.session.commit()
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-5', 'Descripción': 'Clavo', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Stock Inicial': 10, 'Almacén': 'UND-BOD2',
+        }])
+        p = Producto.query.filter_by(codigo='UND-5').first()
+        mov = client.post('/api/v1/movimientos/', json={
+            'tipo': 'ENTRADA', 'producto_id': p.id, 'almacen_destino_id': alm.id,
+            'cantidad': 5, 'motivo': 'compra',
+        })
+        assert mov.status_code == 200, mov.get_json()
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        r = resp.get_json()
+        assert r['eliminados'] == 0 and r['desactivados'] == 1
+        db.session.refresh(p)
+        assert p.activo is False          # sigue existiendo, con su histórico
+        assert r['notas']                  # y se explica por qué
+
+    def test_deshacer_nunca_borra_movimientos(self, client, inv_admin, db):
+        """Producto.movimientos tiene cascade='all, delete-orphan': borrar el
+        producto arrastraría su histórico de movimientos. La guarda que desactiva
+        en vez de borrar es lo único que lo impide — si se cae, se pierde
+        histórico en silencio."""
+        _login(client, inv_admin.id, 'admin')
+        alm = Almacen(nombre=f'UND-MOV-{uuid.uuid4().hex[:4]}', qr_code=str(uuid.uuid4()), activo=True)
+        db.session.add(alm); db.session.commit()
+        body = self._importar(client, [
+            {'Código (SKU)': 'UND-MOV-1', 'Descripción': 'Con movimiento',
+             'Categoría': 'ZZ Und', 'Unidad': 'pza', 'Stock Inicial': 10,
+             'Almacén': alm.nombre},
+            {'Código (SKU)': 'UND-MOV-2', 'Descripción': 'Intacto',
+             'Categoría': 'ZZ Und', 'Unidad': 'pza'},
+        ])
+        p1 = Producto.query.filter_by(codigo='UND-MOV-1').first()
+        r = client.post('/api/v1/movimientos/', json={
+            'tipo': 'SALIDA', 'producto_id': p1.id, 'almacen_origen_id': alm.id,
+            'cantidad': 2, 'motivo': 'uso',
+        })
+        assert r.status_code == 200, r.get_json()
+        movs_antes = MovimientoInventario.query.filter_by(producto_id=p1.id).count()
+        assert movs_antes >= 1
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        rr = resp.get_json()
+        # El que se movió sobrevive con su histórico; el intacto sí se borra.
+        assert rr['desactivados'] == 1 and rr['eliminados'] == 1
+        assert MovimientoInventario.query.filter_by(producto_id=p1.id).count() == movs_antes
+        assert Producto.query.filter_by(codigo='UND-MOV-2').first() is None
+
+    def test_no_se_puede_deshacer_dos_veces(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-6', 'Descripción': 'Taquete', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza',
+        }])
+        url = f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer"
+        assert client.post(url).status_code == 200
+        segunda = client.post(url)
+        assert segunda.status_code == 400
+        assert 'revertida' in segunda.get_json()['detail'].lower()
+
+    def test_previsualizar_no_registra_lote(self, client, inv_admin, db):
+        """El plan no es una importación: no debe aparecer en el historial."""
+        import io as _io
+        _login(client, inv_admin.id, 'admin')
+        antes = len(client.get('/api/v1/productos/importaciones').get_json())
+        client.post('/api/v1/productos/importar', data={
+            'archivo': (_io.BytesIO(_build_import_xlsx([{
+                'Código (SKU)': 'UND-7', 'Descripción': 'X', 'Categoría': 'ZZ Und',
+                'Unidad': 'pza',
+            }])), 'plan.xlsx'),
+            'previsualizar': '1',
+        }, content_type='multipart/form-data')
+        assert len(client.get('/api/v1/productos/importaciones').get_json()) == antes
+
+    def test_deshacer_sin_bodega_activa_si_borra_el_alta(self, client, inv_admin, db):
+        """Sin bodegas activas el stock inicial no cae en ningún bucket. El
+        registro debe guardarlo igual: si no, al deshacer el producto parecería
+        "ya tocado" (stock 10 vs 0 esperado) y se desactivaría en vez de borrarse.
+        """
+        _login(client, inv_admin.id, 'admin')
+        # Ninguna bodega activa en este test.
+        assert Almacen.query.filter_by(activo=True).first() is None
+        body = self._importar(client, [{
+            'Código (SKU)': 'UND-SB', 'Descripción': 'Sin bodega', 'Categoría': 'ZZ Und',
+            'Unidad': 'pza', 'Stock Inicial': 10,
+        }])
+        assert Producto.query.filter_by(codigo='UND-SB').first() is not None
+
+        resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['eliminados'] == 1
+        assert Producto.query.filter_by(codigo='UND-SB').first() is None
+
+    def test_deshacer_masivo_no_consulta_por_producto(self, client, inv_admin, db):
+        """Deshacer debe resolver los productos en lotes, no uno por uno: con
+        cientos de altas serían cientos de viajes a la base en una sola petición.
+        """
+        from sqlalchemy import event
+        _login(client, inv_admin.id, 'admin')
+        N = 120
+        body = self._importar(client, [{
+            'Código (SKU)': f'UNDM-{i:03d}', 'Descripción': f'Prod {i}',
+            'Categoría': 'ZZ Und', 'Unidad': 'pza',
+        } for i in range(N)])
+        assert body['exitosos'] == N
+
+        consultas = {'n': 0}
+        engine = db.engine
+
+        # Se cuentan solo las LECTURAS: los DELETE son uno por producto y son
+        # inherentes al borrado. Lo que no debe escalar con N es la resolución
+        # de "qué producto es este" y "¿tuvo movimientos?".
+        @event.listens_for(engine, 'before_cursor_execute')
+        def _contar(conn, cursor, statement, params, context, executemany):
+            s = statement.lstrip().upper()
+            if s.startswith('SELECT') and (
+                    'FROM PRODUCTOS' in s or 'FROM MOVIMIENTOS_INVENTARIO' in s):
+                consultas['n'] += 1
+
+        try:
+            resp = client.post(f"/api/v1/productos/importaciones/{body['importacion_id']}/deshacer")
+        finally:
+            event.remove(engine, 'before_cursor_execute', _contar)
+
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['eliminados'] == N
+        assert consultas['n'] < 20, (
+            f'{consultas["n"]} lecturas para deshacer {N} altas: volvió el SELECT por producto')
+
+    def test_detalle_lista_lo_que_hizo_el_lote(self, client, inv_admin, db):
+        from decimal import Decimal
+        db.session.add(Producto(codigo='UND-8', descripcion='Vieja', categoria='ZZ Und',
+                                unidad='pza', stock_actual=Decimal('1'), stock_minimo=0))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        body = self._importar(client, [
+            {'Código (SKU)': 'UND-8', 'Descripción': 'Nueva', 'Categoría': 'ZZ Und',
+             'Unidad': 'pza'},
+            {'Código (SKU)': 'UND-9', 'Descripción': 'Alta', 'Categoría': 'ZZ Und',
+             'Unidad': 'pza'},
+        ])
+        det = client.get(f"/api/v1/productos/importaciones/{body['importacion_id']}").get_json()
+        assert {c['codigo'] for c in det['detalle']['creados']} == {'UND-9'}
+        act = det['detalle']['actualizados'][0]
+        assert act['codigo'] == 'UND-8'
+        campo = next(c for c in act['campos'] if c['campo'] == 'descripcion')
+        assert campo['antes'] == 'Vieja' and campo['despues'] == 'Nueva'
+
+
+class TestPrevisualizarImportacion:
+    """Subir el archivo muestra el plan; hasta confirmar no se escribe nada."""
+
+    def _post(self, client, filas, previsualizar=False):
+        import io as _io
+        data = {'archivo': (_io.BytesIO(_build_import_xlsx(filas)), 'materiales.xlsx')}
+        if previsualizar:
+            data['previsualizar'] = '1'
+        return client.post('/api/v1/productos/importar', data=data,
+                           content_type='multipart/form-data')
+
+    FILA_NUEVA = {
+        'Código (SKU)': 'PREV-1', 'Descripción': 'Tornillo nuevo', 'Categoría': 'ZZ Prev',
+        'Unidad': 'pza', 'Stock Inicial': 10, 'Stock Mínimo': 2, 'Precio Unitario': 5,
+    }
+
+    def test_previsualizar_no_escribe_nada(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [self.FILA_NUEVA], previsualizar=True)
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['previsualizacion'] is True
+        assert body['exitosos'] == 1
+        assert body['nuevos'][0]['codigo'] == 'PREV-1'
+        # Nada tocado: ni el producto ni la categoría nueva.
+        assert Producto.query.filter_by(codigo='PREV-1').first() is None
+        from app.models.inventario import CategoriaConfig
+        assert CategoriaConfig.query.filter_by(nombre='ZZ Prev').first() is None
+
+    def test_previsualizar_no_modifica_al_existente(self, client, inv_admin, db):
+        from decimal import Decimal
+        p = Producto(codigo='PREV-2', descripcion='Tuerca', categoria='Tuercas', unidad='pza',
+                     marca='Vieja', stock_actual=Decimal('5'), stock_minimo=0,
+                     precio_unitario=Decimal('2'))
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'PREV-2', 'Descripción': 'Tuerca larga', 'Categoría': 'Tuercas',
+            'Unidad': 'pza', 'Precio Unitario': 9,
+        }], previsualizar=True)
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['actualizados'] == 1
+        cambios = body['cambios_detalle'][0]['cambios']
+        assert 'descripción' in cambios
+        assert any('precio: 2.0 → 9.0' in c for c in cambios)
+        db.session.refresh(p)
+        assert p.descripcion == 'Tuerca' and float(p.precio_unitario) == 2.0
+
+    def test_el_plan_coincide_con_lo_aplicado(self, client, inv_admin, db):
+        """Lo que promete la previsualización es exactamente lo que ocurre."""
+        from decimal import Decimal
+        db.session.add(Producto(codigo='PREV-3', descripcion='Cinta', categoria='ZZ Prev2',
+                                unidad='pza', marca='A', stock_actual=Decimal('1'), stock_minimo=0))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        filas = [
+            {'Código (SKU)': 'PREV-3', 'Descripción': 'Cinta', 'Categoría': 'ZZ Prev2',
+             'Unidad': 'pza', 'Marca': 'B'},
+            {'Código (SKU)': 'PREV-4', 'Descripción': 'Clavo', 'Categoría': 'ZZ Prev2',
+             'Unidad': 'pza', 'Stock Inicial': 3},
+        ]
+        plan = self._post(client, filas, previsualizar=True).get_json()
+        real = self._post(client, filas).get_json()
+        for k in ('exitosos', 'actualizados', 'sin_cambios', 'total_procesadas'):
+            assert plan[k] == real[k], f'{k}: plan={plan[k]} real={real[k]}'
+        assert plan['cambios_detalle'] == real['cambios_detalle']
+        assert Producto.query.filter_by(codigo='PREV-4').first() is not None
+
+    def test_previsualizar_avisa_de_posible_duplicado(self, client, inv_admin, db):
+        """Un material nuevo con la MISMA descripción que uno existente (otro
+        SKU) se reporta como aviso, no como error."""
+        db.session.add(Producto(codigo='DUP-VIEJO', descripcion='Cable THHN 12 negro',
+                                categoria='Cable', unidad='M', cable_tipo='THHN',
+                                cable_calibre='12', stock_actual=0, stock_minimo=0))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [{
+            'Código (SKU)': 'DUP-NUEVO', 'Descripción': 'cable  thhn 12 NEGRO',
+            'Categoría': 'Cable', 'Unidad': 'M',
+            'Tipo (cable)': 'THHN', 'Tamaño mm²/AWG (cable)': '12',
+        }], previsualizar=True)
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['errores'] == []  # avisa, no bloquea
+        assert len(body['duplicados']) == 1
+        assert body['duplicados'][0]['codigo'] == 'DUP-NUEVO'
+        assert body['duplicados'][0]['parecido_a'] == 'DUP-VIEJO'
+
+    def test_previsualizar_reporta_errores_sin_aplicar_lo_bueno(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, [
+            self.FILA_NUEVA,
+            {'Código (SKU)': 'PREV BAD!', 'Descripción': 'Malo', 'Categoría': 'ZZ Prev',
+             'Unidad': 'pza'},
+        ], previsualizar=True)
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['exitosos'] == 1 and len(body['errores']) == 1
+        assert Producto.query.filter_by(codigo='PREV-1').first() is None
+
+
+class TestImportCoherencia:
+    """La importación debe seguir las mismas reglas que el alta manual y no
+    borrar datos que el archivo simplemente no trae."""
+
+    def _post(self, client, headers, filas):
+        """Sube un .xlsx con los encabezados EXACTOS que se le pasen."""
+        import io as _io
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.append(headers)
+        for f in filas:
+            ws.append([f.get(h, '') for h in headers])
+        buf = _io.BytesIO()
+        wb.save(buf); buf.seek(0)
+        return client.post('/api/v1/productos/importar',
+                           data={'archivo': (buf, 'materiales.xlsx')},
+                           content_type='multipart/form-data')
+
+    BASE = ['Código (SKU)', 'Descripción', 'Categoría', 'Unidad']
+
+    # ── No borrar lo que el archivo no trae ──────────────────────────────────
+
+    def test_archivo_sin_columna_marca_no_borra_la_marca(self, client, inv_admin, db):
+        """Un archivo viejo (sin columna Marca) NO debe vaciar la marca guardada.
+        La celda ausente se leía como vacía y borraba el dato de todo el catálogo."""
+        p = Producto(codigo='COH-M1', descripcion='Tornillo', categoria='Tornillería',
+                     unidad='pza', marca='Truper', stock_actual=0, stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, self.BASE, [{
+            'Código (SKU)': 'COH-M1', 'Descripción': 'Tornillo',
+            'Categoría': 'Tornillería', 'Unidad': 'pza',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        db.session.refresh(p)
+        assert p.marca == 'Truper'
+
+    def test_archivo_con_columna_marca_vacia_si_la_limpia(self, client, inv_admin, db):
+        """Si la columna SÍ viene y la celda está vacía, es una orden de limpiar."""
+        p = Producto(codigo='COH-M2', descripcion='Tornillo', categoria='Tornillería',
+                     unidad='pza', marca='Truper', stock_actual=0, stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, self.BASE + ['Marca'], [{
+            'Código (SKU)': 'COH-M2', 'Descripción': 'Tornillo',
+            'Categoría': 'Tornillería', 'Unidad': 'pza', 'Marca': '',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['actualizados'] == 1
+        db.session.refresh(p)
+        assert p.marca is None
+
+    # ── Proveedor habitual (Compras Express) ─────────────────────────────────
+
+    def test_import_guarda_proveedor(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, self.BASE + ['Proveedor', 'Contacto proveedor'], [{
+            'Código (SKU)': 'COH-P1', 'Descripción': 'Cinta', 'Categoría': 'Consumibles',
+            'Unidad': 'pza', 'Proveedor': 'Ferretería López', 'Contacto proveedor': '5512345678',
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['exitosos'] == 1
+        p = Producto.query.filter_by(codigo='COH-P1').first()
+        assert p.proveedor_default_nombre == 'Ferretería López'
+        assert p.proveedor_default_contacto == '5512345678'
+
+    def test_export_trae_proveedor_y_reimportarlo_no_cambia_nada(self, client, inv_admin, db):
+        import io as _io
+        from openpyxl import load_workbook
+        p = Producto(codigo='COH-P2', descripcion='Taquete', categoria='Fijación', unidad='pza',
+                     stock_actual=0, stock_minimo=0,
+                     proveedor_default_nombre='Casa Pérez', proveedor_default_contacto='ventas@x.mx')
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        exp = client.get('/api/v1/productos/exportar')
+        assert exp.status_code == 200
+        ws = load_workbook(_io.BytesIO(exp.data)).active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        assert 'Proveedor' in headers and 'Contacto proveedor' in headers
+        fila = next(r for r in range(5, ws.max_row + 1)
+                    if ws.cell(row=r, column=1).value == 'COH-P2')
+        assert ws.cell(row=fila, column=headers.index('Proveedor') + 1).value == 'Casa Pérez'
+
+        imp = client.post('/api/v1/productos/importar',
+                          data={'archivo': (_io.BytesIO(exp.data), 'catalogo.xlsx')},
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        assert imp.get_json()['actualizados'] == 0, imp.get_json()['cambios_detalle']
+        db.session.refresh(p)
+        assert p.proveedor_default_nombre == 'Casa Pérez'
+
+    # ── Decimales según la unidad (misma regla que el alta manual) ───────────
+
+    def test_rechaza_stock_decimal_en_unidad_entera(self, client, inv_admin, db):
+        """'pza' no admite 2.5 al crear, igual que en el formulario."""
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, self.BASE + ['Stock Inicial'], [{
+            'Código (SKU)': 'COH-D1', 'Descripción': 'Tuerca', 'Categoría': 'Tornillería',
+            'Unidad': 'pza', 'Stock Inicial': 2.5,
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['exitosos'] == 0
+        assert len(body['errores']) == 1 and 'enteras' in body['errores'][0]
+        assert Producto.query.filter_by(codigo='COH-D1').first() is None
+
+    def test_acepta_decimales_en_unidad_continua(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, self.BASE + ['Stock Inicial'], [{
+            'Código (SKU)': 'COH-D2', 'Descripción': 'Pintura', 'Categoría': 'Pinturas',
+            'Unidad': 'Lts', 'Stock Inicial': 2.5,
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()['exitosos'] == 1
+
+    def test_no_rechaza_decimales_que_la_fila_no_aplica(self, client, inv_admin, db):
+        """En un producto EXISTENTE el stock inicial se ignora, así que un decimal
+        ahí no debe convertir la fila en error (rompería archivos que hoy suben)."""
+        from decimal import Decimal
+        p = Producto(codigo='COH-D3', descripcion='Tuerca', categoria='Tornillería',
+                     unidad='pza', stock_actual=Decimal('4'), stock_minimo=0)
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = self._post(client, self.BASE + ['Stock Inicial'], [{
+            'Código (SKU)': 'COH-D3', 'Descripción': 'Tuerca', 'Categoría': 'Tornillería',
+            'Unidad': 'pza', 'Stock Inicial': 2.5,
+        }])
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body['errores'] == []
+        assert float(Producto.query.filter_by(codigo='COH-D3').first().stock_actual) == 4.0
+
+
+class TestExportYPlantillaDestino:
+    """El export baja SOLO datos de catálogo; la plantilla baja con el destino
+    del stock inicial ya resuelto."""
+
+    def _headers(self, data):
+        """Encabezados oficiales de un .xlsx generado (van en la fila 4)."""
+        import io as _io
+        from openpyxl import load_workbook
+        ws = load_workbook(_io.BytesIO(data)).active
+        return [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+
+    # ── Export ───────────────────────────────────────────────────────────────
+
+    def test_export_sin_columnas_de_stock_ni_destino(self, client, inv_admin, db):
+        from decimal import Decimal
+        db.session.add(Producto(codigo='EXPC-1', descripcion='Tornillo', categoria='Tornillería',
+                                unidad='pza', marca='Truper', stock_actual=Decimal('10'),
+                                stock_minimo=Decimal('2'), precio_unitario=Decimal('3.5')))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/exportar')
+        assert resp.status_code == 200
+        headers = self._headers(resp.data)
+        for fuera in ('Stock Inicial', 'Stock Mínimo', 'Almacén', 'Proyecto'):
+            assert fuera not in headers, f'{fuera} no debería exportarse'
+        for dentro in ('Código (SKU)', 'Descripción', 'Marca', 'Categoría', 'Unidad',
+                       'Tipo (cable)', 'Tamaño mm²/AWG (cable)', 'Precio Unitario',
+                       'URL Imagen (opcional)'):
+            assert dentro in headers, f'falta la columna {dentro}'
+
+    def test_export_alinea_valores_con_sus_columnas(self, client, inv_admin, db):
+        """Quitar columnas no debe recorrer los valores de lugar."""
+        import io as _io
+        from decimal import Decimal
+        from openpyxl import load_workbook
+        db.session.add(Producto(codigo='EXPC-2', descripcion='Cable THHN', categoria='Cable',
+                                unidad='M', marca='Condumex', cable_tipo='THHN',
+                                cable_calibre='12', stock_actual=Decimal('250'),
+                                stock_minimo=Decimal('5'), precio_unitario=Decimal('18.75')))
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/exportar')
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        fila = next(r for r in range(5, ws.max_row + 1)
+                    if ws.cell(row=r, column=1).value == 'EXPC-2')
+        val = {h: ws.cell(row=fila, column=i + 1).value for i, h in enumerate(headers)}
+        assert val['Descripción'] == 'Cable THHN'
+        assert val['Marca'] == 'Condumex'
+        assert val['Categoría'] == 'Cable'
+        assert val['Tipo (cable)'] == 'THHN'
+        assert val['Unidad'] == 'M'
+        assert float(val['Precio Unitario']) == pytest.approx(18.75, abs=0.001)
+
+    def test_export_respeta_los_filtros_del_catalogo(self, client, inv_admin, db):
+        """Con miles de productos, bajar todo para corregir una categoría es
+        incómodo: el export acepta los mismos filtros del catálogo."""
+        import io as _io
+        from decimal import Decimal
+        from openpyxl import load_workbook
+        db.session.add_all([
+            Producto(codigo='FLT-A1', descripcion='Tornillo', categoria='ZZ Alfa', unidad='pza',
+                     stock_actual=Decimal('5'), stock_minimo=0),
+            Producto(codigo='FLT-A2', descripcion='Tuerca', categoria='ZZ Alfa', unidad='pza',
+                     stock_actual=Decimal('5'), stock_minimo=0),
+            Producto(codigo='FLT-B1', descripcion='Cinta', categoria='ZZ Beta', unidad='pza',
+                     stock_actual=Decimal('5'), stock_minimo=0),
+        ])
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        resp = client.get('/api/v1/productos/exportar?categoria=ZZ Alfa')
+        assert resp.status_code == 200
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        codigos = {ws.cell(row=r, column=1).value for r in range(5, ws.max_row + 1)}
+        assert 'FLT-A1' in codigos and 'FLT-A2' in codigos
+        assert 'FLT-B1' not in codigos
+
+        # Búsqueda libre: mismo criterio que el catálogo (código/descripción/…).
+        resp = client.get('/api/v1/productos/exportar?q=Cinta')
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        codigos = {ws.cell(row=r, column=1).value for r in range(5, ws.max_row + 1)}
+        assert 'FLT-B1' in codigos and 'FLT-A1' not in codigos
+
+    def test_reimportar_un_export_filtrado_no_toca_lo_ausente(self, client, inv_admin, db):
+        """Subir un archivo con solo una parte del catálogo no debe afectar al
+        resto: el importador únicamente toca los SKU que vienen en el archivo."""
+        import io as _io
+        from decimal import Decimal
+        db.session.add_all([
+            Producto(codigo='FLT-C1', descripcion='Tornillo', categoria='ZZ Gamma', unidad='pza',
+                     marca='Truper', stock_actual=Decimal('5'), stock_minimo=Decimal('3')),
+            Producto(codigo='FLT-D1', descripcion='Cinta', categoria='ZZ Delta', unidad='pza',
+                     marca='3M', stock_actual=Decimal('7'), stock_minimo=Decimal('2')),
+        ])
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        exp = client.get('/api/v1/productos/exportar?categoria=ZZ Gamma')
+        imp = client.post('/api/v1/productos/importar',
+                          data={'archivo': (_io.BytesIO(exp.data), 'catalogo_filtrado.xlsx')},
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        assert imp.get_json()['total_procesadas'] == 1  # solo el de la categoría filtrada
+        otro = Producto.query.filter_by(codigo='FLT-D1').first()
+        assert otro.marca == '3M' and float(otro.stock_minimo) == 2.0
+
+    def test_roundtrip_export_conserva_stock_y_minimo(self, client, inv_admin, db):
+        """Reimportar el export (ya sin las columnas de stock) NO debe pisar el
+        stock actual ni el stock mínimo con 0. Es el caso crítico del cambio."""
+        import io as _io
+        from decimal import Decimal
+        p = Producto(codigo='RTC-1', descripcion='Tuerca', categoria='Tuercas', unidad='pza',
+                     marca='Urrea', stock_actual=Decimal('40'), stock_minimo=Decimal('7'),
+                     precio_unitario=Decimal('2.5'))
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        exp = client.get('/api/v1/productos/exportar')
+        assert exp.status_code == 200
+        data = {'archivo': (_io.BytesIO(exp.data), 'catalogo_materiales.xlsx')}
+        imp = client.post('/api/v1/productos/importar', data=data,
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        body = imp.get_json()
+        assert body['actualizados'] == 0, body['cambios_detalle']
+        assert body['sin_cambios'] >= 1
+        db.session.refresh(p)
+        assert float(p.stock_actual) == pytest.approx(40.0, abs=0.01)
+        assert float(p.stock_minimo) == pytest.approx(7.0, abs=0.01)
+
+    def test_roundtrip_export_aplica_marca_editada(self, client, inv_admin, db):
+        """Editar la marca en el export y reimportar sí debe aplicarse."""
+        import io as _io
+        from decimal import Decimal
+        from openpyxl import load_workbook
+        p = Producto(codigo='RTC-2', descripcion='Taquete', categoria='Fijación', unidad='pza',
+                     marca='Vieja', stock_actual=Decimal('5'), stock_minimo=Decimal('1'),
+                     precio_unitario=Decimal('1'))
+        db.session.add(p); db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        exp = client.get('/api/v1/productos/exportar')
+        wb = load_workbook(_io.BytesIO(exp.data))
+        ws = wb.active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        col_marca = headers.index('Marca') + 1
+        fila = next(r for r in range(5, ws.max_row + 1)
+                    if ws.cell(row=r, column=1).value == 'RTC-2')
+        ws.cell(row=fila, column=col_marca, value='Fischer')
+        buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
+
+        imp = client.post('/api/v1/productos/importar',
+                          data={'archivo': (buf, 'catalogo_materiales.xlsx')},
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        assert imp.get_json()['actualizados'] == 1
+        db.session.refresh(p)
+        assert p.marca == 'Fischer'
+        assert float(p.stock_minimo) == pytest.approx(1.0, abs=0.01)  # intacto
+
+    # ── Plantilla con destino ────────────────────────────────────────────────
+
+    def _destino(self, db):
+        alm = Almacen(nombre=f'BOD-{uuid.uuid4().hex[:5]}', qr_code=str(uuid.uuid4()), activo=True)
+        proy = Proyecto(numero_proyecto=f'PY-{uuid.uuid4().hex[:5]}', nombre='Nave', activo=True)
+        db.session.add_all([alm, proy]); db.session.commit()
+        return alm, proy
+
+    def test_plantilla_prellena_destino(self, client, inv_admin, db):
+        import io as _io
+        from openpyxl import load_workbook
+        alm, proy = self._destino(db)
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get(
+            f'/api/v1/productos/plantilla-importar?almacen_id={alm.id}&proyecto_id={proy.id}')
+        assert resp.status_code == 200
+        wb = load_workbook(_io.BytesIO(resp.data))
+        ws = wb.active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        c_alm = headers.index('Almacén') + 1
+        c_proy = headers.index('Proyecto') + 1
+        for fila in (5, 6, 50):
+            assert ws.cell(row=fila, column=c_alm).value == alm.nombre
+            assert ws.cell(row=fila, column=c_proy).value == proy.numero_proyecto
+        # Hoja oculta con las listas desplegables.
+        assert 'Listas' in wb.sheetnames
+        assert wb['Listas'].sheet_state == 'hidden'
+
+    def test_plantilla_sin_destino_sigue_vacia(self, client, inv_admin, db):
+        """Sin parámetros la plantilla baja como siempre (nada prellenado)."""
+        import io as _io
+        from openpyxl import load_workbook
+        self._destino(db)
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get('/api/v1/productos/plantilla-importar')
+        assert resp.status_code == 200
+        ws = load_workbook(_io.BytesIO(resp.data)).active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        c_alm = headers.index('Almacén') + 1
+        assert ws.cell(row=5, column=c_alm).value is None
+
+    def test_plantilla_destino_inexistente_400(self, client, inv_admin, db):
+        _login(client, inv_admin.id, 'admin')
+        r1 = client.get('/api/v1/productos/plantilla-importar?almacen_id=999999')
+        assert r1.status_code == 400 and 'detail' in r1.get_json()
+        r2 = client.get('/api/v1/productos/plantilla-importar?proyecto_id=999999')
+        assert r2.status_code == 400 and 'detail' in r2.get_json()
+
+    def test_plantilla_destino_inactivo_400(self, client, inv_admin, db):
+        alm, _proy = self._destino(db)
+        alm.activo = False
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get(f'/api/v1/productos/plantilla-importar?almacen_id={alm.id}')
+        assert resp.status_code == 400
+
+    def test_plantilla_prellenada_deposita_en_el_bucket(self, client, inv_admin, db):
+        """End-to-end: bajar la plantilla con destino, capturar un material y
+        subirla debe dejar el stock inicial en ese almacén y proyecto."""
+        import io as _io
+        from openpyxl import load_workbook
+        alm, proy = self._destino(db)
+        _login(client, inv_admin.id, 'admin')
+
+        resp = client.get(
+            f'/api/v1/productos/plantilla-importar?almacen_id={alm.id}&proyecto_id={proy.id}')
+        wb = load_workbook(_io.BytesIO(resp.data))
+        ws = wb.active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        pos = {h: i + 1 for i, h in enumerate(headers)}
+        # Solo se captura el material: el destino ya viene lleno.
+        ws.cell(row=5, column=pos['Código (SKU)'], value='PLT-DEST-1')
+        ws.cell(row=5, column=pos['Descripción'], value='Tornillo hex')
+        ws.cell(row=5, column=pos['Categoría'], value='Tornillería')
+        ws.cell(row=5, column=pos['Unidad'], value='pza')
+        ws.cell(row=5, column=pos['Stock Inicial'], value=25)
+        buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
+
+        imp = client.post('/api/v1/productos/importar',
+                          data={'archivo': (buf, 'plantilla_materiales.xlsx')},
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        body = imp.get_json()
+        assert body['exitosos'] == 1, body
+        assert body['errores'] == []
+        p = Producto.query.filter_by(codigo='PLT-DEST-1').first()
+        assert p is not None
+        bucket = StockAlmacenProyecto.query.filter_by(
+            producto_id=p.id, almacen_id=alm.id, proyecto_id=proy.id).first()
+        assert bucket is not None and float(bucket.cantidad) == pytest.approx(25.0, abs=0.01)
+        cache = StockPorAlmacen.query.filter_by(producto_id=p.id, almacen_id=alm.id).first()
+        assert cache is not None and float(cache.cantidad) == pytest.approx(25.0, abs=0.01)
+
+    def test_reimport_masivo_no_consulta_por_fila(self, client, inv_admin, db):
+        """El importador debe resolver los SKU en LOTES, no uno por fila.
+
+        En producción el catálogo pasa de 5 000 productos: un SELECT por renglón
+        eran 5 000 viajes a Postgres en una sola petición HTTP — segundos de pura
+        latencia y riesgo de que el proxy corte antes de terminar. Este test fija
+        esa garantía: el número de consultas no crece con las filas del archivo.
+        """
+        import io as _io
+        from decimal import Decimal
+        from sqlalchemy import event
+
+        N = 400
+        db.session.bulk_save_objects([
+            Producto(codigo=f'MASS-{i:04d}', descripcion=f'Producto {i}', marca='MarcaX',
+                     categoria=f'Cat {i % 8}', unidad='pza', stock_actual=Decimal('10'),
+                     stock_minimo=Decimal('2'), precio_unitario=Decimal('12.5'))
+            for i in range(N)
+        ])
+        db.session.commit()
+        _login(client, inv_admin.id, 'admin')
+
+        exp = client.get('/api/v1/productos/exportar')
+        assert exp.status_code == 200
+
+        consultas = {'productos': 0}
+        engine = db.engine
+
+        @event.listens_for(engine, 'before_cursor_execute')
+        def _contar(conn, cursor, statement, params, context, executemany):
+            if 'FROM productos' in statement:
+                consultas['productos'] += 1
+
+        try:
+            imp = client.post('/api/v1/productos/importar',
+                              data={'archivo': (_io.BytesIO(exp.data), 'catalogo.xlsx')},
+                              content_type='multipart/form-data')
+        finally:
+            event.remove(engine, 'before_cursor_execute', _contar)
+
+        assert imp.status_code == 200, imp.get_json()
+        assert imp.get_json()['sin_cambios'] == N
+        # Con la precarga por lotes son un puñado de consultas; sin ella serían
+        # N+1 (>400). El margen es amplio a propósito: lo que se vigila es que no
+        # escale con el número de filas.
+        assert consultas['productos'] < 25, (
+            f'{consultas["productos"]} consultas a productos para {N} filas: '
+            'volvió el SELECT por fila'
+        )
+
+    def test_filas_prellenadas_vacias_no_generan_errores(self, client, inv_admin, db):
+        """Las filas prellenadas que traen SOLO el destino (sin material) no
+        deben contar como filas capturadas ni reportar errores."""
+        import io as _io
+        from openpyxl import load_workbook
+        alm, proy = self._destino(db)
+        _login(client, inv_admin.id, 'admin')
+        resp = client.get(
+            f'/api/v1/productos/plantilla-importar?almacen_id={alm.id}&proyecto_id={proy.id}')
+        wb = load_workbook(_io.BytesIO(resp.data))
+        ws = wb.active
+        headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+        pos = {h: i + 1 for i, h in enumerate(headers)}
+        ws.cell(row=5, column=pos['Código (SKU)'], value='PLT-DEST-2')
+        ws.cell(row=5, column=pos['Descripción'], value='Rondana')
+        ws.cell(row=5, column=pos['Categoría'], value='Tornillería')
+        ws.cell(row=5, column=pos['Unidad'], value='pza')
+        buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
+
+        imp = client.post('/api/v1/productos/importar',
+                          data={'archivo': (buf, 'plantilla_materiales.xlsx')},
+                          content_type='multipart/form-data')
+        assert imp.status_code == 200, imp.get_json()
+        body = imp.get_json()
+        assert body['exitosos'] == 1
+        assert body['errores'] == []
+        assert body['total_procesadas'] == 1
