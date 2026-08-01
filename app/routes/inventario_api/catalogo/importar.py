@@ -8,33 +8,153 @@ from sqlalchemy import distinct as sql_distinct
 
 from app.extensions import db, limiter
 from app.models import (
-    CategoriaConfig, Producto, Proyecto,
-    StockPorAlmacen, StockAlmacenProyecto,
+    Almacen, CategoriaConfig, ImportacionCatalogo, ImportacionCatalogoCambio,
+    Producto, Proyecto, StockPorAlmacen, StockAlmacenProyecto,
 )
 from app.realtime import emit_to_role
 
 from .._core import (
     bp,
     _require_inventario, _require_inventario_admin,
+    transaccion_de_stock,
     CODIGO_REGEX, _IMAGEN_URL_REGEX,
     _audit, _almacen_default_id,
     _es_categoria_cable, CABLE_UNIDAD,
     _INV_ROLES,
 )
+from ..productos.consultas import _productos_filtered_query
+from ..productos.reglas import _validar_stock_entero
 from .plantilla import (
-    PLANTILLA_HEADERS, PLANTILLA_MAX_FILAS, PLANTILLA_SECTION_PREFIX,
+    COL_ALMACEN, COL_PROYECTO,
+    EXPORT_HEADERS, PLANTILLA_HEADERS, PLANTILLA_MAX_FILAS, PLANTILLA_SECTION_PREFIX,
     _cell_number, _cell_str, _categoria_similar, _construir_plantilla_workbook,
     _norm_categoria, _norm_header, _producto_export_row,
 )
+
+
+def _clave_proyecto(p: Proyecto) -> str:
+    """Texto con el que el importador reconoce un proyecto (`proy_by_key`)."""
+    return (p.numero_proyecto or p.nombre or '').strip()
+
+
+# Cambios que se reportan sin "antes → después" porque el valor es largo o
+# binario y no aporta leerlo en una línea.
+_CAMBIOS_SIN_VALOR = {'descripción', 'imagen', 'reactivado', 'contacto del proveedor'}
+
+
+def _mismo_valor(a, b) -> bool:
+    """¿Cuentan como el MISMO dato del catálogo?
+
+    Una celda vacía y un campo en NULL son lo mismo, y los números se comparan
+    por valor (3.50 == 3.5). Sin esto, reimportar un archivo sin editar
+    reportaría cambios falsos por puro formato.
+    """
+    if isinstance(a, Decimal) or isinstance(b, Decimal):
+        return (Decimal(str(a if a is not None else 0))
+                == Decimal(str(b if b is not None else 0)))
+    return ('' if a is None else a) == ('' if b is None else b)
+
+
+# Campos numéricos del producto: al deshacer hay que devolverlos como Decimal,
+# no como el texto con el que viajaron en el JSON del registro.
+_CAMPOS_DECIMAL = {'precio_unitario', 'stock_minimo', 'stock_actual'}
+_CAMPOS_BOOL = {'activo'}
+
+
+def _valor_serializable(v):
+    """Valor listo para JSON (Decimal → str, para no perder precisión)."""
+    return str(v) if isinstance(v, Decimal) else v
+
+
+def _valor_restaurado(attr: str, v):
+    """Convierte el valor guardado en el registro al tipo real de la columna."""
+    if v is None:
+        return None
+    if attr in _CAMPOS_DECIMAL:
+        return Decimal(str(v))
+    if attr in _CAMPOS_BOOL:
+        return bool(v)
+    return v
+
+
+def _texto_cambio(etiqueta: str, antes, despues) -> str:
+    """Línea legible del cambio, para el reporte al SPA."""
+    if etiqueta in _CAMBIOS_SIN_VALOR:
+        return etiqueta
+
+    def _fmt(v):
+        if v is None or v == '':
+            return '—'
+        return str(float(v)) if isinstance(v, Decimal) else str(v)
+
+    return f'{etiqueta}: {_fmt(antes)} → {_fmt(despues)}'
 
 
 @bp.route('/productos/plantilla-importar', methods=['GET'])
 @_require_inventario
 def get_plantilla_materiales():
     """Genera y sirve un Excel de plantilla VACÍA para carga masiva de productos.
-    Incluye instrucciones, validaciones de celda y tooltips en cada columna."""
+    Incluye instrucciones, validaciones de celda y tooltips en cada columna.
+
+    Acepta `almacen_id` y `proyecto_id` (opcionales): el destino elegido al
+    descargar baja PRELLENADO en la columna Almacén / Proyecto de cada fila, de
+    modo que el stock inicial de todo lo que se capture caiga donde se quiere sin
+    teclear nombres. Ambas columnas traen además la lista de bodegas y proyectos
+    reales, así que ni el prellenado ni un cambio manual pueden inventar un
+    nombre que no existe (que era la fuente de errores al importar).
+    """
+    almacen_id = request.args.get('almacen_id', type=int)
+    proyecto_id = request.args.get('proyecto_id', type=int)
+
+    prellenado = {}
+    destino_txt = []
+    if almacen_id:
+        alm = db.session.get(Almacen, almacen_id)
+        if not alm or not alm.activo:
+            return jsonify({'detail': 'La bodega seleccionada no existe o está inactiva'}), 400
+        prellenado[COL_ALMACEN] = alm.nombre
+        destino_txt.append(f'bodega {alm.nombre}')
+    if proyecto_id:
+        proy = db.session.get(Proyecto, proyecto_id)
+        if not proy or not proy.activo:
+            return jsonify({'detail': 'El proyecto seleccionado no existe o está inactivo'}), 400
+        clave = _clave_proyecto(proy)
+        if not clave:
+            return jsonify({'detail': 'El proyecto seleccionado no tiene número ni nombre'}), 400
+        prellenado[COL_PROYECTO] = clave
+        destino_txt.append(f'proyecto {clave}')
+
+    # Listas desplegables con lo que EXISTE hoy (hoja oculta). El proyecto se
+    # ofrece por su clave de importación para que coincida exactamente.
+    listas = {
+        COL_ALMACEN: [
+            a.nombre for a in Almacen.query
+            .filter(Almacen.activo == True)  # noqa: E712
+            .order_by(Almacen.nombre).all()
+        ],
+        COL_PROYECTO: [
+            clave for clave in (
+                _clave_proyecto(p) for p in Proyecto.query
+                .filter(Proyecto.activo == True)  # noqa: E712
+                .order_by(Proyecto.numero_proyecto).all()
+            ) if clave
+        ],
+    }
+
+    instruccion = None
+    if destino_txt:
+        instruccion = (
+            f'⚠ El stock inicial de este archivo entra a: {" · ".join(destino_txt)} — ya viene '
+            'lleno en las columnas Almacén/Proyecto (celdas grises). Si una fila va a otro lado, '
+            'cámbialo con la listita de la celda. Vacío = bodega predeterminada y General (libre). '
+            'No alteres los encabezados de la fila 4. Las columnas de CABLE (ámbar) solo se llenan '
+            'si la categoría contiene "cable".'
+        )
+
     try:
-        buf = _construir_plantilla_workbook()
+        buf = _construir_plantilla_workbook(
+            instruccion=instruccion, prellenado=prellenado, listas=listas,
+        )
     except ImportError:
         return jsonify({'detail': 'openpyxl no instalado en el servidor'}), 500
     return send_file(
@@ -48,17 +168,46 @@ def get_plantilla_materiales():
 @bp.route('/productos/exportar', methods=['GET'])
 @_require_inventario_admin
 def exportar_productos():
-    """Exporta TODO el catálogo activo en el mismo formato de la plantilla, con
-    los productos ya llenados. Sirve para editar en Excel y reimportar: el
-    importador detecta y aplica SOLO los campos que cambiaron (el stock actual
-    nunca se toca al reimportar productos existentes)."""
+    """Exporta TODO el catálogo activo con los productos ya llenados. Sirve para
+    editar en Excel y reimportar: el importador detecta y aplica SOLO los campos
+    que cambiaron.
+
+    Baja con EXPORT_HEADERS, no con la plantilla completa: aquí los productos YA
+    existen, así que solo salen los datos de catálogo (marca, descripción,
+    categoría, unidad, cable, precio, imagen). Stock inicial, stock mínimo,
+    almacén y proyecto no se exportan porque no se aplican a un producto
+    existente — el stock se mueve por Movimientos y el mínimo desde la ficha del
+    producto. Como el importador empareja por nombre de columna, el archivo se
+    reimporta igual y esos campos quedan intactos.
+
+    Acepta los MISMOS filtros del catálogo (`categoria`, `q`, `stock`, `imagen`,
+    `unidad`, `compra`) reusando su query: con miles de productos, bajar todo
+    para corregir una categoría es incómodo y arriesgado. Un archivo filtrado se
+    reimporta sin problema — el importador solo toca los SKU que vienen en él,
+    así que lo que no se exportó no se entera."""
     from itertools import groupby
     productos = (
-        Producto.query
-        .filter(Producto.activo == True)  # noqa: E712
+        _productos_filtered_query()
         .order_by(Producto.categoria.asc(), Producto.codigo.asc())
         .all()
     )
+    # Descripción legible de los filtros, para el encabezado y el nombre del
+    # archivo: que se vea a simple vista que el Excel es un subconjunto.
+    filtros_txt = []
+    if (request.args.get('categoria') or '').strip():
+        filtros_txt.append(f"categoría {request.args['categoria'].strip()}")
+    if (request.args.get('q') or '').strip():
+        filtros_txt.append(f"búsqueda “{request.args['q'].strip()}”")
+    if (request.args.get('unidad') or '').strip():
+        filtros_txt.append(f"unidad {request.args['unidad'].strip()}")
+    _etiquetas = {'bajo': 'bajo mínimo', 'sin': 'sin existencias'}
+    if (request.args.get('stock') or '').strip().lower() in _etiquetas:
+        filtros_txt.append(_etiquetas[request.args['stock'].strip().lower()])
+    _img = {'con': 'con imagen', 'sin': 'sin imagen'}
+    if (request.args.get('imagen') or '').strip().lower() in _img:
+        filtros_txt.append(_img[request.args['imagen'].strip().lower()])
+    if (request.args.get('compra') or '').strip().lower() in ('activa', '1', 'true', 'si'):
+        filtros_txt.append('con compra en curso')
 
     # Agrupar por categoría: fila de sección resaltada + productos, con una fila
     # en blanco entre secciones. El importador salta secciones/blancos.
@@ -68,34 +217,56 @@ def exportar_productos():
         if rows:
             rows.append(None)  # separador visual entre secciones
         rows.append({'__section__': cat, 'count': len(grupo)})
-        rows.extend(_producto_export_row(p) for p in grupo)
+        rows.extend(_producto_export_row(p, EXPORT_HEADERS) for p in grupo)
 
+    cabecera_filtro = (
+        f'Selección: {" · ".join(filtros_txt)} — {len(productos)} producto(s). '
+        'Solo estos se verán afectados al reimportar. '
+        if filtros_txt else ''
+    )
     instruccion = (
-        '⚠ Edita los valores y vuelve a subir este archivo en "Importar". El sistema aplica '
-        'SOLO lo que cambió; las filas sin cambios se ignoran. El Stock Inicial NO modifica el '
-        'stock real de productos existentes (usa Movimientos para eso). No borres el SKU (columna A) '
-        'ni las filas de sección grises. Columnas de CABLE en ámbar: llénalas solo en productos de cable.'
+        f'⚠ {cabecera_filtro}Edita los valores y vuelve a subir este archivo en "Importar". '
+        'El sistema aplica SOLO lo que cambió; las filas sin cambios se ignoran. Aquí se editan '
+        'los datos del catálogo (marca, descripción, categoría, unidad, precio, proveedor, '
+        'imagen): el stock se mueve en Movimientos y el stock mínimo en la ficha del producto. '
+        'No borres el SKU (columna A) ni las filas de sección grises. Columnas de CABLE en '
+        'ámbar: llénalas solo en productos de cable.'
     )
     try:
-        buf = _construir_plantilla_workbook(rows=rows, instruccion=instruccion)
+        buf = _construir_plantilla_workbook(
+            rows=rows, instruccion=instruccion, headers=EXPORT_HEADERS,
+        )
     except ImportError:
         return jsonify({'detail': 'openpyxl no instalado en el servidor'}), 500
 
-    _audit(request.current_user, f'Exportó catálogo de materiales ({len(productos)} productos)')
+    detalle = f' [{", ".join(filtros_txt)}]' if filtros_txt else ''
+    _audit(request.current_user,
+           f'Exportó catálogo de materiales ({len(productos)} productos){detalle}')
     db.session.commit()
     return send_file(
         buf,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name='catalogo_materiales.xlsx',
+        download_name=('catalogo_filtrado.xlsx' if filtros_txt else 'catalogo_materiales.xlsx'),
     )
 
 
 @bp.route('/productos/importar', methods=['POST'])
 @_require_inventario_admin
-@limiter.limit('5 per minute')
+# Una importación ahora son DOS pasadas por aquí (previsualizar y aplicar), tres
+# si hubo que confirmar categorías. Con el tope viejo de 5/min, dos cargas
+# seguidas chocaban con el límite; el guardia real sigue siendo el tope de 5 MB
+# y el de filas por archivo.
+@limiter.limit('15 per minute')
+@transaccion_de_stock
 def importar_materiales():
     """Importa productos en masa desde un archivo Excel.
+
+    Con `previsualizar=1` hace exactamente el mismo recorrido pero NO escribe
+    nada: devuelve el plan (qué se crearía, qué cambiaría campo por campo, qué
+    filas fallan y qué materiales se parecen a uno que ya existe) para que el
+    usuario confirme. Es el mismo camino de código, no una simulación aparte:
+    si el plan dice algo, aplicar hace justo eso.
 
     Validaciones a prueba de tontos:
       - Tamaño max 5 MB.
@@ -115,6 +286,8 @@ def importar_materiales():
         import pandas as pd
     except ImportError:
         return jsonify({'detail': 'pandas no instalado en el servidor'}), 500
+
+    previsualizar = (request.form.get('previsualizar') or '').strip().lower() in ('1', 'true', 'si')
 
     file = request.files.get('archivo') or request.files.get('archivo_excel')
     if not file or not file.filename:
@@ -175,6 +348,12 @@ def importar_materiales():
     cambios_detalle = []  # [{codigo, cambios: [str, ...]}] para el reporte al SPA
     errores = []
     skus_en_archivo = set()  # detectar duplicados intra-archivo
+    # Solo para la previsualización: qué se daría de alta y qué materiales se
+    # parecen a uno que ya existe.
+    nuevos_detalle, duplicados = [], []
+    # Registro del lote para poder DESHACERLO: por producto, qué se hizo y con
+    # qué valores estaba antes.
+    lote_cambios = []
     # Pipeline de imágenes → R2: ids de productos cuya imagen es URL externa y
     # hay que descargar/convertir/subir. Se encola al final (no-op si R2 apagado).
     from ..imagenes import marcar_para_sync, encolar_sync
@@ -193,10 +372,14 @@ def importar_materiales():
     # uno). El proyecto se resuelve por número o por nombre.
     from app.models import Almacen as _Almacen
     alm_by_name: dict[str, int] = {}
+    alm_nombre_por_id: dict[int, str] = {}   # para nombrar el destino en el plan
     for _a in _Almacen.query.filter(_Almacen.activo == True).all():  # noqa: E712
         alm_by_name.setdefault(_norm_categoria(_a.nombre), _a.id)
+        alm_nombre_por_id[_a.id] = _a.nombre
     proy_by_key: dict[str, int] = {}
+    proy_nombre_por_id: dict[int, str] = {}
     for _p in Proyecto.query.all():
+        proy_nombre_por_id[_p.id] = _clave_proyecto(_p)
         if _p.numero_proyecto:
             proy_by_key.setdefault(_norm_categoria(_p.numero_proyecto), _p.id)
         if _p.nombre:
@@ -265,6 +448,45 @@ def importar_materiales():
                 'categorias_existentes': sorted(set(cat_canon.values()), key=str.lower),
             }), 200
 
+    # ── Precarga de los SKU del archivo (una query por lote, no por fila) ─────
+    # Buscar el producto fila por fila era un SELECT por renglón: reimportar el
+    # export de 5 000 productos disparaba 5 001 consultas, o sea 5 000 viajes de
+    # ida y vuelta a Postgres — segundos de latencia pura y riesgo de que el
+    # proxy corte la petición antes de terminar. Se resuelven en lotes.
+    # Se traen TODOS, activos e inactivos: un SKU dado de baja se reactiva al
+    # reimportarlo, igual que antes.
+    codigos_archivo, _vistos = [], set()
+    for _, row in data_df.iterrows():
+        cod = _cell_str(_g(row, 'Código (SKU)'), maxlen=50)
+        if cod and not cod.startswith(PLANTILLA_SECTION_PREFIX) and cod not in _vistos:
+            _vistos.add(cod)
+            codigos_archivo.append(cod)
+    # Columnas que el archivo TRAE. Los campos opcionales de texto solo se
+    # aplican si su columna existe: un archivo viejo (o hecho a mano) que no la
+    # tenga se leería como celda vacía y BORRARÍA el dato guardado. Con la
+    # columna presente, una celda vacía sí significa "límpialo", que es lo que
+    # espera quien edita el export.
+    columnas_presentes = set(column_map.values())
+
+    # Índice de descripciones del catálogo, solo para avisar de posibles
+    # duplicados en la previsualización. Se carga únicamente en ese modo: son
+    # dos columnas de todo el catálogo y no vale la pena pagarlo al aplicar.
+    desc_existente: dict[str, str] = {}
+    if previsualizar:
+        for _cod, _desc in db.session.query(Producto.codigo, Producto.descripcion).filter(
+            Producto.activo == True  # noqa: E712
+        ).all():
+            if _desc:
+                desc_existente.setdefault(_norm_categoria(_desc), _cod)
+
+    existentes_por_codigo: dict[str, Producto] = {}
+    LOTE_SKUS = 900  # holgado para el tope de parámetros de un IN (...)
+    for i in range(0, len(codigos_archivo), LOTE_SKUS):
+        for p in Producto.query.filter(
+            Producto.codigo.in_(codigos_archivo[i:i + LOTE_SKUS])
+        ).all():
+            existentes_por_codigo[p.codigo] = p
+
     for offset, row in data_df.iterrows():
         fila_excel = header_row_idx + offset + 2  # +1 por header + 1 porque Excel es 1-indexed
         try:
@@ -280,6 +502,9 @@ def importar_materiales():
             # al crear un producto nuevo con stock > 0; en updates se ignoran.
             almacen_in  = _cell_str(_g(row, 'Almacén'), maxlen=100)
             proyecto_in = _cell_str(_g(row, 'Proyecto'), maxlen=100)
+            # Proveedor habitual (para Compras Express).
+            prov_nombre   = _cell_str(_g(row, 'Proveedor'), maxlen=150)
+            prov_contacto = _cell_str(_g(row, 'Contacto proveedor'), maxlen=150)
 
             # Aplicar la decisión del usuario: si esta categoría del archivo se
             # mapeó a una existente, la sustituimos antes de procesar.
@@ -352,10 +577,11 @@ def importar_materiales():
                 continue
             skus_en_archivo.add(sku_lower)
 
-            # Producto existente (upsert por SKU). Se resuelve aquí para poder
-            # reutilizarlo tanto en la validación de cable (heredar Tipo/Tamaño
-            # ya guardados) como en el bloque de actualización más abajo.
-            existente = Producto.query.filter(Producto.codigo == codigo).first()
+            # Producto existente (upsert por SKU), de la precarga por lotes. Se
+            # resuelve aquí para poder reutilizarlo tanto en la validación de
+            # cable (heredar Tipo/Tamaño ya guardados) como en el bloque de
+            # actualización más abajo.
+            existente = existentes_por_codigo.get(codigo)
 
             # ── Cable a prueba de tontos ──────────────────────────────────────
             # Si la categoría es de cable: Tipo y Tamaño son obligatorios (pueden
@@ -378,6 +604,22 @@ def importar_materiales():
                 cable_tipo_final = None
                 cable_calibre_final = None
 
+            # Decimales según la unidad: misma regla que el alta manual y que
+            # solicitudes/compras — 'pza' no admite 2.5. Se exige SOLO sobre lo
+            # que esta fila va a aplicar: el stock inicial únicamente cuenta en
+            # productos nuevos (en existentes se ignora), y el mínimo solo si la
+            # celda traía valor. Así un archivo viejo con decimales en una
+            # columna que de todos modos no se aplica no se vuelve un error.
+            stock_min_provisto = _cell_str(_g(row, 'Stock Mínimo')) != ''
+            err_dec = _validar_stock_entero(
+                unidad,
+                None if existente else stock_actual,
+                stock_minimo if stock_min_provisto else None,
+            )
+            if err_dec:
+                errores.append(f'Fila {fila_excel}: {err_dec}')
+                continue
+
             # Resolver categoría a prueba de tontos (sirve para alta y update):
             #  - Si ya existe una equivalente (case/acento-insensitiva), usar el
             #    nombre canónico para no romper el agrupado del dashboard.
@@ -388,20 +630,21 @@ def importar_materiales():
             if categoria_canonica is None:
                 categoria_canonica = categoria  # primera ocurrencia → este es el canónico
                 cat_canon[cat_key] = categoria_canonica
-                db.session.add(CategoriaConfig(
-                    nombre=categoria_canonica,
-                    imagen_url=None,
-                    created_by_id=user.id,
-                ))
+                if not previsualizar:
+                    db.session.add(CategoriaConfig(
+                        nombre=categoria_canonica,
+                        imagen_url=None,
+                        created_by_id=user.id,
+                    ))
                 categorias_creadas.append(categoria_canonica)
 
             precio_dec = Decimal(str(precio))
             stock_min_dec = Decimal(str(stock_minimo))
-            # ¿Vinieron en blanco las celdas opcionales? En un update NO debemos
-            # pisar un precio/mínimo existente con 0 solo porque la celda quedó
-            # vacía. (En alta sí caen a 0, que es el default correcto.)
+            # ¿Vino en blanco la celda opcional? En un update NO debemos pisar un
+            # precio existente con 0 solo porque la celda quedó vacía. (En alta sí
+            # cae a 0, que es el default correcto.) `stock_min_provisto` ya se
+            # calculó arriba, para la validación de decimales.
             precio_provisto = _cell_str(_g(row, 'Precio Unitario')) != ''
-            stock_min_provisto = _cell_str(_g(row, 'Stock Mínimo')) != ''
 
             # ── UPSERT con DETECCIÓN DE CAMBIOS ──────────────────────────────
             # Solo aplicamos (y reportamos) los campos que REALMENTE cambiaron;
@@ -411,49 +654,68 @@ def importar_materiales():
             # real se mueve solo por movimientos/ajustes. (`existente` ya se
             # resolvió arriba, en la validación de cable.)
             if existente:
-                cambios_fila = []
-
-                if descripcion != (existente.descripcion or ''):
-                    cambios_fila.append('descripción')
-                    existente.descripcion = descripcion
-                if (marca or None) != (existente.marca or None):
-                    cambios_fila.append(f'marca: {existente.marca or "—"} → {marca or "—"}')
-                    existente.marca = marca or None
-                if categoria_canonica != (existente.categoria or ''):
-                    cambios_fila.append(f'categoría: {existente.categoria or "—"} → {categoria_canonica}')
-                    existente.categoria = categoria_canonica
-                if unidad != (existente.unidad or ''):
-                    cambios_fila.append(f'unidad: {existente.unidad or "—"} → {unidad}')
-                    existente.unidad = unidad
-                # Cable (None si dejó de ser cable).
-                if (existente.cable_tipo or None) != (cable_tipo_final or None):
-                    cambios_fila.append(f'tipo cable: {existente.cable_tipo or "—"} → {cable_tipo_final or "—"}')
-                    existente.cable_tipo = cable_tipo_final
-                if (existente.cable_calibre or None) != (cable_calibre_final or None):
-                    cambios_fila.append(f'tamaño cable: {existente.cable_calibre or "—"} → {cable_calibre_final or "—"}')
-                    existente.cable_calibre = cable_calibre_final
-                # Precio y stock mínimo: solo si la celda venía con valor.
-                if precio_provisto and Decimal(str(existente.precio_unitario or 0)) != precio_dec:
-                    cambios_fila.append(f'precio: {float(existente.precio_unitario or 0)} → {float(precio_dec)}')
-                    existente.precio_unitario = precio_dec
-                if stock_min_provisto and Decimal(str(existente.stock_minimo or 0)) != stock_min_dec:
-                    cambios_fila.append(f'stock mín: {float(existente.stock_minimo or 0)} → {float(stock_min_dec)}')
-                    existente.stock_minimo = stock_min_dec
-                # Imagen: solo si vino una URL válida y es distinta.
-                if imagen_final and (existente.imagen_url or '') != imagen_final:
-                    cambios_fila.append('imagen')
-                    existente.imagen_url = imagen_final
-                    if marcar_para_sync(existente, imagen_final):
-                        sync_ids.append(existente.id)
-                # Reactivar si estaba soft-deleted.
+                # Primero se calcula QUÉ cambiaría y hasta el final se aplica.
+                # Así el mismo recorrido sirve para previsualizar (sin escribir
+                # nada) y para aplicar: es imposible que el plan que ve el
+                # usuario y lo que realmente pasa se separen. Los pares
+                # (anterior, nuevo) son además el registro que necesita el
+                # deshacer.
+                #
+                # Solo entran las columnas que el archivo TRAE: sin esa guarda,
+                # una plantilla vieja sin la columna Marca borraba la marca de
+                # todo el catálogo al reimportarla (celda ausente = celda vacía).
+                propuestas = [
+                    ('descripcion', descripcion, 'descripción'),
+                    ('categoria', categoria_canonica, 'categoría'),
+                    ('unidad', unidad, 'unidad'),
+                    # Cable: None si el producto dejó de ser de cable.
+                    ('cable_tipo', cable_tipo_final, 'tipo cable'),
+                    ('cable_calibre', cable_calibre_final, 'tamaño cable'),
+                ]
+                if 'Marca' in columnas_presentes:
+                    propuestas.append(('marca', marca or None, 'marca'))
+                # Precio y stock mínimo: solo si la celda venía con valor, para no
+                # pisar lo guardado con un 0 que en realidad era "no lo toqué".
+                if precio_provisto:
+                    propuestas.append(('precio_unitario', precio_dec, 'precio'))
+                if stock_min_provisto:
+                    propuestas.append(('stock_minimo', stock_min_dec, 'stock mín'))
+                if 'Proveedor' in columnas_presentes:
+                    propuestas.append(('proveedor_default_nombre', prov_nombre or None, 'proveedor'))
+                if 'Contacto proveedor' in columnas_presentes:
+                    propuestas.append(
+                        ('proveedor_default_contacto', prov_contacto or None, 'contacto del proveedor'))
+                # Imagen: solo si vino una URL válida (vacío nunca borra la foto).
+                if imagen_final:
+                    propuestas.append(('imagen_url', imagen_final, 'imagen'))
+                # Reactivar si estaba dado de baja.
                 if not existente.activo:
-                    cambios_fila.append('reactivado')
-                    existente.activo = True
+                    propuestas.append(('activo', True, 'reactivado'))
+
+                cambios_fila, valores_previos, valores_nuevos = [], {}, {}
+                for attr, valor, etiqueta in propuestas:
+                    actual = getattr(existente, attr)
+                    if _mismo_valor(actual, valor):
+                        continue
+                    cambios_fila.append(_texto_cambio(etiqueta, actual, valor))
+                    valores_previos[attr] = actual
+                    valores_nuevos[attr] = valor
 
                 if cambios_fila:
                     actualizados += 1
                     if len(cambios_detalle) < 500:  # cap para no inflar la respuesta
                         cambios_detalle.append({'codigo': existente.codigo, 'cambios': cambios_fila})
+                    if not previsualizar:
+                        for attr, valor in valores_nuevos.items():
+                            setattr(existente, attr, valor)
+                        if 'imagen_url' in valores_nuevos and marcar_para_sync(existente, imagen_final):
+                            sync_ids.append(existente.id)
+                        lote_cambios.append({
+                            'producto': existente, 'codigo': existente.codigo,
+                            'accion': 'ACTUALIZADO',
+                            'antes': {k: _valor_serializable(v) for k, v in valores_previos.items()},
+                            'despues': {k: _valor_serializable(v) for k, v in valores_nuevos.items()},
+                        })
                 else:
                     sin_cambios += 1
                 continue
@@ -479,6 +741,31 @@ def importar_materiales():
                     continue
                 proyecto_destino_id = pid
 
+            exitosos += 1
+            # Aviso de posible duplicado: mismo texto de descripción que un
+            # material que YA existe (o que otra fila del archivo) con otro SKU.
+            # A miles de productos, el catálogo duplicado es el problema clásico;
+            # se avisa, no se bloquea, porque a veces sí son cosas distintas.
+            if previsualizar:
+                desc_key = _norm_categoria(descripcion)
+                gemelo = desc_existente.get(desc_key)
+                if gemelo and gemelo != codigo and len(duplicados) < 200:
+                    duplicados.append({
+                        'fila': fila_excel, 'codigo': codigo,
+                        'descripcion': descripcion, 'parecido_a': gemelo,
+                    })
+                elif not gemelo:
+                    desc_existente[desc_key] = codigo
+                if len(nuevos_detalle) < 500:
+                    nuevos_detalle.append({
+                        'fila': fila_excel, 'codigo': codigo, 'descripcion': descripcion,
+                        'categoria': categoria_canonica, 'unidad': unidad,
+                        'stock_inicial': float(stock_inicial_dec),
+                        'almacen': alm_nombre_por_id.get(almacen_destino_id, '—'),
+                        'proyecto': proy_nombre_por_id.get(proyecto_destino_id, 'General (libre)'),
+                    })
+                continue
+
             nuevo = Producto(
                 codigo=codigo,
                 descripcion=descripcion,
@@ -491,6 +778,8 @@ def importar_materiales():
                 stock_minimo=stock_min_dec,
                 precio_unitario=precio_dec,
                 imagen_url=imagen_final,
+                proveedor_default_nombre=(prov_nombre or None),
+                proveedor_default_contacto=(prov_contacto or None),
                 created_by_id=user.id,
             )
             db.session.add(nuevo)
@@ -500,6 +789,17 @@ def importar_materiales():
             # general) si hay bodega y >0. Feature stock por proyecto: la fuente de
             # verdad es stock_almacen_proyecto; se crea también el cache
             # stock_por_almacen consistente (producto nuevo = un solo bucket).
+            #
+            # A diferencia del resto del módulo, aquí NO se usan `_depositar()` +
+            # `_recalcular_caches()`: esos hacen SELECT ... FOR UPDATE y dos
+            # recálculos por producto, o sea ~5 consultas por fila — en una carga
+            # de miles de altas serían decenas de miles de viajes a la base. Y no
+            # aportan nada: el producto acaba de nacer en ESTA transacción, así
+            # que nadie más puede tener su bucket, no hay fila previa que releer
+            # y el cache es exactamente lo que se deposita. La vista va envuelta
+            # en @transaccion_de_stock, de modo que cualquier fallo hace rollback
+            # y los errores de lock salen como 409 igual que en los demás
+            # endpoints que mutan stock.
             if stock_inicial_dec > 0 and almacen_destino_id:
                 db.session.add(StockAlmacenProyecto(
                     producto_id=nuevo.id,
@@ -513,13 +813,75 @@ def importar_materiales():
                     cantidad=stock_inicial_dec,
                 ))
 
-            exitosos += 1
+            # Registro para deshacer: el alta y el stock que se depositó (con su
+            # bucket), que es lo que habría que retirar al revertir.
+            deposito = stock_inicial_dec > 0 and almacen_destino_id
+            lote_cambios.append({
+                'producto': nuevo, 'codigo': codigo, 'accion': 'CREADO',
+                'antes': {}, 'despues': {},
+                # El stock se registra SIEMPRE, aunque no haya bodega donde
+                # depositarlo: al deshacer se compara contra `stock_actual` del
+                # producto para saber si alguien lo movió, y si aquí fuera None
+                # un alta sin bodega parecería "ya tocada" y no se borraría.
+                'stock_inicial': stock_inicial_dec,
+                'almacen_id': almacen_destino_id if deposito else None,
+                'proyecto_id': proyecto_destino_id if deposito else None,
+            })
+
             # Si la imagen importada es una URL externa, encolar su sync a R2.
             if marcar_para_sync(nuevo, imagen_final):
                 sync_ids.append(nuevo.id)
 
         except Exception as e:
             errores.append(f'Fila {fila_excel}: error inesperado — {str(e)[:80]}')
+
+    # ── Previsualización: se devuelve el plan y NO se escribe nada ────────────
+    # El rollback es la garantía dura: aunque algún camino haya tocado la sesión,
+    # aquí no queda nada. Es la misma información que verá el resumen final,
+    # calculada por el mismo recorrido.
+    if previsualizar:
+        db.session.rollback()
+        return jsonify({
+            'previsualizacion': True,
+            'exitosos': exitosos,
+            'actualizados': actualizados,
+            'sin_cambios': sin_cambios,
+            'errores': errores,
+            'total_procesadas': exitosos + actualizados + sin_cambios + len(errores),
+            'categorias_creadas': categorias_creadas,
+            'cambios_detalle': cambios_detalle,
+            'nuevos': nuevos_detalle,
+            'duplicados': duplicados,
+        })
+
+    # ── Registro del lote, para poder deshacerlo ─────────────────────────────
+    # Se guarda ANTES del commit y en la misma transacción: o queda todo (los
+    # productos y su registro) o no queda nada. Un lote sin registro sería una
+    # importación que ya no se puede revertir.
+    lote = None
+    if lote_cambios:
+        import json as _json_lote
+        lote = ImportacionCatalogo(
+            usuario_id=user.id,
+            archivo=(file.filename or '')[:250],
+            creados=exitosos, actualizados=actualizados,
+            sin_cambios=sin_cambios, errores=len(errores),
+            estado='APLICADA',
+        )
+        db.session.add(lote)
+        db.session.flush()  # id del lote antes de colgarle los cambios
+        for c in lote_cambios:
+            db.session.add(ImportacionCatalogoCambio(
+                importacion_id=lote.id,
+                producto_id=c['producto'].id,
+                codigo=c['codigo'],
+                accion=c['accion'],
+                antes=_json_lote.dumps(c['antes']) if c['antes'] else None,
+                despues=_json_lote.dumps(c['despues']) if c['despues'] else None,
+                stock_inicial=c.get('stock_inicial'),
+                almacen_id=c.get('almacen_id'),
+                proyecto_id=c.get('proyecto_id'),
+            ))
 
     try:
         msg = (f'Importación masiva: {exitosos} creados, {actualizados} actualizados, '
@@ -554,6 +916,9 @@ def importar_materiales():
         'categorias_creadas': categorias_creadas,
         'cambios_detalle': cambios_detalle,
     }
+    # Id del lote: con esto el SPA ofrece "Deshacer" justo después de importar.
+    if lote is not None:
+        respuesta['importacion_id'] = lote.id
     # Clave `imagenes` solo si hay algo que sincronizar → la respuesta queda
     # idéntica a la de antes cuando R2 está apagado (no rompe nada).
     if sync_ids:

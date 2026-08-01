@@ -349,6 +349,62 @@ class MovimientoInventario(db.Model):
         return self.recibe_nombre
 
 
+class ImportacionCatalogo(db.Model):
+    """Un lote de importación por Excel, guardado para poder DESHACERLO.
+
+    Una carga masiva toca cientos de productos de golpe; si el archivo venía mal,
+    corregir a mano es inviable. Aquí queda qué se hizo y con qué valores estaba
+    cada campo ANTES, que es lo único que permite revertirlo con seguridad.
+    """
+    __tablename__ = "importaciones_catalogo"
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    fecha = db.Column(db.DateTime, default=_now_utc, index=True)
+    archivo = db.Column(db.String(250), nullable=True)
+    creados = db.Column(db.Integer, default=0, nullable=False)
+    actualizados = db.Column(db.Integer, default=0, nullable=False)
+    sin_cambios = db.Column(db.Integer, default=0, nullable=False)
+    errores = db.Column(db.Integer, default=0, nullable=False)
+    # APLICADA (se puede deshacer) | REVERTIDA (ya se deshizo).
+    estado = db.Column(db.String(20), default='APLICADA', nullable=False, index=True)
+    revertida_at = db.Column(db.DateTime, nullable=True)
+    revertida_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Resumen legible de lo que NO se pudo revertir y por qué.
+    revertida_notas = db.Column(db.Text, nullable=True)
+
+    usuario = db.relationship('User', foreign_keys=[usuario_id])
+    revertida_por = db.relationship('User', foreign_keys=[revertida_por_id])
+
+
+class ImportacionCatalogoCambio(db.Model):
+    """Lo que la importación le hizo a UN producto, con valores antes/después.
+
+    `antes` y `despues` son JSON serializado {campo: valor}. Se guarda el
+    `despues` para poder comprobar, al deshacer, que nadie haya cambiado ese
+    campo después: si ya no coincide, esa parte no se toca y se reporta.
+    """
+    __tablename__ = "importaciones_catalogo_cambios"
+    id = db.Column(db.Integer, primary_key=True)
+    importacion_id = db.Column(
+        db.Integer,
+        db.ForeignKey('importaciones_catalogo.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=True, index=True)
+    codigo = db.Column(db.String(100), nullable=False)
+    accion = db.Column(db.String(12), nullable=False)  # CREADO | ACTUALIZADO
+    antes = db.Column(db.Text, nullable=True)
+    despues = db.Column(db.Text, nullable=True)
+    # Solo en CREADO: stock inicial depositado y en qué bucket, para retirarlo
+    # al deshacer si sigue intacto.
+    stock_inicial = db.Column(db.Numeric(10, 2), nullable=True)
+    almacen_id = db.Column(db.Integer, db.ForeignKey('almacenes.id'), nullable=True)
+    proyecto_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=True)
+
+    importacion = db.relationship('ImportacionCatalogo', backref=db.backref(
+        'cambios', lazy='dynamic', cascade='all, delete-orphan', passive_deletes=True))
+
+
 class CategoriaConfig(db.Model):
     """Metadatos visuales para categorías de productos (imagen, etc.).
     El campo `nombre` se considera la PK lógica: coincide con `Producto.categoria`
