@@ -44,8 +44,14 @@ def app():
     # ANTES de create_app; load_dotenv(override=False) respeta estos valores
     # vacíos, así r2_enabled() devuelve False y marcar_para_sync es no-op (los
     # endpoints de catálogo/import se comportan igual que sin la feature).
+    # Lo mismo para el bucket PRIVADO (fotos de perfil, documentos, evidencias):
+    # con R2_PRIVADO_BUCKET vacío, `archivos.habilitado()` es False y todo se
+    # guarda/lee del UPLOAD_FOLDER temporal, sin tocar la red. Importante porque
+    # el .env local SÍ trae credenciales reales.
     for _r2 in ('R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_ACCESS_KEY_ID',
-                'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_BASE_URL'):
+                'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_BASE_URL',
+                'R2_PRIVADO_BUCKET', 'R2_PRIVADO_ACCOUNT_ID',
+                'R2_PRIVADO_ACCESS_KEY_ID', 'R2_PRIVADO_SECRET_ACCESS_KEY'):
         os.environ[_r2] = ''
     os.environ['R2_FORCE_ENABLE'] = 'false'
 

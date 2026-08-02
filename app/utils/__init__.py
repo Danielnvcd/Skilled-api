@@ -9,6 +9,8 @@ particionado por dominio:
   audit.py          log_action
   files.py          allowed_file, STRICT_MIMETYPES, safe_excel_value
   images.py         allowed_image_file, image_to_webp, replace_ext_with_webp
+  archivos.py       almacenamiento de archivos privados (R2 privado ↔ disco).
+                    Se usa como módulo: `from app.utils import archivos`
   horas.py          turnos_se_traslapan, calcular_horas_productivas
   payroll.py        to_dec, recalcular_totales_prenomina
 

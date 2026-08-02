@@ -6,16 +6,15 @@ Incluye:
   - /profile, /profile/foto (edición + foto)
   - /change-password/<id> (cambio propio con TOTP si aplica)
 """
-import os
 import uuid
 
 import pyotp
-from flask import current_app, g, jsonify, request, send_from_directory
+from flask import current_app, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db, limiter
 from app.models import RefreshToken, User
-from app.utils import log_action
+from app.utils import archivos, log_action
 
 from ._core import (
     _MAX_PASSWORD_LEN,
@@ -118,11 +117,10 @@ def api_get_user_foto(user_id: int):
     # Anti path-traversal: profile_pic se genera siempre internamente con secure_filename
     if '/' in filename or '\\' in filename or '..' in filename:
         return jsonify({'error': 'Ruta inválida'}), 400
-    folder = current_app.config['UPLOAD_FOLDER']
-    full = os.path.join(folder, filename)
-    if not os.path.exists(full):
-        return jsonify({'error': 'Foto no encontrada en disco'}), 404
-    return send_from_directory(folder, filename)
+    resp = archivos.enviar(filename)
+    if resp is None:
+        return jsonify({'error': 'Foto no encontrada'}), 404
+    return resp
 
 
 # ── Perfil propio ───────────────────────────────────────────────────────────
@@ -158,18 +156,10 @@ def api_update_profile():
         if not allowed_image_file(foto):
             return jsonify({'error': 'Foto rechazada: solo se permiten imágenes JPG o PNG reales.'}), 400
         unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.webp"
-        upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
-        webp_buf = image_to_webp(foto)
-        with open(upload_path, 'wb') as f:
-            f.write(webp_buf.getvalue())
-        # Borrar foto vieja (si no es default) para no llenar disco
+        archivos.guardar(unique_filename, image_to_webp(foto).getvalue(), 'image/webp')
+        # Borrar foto vieja (si no es default) para no acumular basura
         if user.profile_pic and user.profile_pic != 'default.png':
-            old = os.path.join(current_app.config['UPLOAD_FOLDER'], user.profile_pic)
-            if os.path.exists(old):
-                try:
-                    os.remove(old)
-                except Exception as e:
-                    current_app.logger.warning('No se pudo eliminar foto vieja: %s', e)
+            archivos.eliminar(user.profile_pic)
         user.profile_pic = unique_filename
 
     try:
@@ -202,14 +192,9 @@ def api_delete_profile_foto():
         current_app.logger.error('Error eliminando foto de perfil: %s', e)
         return jsonify({'error': 'Error al eliminar la foto'}), 500
 
-    # Limpieza de disco best-effort — no falla la op si el archivo no existe.
+    # Limpieza best-effort (R2 + disco) — no falla la op si el archivo no existe.
     if old and old != 'default.png':
-        path = os.path.join(current_app.config['UPLOAD_FOLDER'], old)
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except Exception as e:
-                current_app.logger.warning('No se pudo eliminar archivo de foto: %s', e)
+        archivos.eliminar(old)
 
     log_action(f"Eliminó su foto de perfil ({user.username})")
     return jsonify(_user_to_dict(user))

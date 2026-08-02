@@ -8,6 +8,6 @@ Todos los endpoints exigen además 2FA activo: el rol puede crear cuentas y
 revocar sesiones, así que una contraseña filtrada no debe alcanzar para entrar.
 """
 from ._core import bp
-from . import cuentas, endpoints, mantenimiento  # noqa: F401
+from . import archivos, cuentas, endpoints, mantenimiento  # noqa: F401
 
 __all__ = ['bp']

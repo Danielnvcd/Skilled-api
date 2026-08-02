@@ -1,5 +1,4 @@
 """Foto de perfil: admin sube/reemplaza la foto de otro usuario."""
-import os
 import traceback
 import uuid
 
@@ -10,7 +9,7 @@ from app.models import User
 from app.realtime import emit_to_role
 from app.routes._api_helpers import require_gestion_usuarios
 from app.routes.api_auth import jwt_required
-from app.utils import allowed_image_file, image_to_webp, log_action
+from app.utils import allowed_image_file, archivos, image_to_webp, log_action
 
 from ._core import _user_to_dict, bp
 
@@ -38,24 +37,16 @@ def subir_foto(user_id):
         return jsonify({'error': 'Foto rechazada: solo se permiten imágenes JPG o PNG reales.'}), 400
 
     unique_filename = f"profile_{user.id}_{uuid.uuid4().hex[:8]}.webp"
-    upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
 
     try:
-        webp_buf = image_to_webp(foto)
-        with open(upload_path, 'wb') as f:
-            f.write(webp_buf.getvalue())
+        archivos.guardar(unique_filename, image_to_webp(foto).getvalue(), 'image/webp')
     except Exception as e:
         current_app.logger.error('Error guardando foto: %s', e)
         return jsonify({'error': 'No se pudo guardar la imagen'}), 500
 
-    # Borrar foto vieja para no llenar disco
+    # Borrar foto vieja para no acumular basura (en R2 y en disco)
     if user.profile_pic and user.profile_pic != 'default.png':
-        old = os.path.join(current_app.config['UPLOAD_FOLDER'], user.profile_pic)
-        if os.path.exists(old):
-            try:
-                os.remove(old)
-            except Exception as e:
-                current_app.logger.warning('No se pudo eliminar foto vieja: %s', e)
+        archivos.eliminar(user.profile_pic)
 
     user.profile_pic = unique_filename
 

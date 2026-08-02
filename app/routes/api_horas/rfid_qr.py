@@ -247,7 +247,9 @@ def rfid_trabajadores_reporte(reporte_id):
             'viaticos': float(t.viaticos) if t.viaticos is not None else 0.0,
             'pago_dia_festivo': float(t.pago_dia_festivo) if t.pago_dia_festivo is not None else 0.0,
             'rfid_uid': t.rfid_uid or '',
-            'foto_url': f'/uploads/{t.foto_perfil}' if t.foto_perfil else None,
+            # `/uploads/` nunca estuvo servido por Flask: apuntamos al endpoint
+            # real (con JWT), que ahora lee de R2 privado o de disco.
+            'foto_url': f'/api/trabajadores/{t.id}/foto' if t.foto_perfil else None,
         })
 
     return jsonify({

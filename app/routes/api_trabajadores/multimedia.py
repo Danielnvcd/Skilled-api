@@ -11,16 +11,16 @@ Registra:
 import os
 import time
 
-from flask import current_app, jsonify, request, send_from_directory
+from flask import current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
 from app.extensions import db, limiter
 from app.models import DocumentoTrabajador, Trabajador
 from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
-from app.utils import allowed_file, log_action
+from app.utils import allowed_file, archivos, log_action
 
-from ._core import _authorized, _parse_date, _save_foto, bp
+from ._core import _authorized, _parse_date, _save_foto, bp, thumb_key
 
 
 # ── Foto de perfil ─────────────────────────────────────────────────────────────
@@ -58,7 +58,10 @@ def get_foto(id):
         return jsonify({'error': 'Acceso denegado'}), 403
     if not t.foto_perfil:
         return jsonify({'error': 'Sin foto'}), 404
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], t.foto_perfil)
+    resp = archivos.enviar(t.foto_perfil)
+    if resp is None:
+        return jsonify({'error': 'Foto no encontrada'}), 404
+    return resp
 
 
 @bp.route('/<int:id>/foto/thumb', methods=['GET'])
@@ -71,12 +74,14 @@ def get_foto_thumb(id):
         return jsonify({'error': 'Acceso denegado'}), 403
     if not t.foto_perfil:
         return jsonify({'error': 'Sin foto'}), 404
-    folder, filename = os.path.split(t.foto_perfil)
-    thumb_rel = os.path.join(folder, f'thumb_{filename}').replace('\\', '/')
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    if os.path.exists(os.path.join(upload_folder, thumb_rel)):
-        return send_from_directory(upload_folder, thumb_rel)
-    return send_from_directory(upload_folder, t.foto_perfil)
+    # El thumb puede no existir (fotos viejas, o falló al generarse): en ese caso
+    # se sirve la original, igual que siempre.
+    resp = archivos.enviar(thumb_key(t.foto_perfil))
+    if resp is None:
+        resp = archivos.enviar(t.foto_perfil)
+    if resp is None:
+        return jsonify({'error': 'Foto no encontrada'}), 404
+    return resp
 
 
 # ── Documentos ────────────────────────────────────────────────────────────────
@@ -126,10 +131,8 @@ def subir_documento(id):
     filename = secure_filename(file.filename)
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
     unique_filename = f'{int(time.time())}_{filename}'
-    upload_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'trabajadores', str(t.id))
-    os.makedirs(upload_folder, exist_ok=True)
 
-    # Imágenes (JPG/PNG/HEIC) se reencoden a WebP para ahorrar disco y unificar
+    # Imágenes (JPG/PNG/HEIC) se reencoden a WebP para ahorrar espacio y unificar
     # formato. PDF se guarda intacto. El nombre humano (`nombre_archivo`) también
     # se ajusta a .webp para que coincida con lo que el usuario descarga después.
     if ext in {'jpg', 'jpeg', 'png', 'heic'}:
@@ -141,10 +144,12 @@ def subir_documento(id):
             return jsonify({'error': 'No se pudo procesar la imagen'}), 400
         unique_filename = replace_ext_with_webp(unique_filename)
         filename = replace_ext_with_webp(filename)
-        with open(os.path.join(upload_folder, unique_filename), 'wb') as f:
-            f.write(webp_buf.getvalue())
+        contenido, content_type = webp_buf.getvalue(), 'image/webp'
     else:
-        file.save(os.path.join(upload_folder, unique_filename))
+        file.seek(0)
+        contenido, content_type = file.read(), 'application/pdf'
+
+    archivos.guardar(f'trabajadores/{t.id}/{unique_filename}', contenido, content_type)
 
     doc = DocumentoTrabajador(
         trabajador_id=t.id,
@@ -175,12 +180,10 @@ def descargar_documento(doc_id):
     # CRLF o caracteres de control que algún antiguo browser podría
     # interpretar mal en el Content-Disposition.
     safe_name = secure_filename(doc.nombre_archivo) or f'documento_{doc_id}'
-    return send_from_directory(
-        current_app.config['UPLOAD_FOLDER'],
-        doc.ruta_archivo,
-        as_attachment=True,
-        download_name=safe_name,
-    )
+    resp = archivos.enviar(doc.ruta_archivo, as_attachment=True, download_name=safe_name)
+    if resp is None:
+        return jsonify({'error': 'Archivo no encontrado'}), 404
+    return resp
 
 
 @bp.route('/documentos/<int:doc_id>', methods=['DELETE'])
@@ -191,12 +194,7 @@ def eliminar_documento(doc_id):
         return jsonify({'error': 'No encontrado'}), 404
     if not _authorized(doc.trabajador):
         return jsonify({'error': 'Acceso denegado'}), 403
-    file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], doc.ruta_archivo)
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-    except Exception as e:
-        current_app.logger.error('Error eliminando archivo físico: %s', e)
+    archivos.eliminar(doc.ruta_archivo)
     log_action(f'Eliminó documento {doc.nombre_archivo} del trabajador {doc.trabajador_id}')
     trabajador_id = doc.trabajador_id
     doc_id = doc.id
