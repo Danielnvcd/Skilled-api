@@ -18,7 +18,7 @@ from app.extensions import db, limiter
 from app.models import DocumentoTrabajador, Trabajador
 from app.realtime import emit_to_role
 from app.routes.api_auth import jwt_required
-from app.utils import allowed_file, archivos, log_action
+from app.utils import allowed_file, antivirus, archivos, log_action
 
 from ._core import _authorized, _parse_date, _save_foto, bp, thumb_key
 
@@ -95,6 +95,43 @@ _DOCUMENTO_TRABAJADOR_EXTS = {'pdf', 'jpg', 'jpeg', 'png', 'heic'}
 _DOCUMENTO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB por archivo (vs los 50 MB globales)
 
 
+def _escanear_o_rechazar(contenido: bytes, filename: str, t):
+    """Pasa `contenido` por el antivirus. Devuelve una respuesta de error si hay
+    que rechazar la subida, o None si puede continuar.
+
+    Si el antivirus está apagado (no configurado) es un no-op y todo sigue como
+    antes. Si está configurado pero no responde, manda `CLAMAV_FAIL_CLOSED`:
+    por defecto se rechaza con 503, porque dar por bueno un archivo que nadie
+    revisó es exactamente lo que vuelve inútil tener antivirus."""
+    if not antivirus.habilitado():
+        return None
+
+    try:
+        amenaza = antivirus.escanear(contenido)
+    except antivirus.AntivirusNoDisponible as e:
+        current_app.logger.error('Antivirus no disponible al subir %s: %s', filename, e)
+        if antivirus.fail_closed():
+            return jsonify({
+                'error': 'El antivirus no está disponible en este momento. '
+                         'Intenta de nuevo en unos minutos.',
+            }), 503
+        return None
+
+    if amenaza:
+        # Se registra con la palabra "antivirus" a propósito: así aparece en
+        # Sistemas → Eventos de seguridad sin tener que buscar en la bitácora.
+        log_action(
+            f'Antivirus rechazó el archivo {filename} para el trabajador '
+            f'{t.nombre} ({t.no_empleado}): {amenaza}'
+        )
+        db.session.commit()
+        current_app.logger.warning('Antivirus: %s en %s', amenaza, filename)
+        return jsonify({
+            'error': f'El archivo fue rechazado por el antivirus ({amenaza}).',
+        }), 400
+    return None
+
+
 @bp.route('/<int:id>/documentos', methods=['POST'])
 @jwt_required
 @limiter.limit('10 per minute')
@@ -148,6 +185,13 @@ def subir_documento(id):
     else:
         file.seek(0)
         contenido, content_type = file.read(), 'application/pdf'
+
+        # Los PDF son lo único que se guarda tal cual: no hay re-encode que
+        # neutralice un payload, así que aquí es donde el antivirus aporta.
+        # Las imágenes ya pasaron por Pillow unas líneas arriba.
+        rechazo = _escanear_o_rechazar(contenido, filename, t)
+        if rechazo:
+            return rechazo
 
     archivos.guardar(f'trabajadores/{t.id}/{unique_filename}', contenido, content_type)
 

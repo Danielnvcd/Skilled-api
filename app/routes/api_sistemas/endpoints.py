@@ -81,6 +81,21 @@ def estado():
         db.session.rollback()
         db_detalle = f'error: {type(e).__name__}'
 
+    # ── Antivirus ────────────────────────────────────────────────────────────
+    # Con CLAMAV_FAIL_CLOSED=true, un clamd caído deja de aceptar documentos.
+    # Sin este dato nadie se entera hasta que alguien de RRHH se queja.
+    from app.utils import antivirus
+    if not antivirus.habilitado():
+        av = {'ok': None, 'fail_closed': False,
+              'detalle': 'No configurado: los PDF se guardan sin escanear.'}
+    else:
+        problema = antivirus.ping()
+        av = {
+            'ok': problema is None,
+            'fail_closed': antivirus.fail_closed(),
+            'detalle': (antivirus.version() or 'clamd responde') if problema is None else problema,
+        }
+
     defensas = [] if redis_ok else [
         'Revocación inmediata de JWT por jti (el logout no mata el token hasta su exp, ≤20 min)',
         'Lockout escalado por intentos fallidos de contraseña',
@@ -91,9 +106,18 @@ def estado():
         'Registro de peticiones de este panel',
     ]
 
+    if av['ok'] is False:
+        defensas.append(
+            'Escaneo antivirus de documentos — subir PDF responde 503 hasta que vuelva'
+            if av['fail_closed'] else
+            'Escaneo antivirus de documentos — los PDF se están aceptando SIN escanear'
+        )
+
     return jsonify({
         # Redis es COMPARTIDO por todos los workers: este dato es global.
         'redis': {'ok': redis_ok, 'detalle': redis_detalle},
+        # clamd es un demonio del host, común a todos los workers.
+        'antivirus': av,
         # El pool de conexiones es POR WORKER (cada proceso tiene el suyo).
         'base_datos': {'ok': db_ok, 'detalle': db_detalle, 'pool': pool},
         'proceso': {
@@ -111,7 +135,7 @@ def estado():
         # Redis justamente para que sea común a los 4 workers).
         'alcance': {
             'por_worker': ['proceso', 'base_datos.pool'],
-            'global': ['redis', 'peticiones'],
+            'global': ['redis', 'antivirus', 'peticiones'],
             'nota': (
                 'Detrás de nginx corren varios workers de gunicorn: los datos '
                 'del proceso cambian según cuál atienda cada petición.'
@@ -275,6 +299,7 @@ _PATRONES_SEGURIDAD = (
     'desactivó',
     'reactivó',
     'creó usuario',
+    'antivirus',
 )
 
 
