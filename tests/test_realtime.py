@@ -164,7 +164,8 @@ class TestForceLogout:
 # plantilla-frontend (`src/`), o la UI dejará de refrescarse en vivo sin que
 # falle nada visible.
 EVENTOS_ESPERADOS = {
-    'abono:new', 'ajuste:changed', 'almacen:changed', 'asignacion:changed',
+    'abono:new', 'ajuste:changed', 'almacen:changed', 'archivo:sync_progreso',
+    'asignacion:changed',
     'baja:changed', 'bitacora:new', 'compra:changed', 'credencial:changed',
     'documento:changed', 'empleado:changed', 'estante:changed',
     'herramienta:changed', 'incidencia:changed', 'mantenimiento:changed',

@@ -8,6 +8,7 @@ No registres rutas en este archivo. Las rutas viven en los submódulos por
 dominio: crud.py, timeline.py, credenciales.py, multimedia.py, importar.py,
 exportar.py.
 """
+import io
 import json
 import os
 import re
@@ -23,6 +24,7 @@ from flask import Blueprint
 
 from app.models import CredencialPlanta, Proyecto, Trabajador
 from app.routes._api_helpers import current_user, is_admin
+from app.utils import archivos
 
 
 def apply_trabajador_filtros(query, args):
@@ -83,61 +85,54 @@ def _mask_pii(value: str, visible: int = 4) -> str:
     return value[:visible] + '*' * (len(value) - visible * 2) + value[-visible:]
 
 
-def _generate_thumbnail(original_path: str, thumb_path: str, size: tuple = (100, 100)) -> None:
-    """Genera un thumbnail WebP de `size` px a partir de `original_path`."""
+def _thumbnail_webp(data: bytes, size: tuple = (100, 100)) -> bytes:
+    """Thumbnail WebP de `size` px a partir de los bytes de una imagen."""
     from PIL import Image, ImageOps
-    with Image.open(original_path) as img:
+    with Image.open(io.BytesIO(data)) as img:
         img = ImageOps.exif_transpose(img)
         if img.mode not in ('RGB', 'RGBA'):
             img = img.convert('RGBA' if 'A' in img.mode else 'RGB')
         img.thumbnail(size, Image.LANCZOS)
-        img.save(thumb_path, 'WEBP', quality=82, method=6)
+        buf = io.BytesIO()
+        img.save(buf, 'WEBP', quality=82, method=6)
+        return buf.getvalue()
 
 
-def _save_profile_picture(file, pp_folder: str, unique_filename: str) -> str:
-    """Guarda la foto original convertida a WebP y genera su thumbnail también WebP.
+def thumb_key(foto_perfil_rel: str) -> str:
+    """Key del thumbnail dado el path de la foto: mismo folder, prefijo 'thumb_'."""
+    folder, filename = os.path.split((foto_perfil_rel or '').replace('\\', '/'))
+    return f"{folder}/thumb_{filename}" if folder else f"thumb_{filename}"
 
-    Devuelve la ruta relativa al UPLOAD_FOLDER (p.ej. 'perfiles/pp_123_foto.webp').
-    El thumbnail se guarda como 'perfiles/thumb_pp_123_foto.webp'.
+
+def _save_profile_picture(file, unique_filename: str) -> str:
+    """Guarda la foto convertida a WebP y su thumbnail (R2 privado o disco).
+
+    Devuelve la ruta relativa/key almacenada en BD (p.ej.
+    'perfiles/pp_123_foto.webp'); el thumbnail queda en
+    'perfiles/thumb_pp_123_foto.webp'. Ver `app/utils/archivos.py`: la key es la
+    misma cadena que antes era un path en disco, así que la columna no cambia.
     """
     from app.utils import image_to_webp, replace_ext_with_webp
 
-    os.makedirs(pp_folder, exist_ok=True)
     webp_filename = replace_ext_with_webp(unique_filename)
-    original_path = os.path.join(pp_folder, webp_filename)
+    key = f"perfiles/{webp_filename}"
+    data = image_to_webp(file).getvalue()
+    archivos.guardar(key, data, 'image/webp')
 
-    webp_buf = image_to_webp(file)
-    with open(original_path, 'wb') as f:
-        f.write(webp_buf.getvalue())
-
-    thumb_filename = f"thumb_{webp_filename}"
-    thumb_path = os.path.join(pp_folder, thumb_filename)
     try:
-        _generate_thumbnail(original_path, thumb_path)
+        archivos.guardar(thumb_key(key), _thumbnail_webp(data), 'image/webp')
     except Exception as e:
         current_app.logger.warning(f"No se pudo generar thumbnail para {webp_filename}: {e}")
 
-    return f"perfiles/{webp_filename}"
+    return key
 
 
 def _delete_profile_picture(foto_perfil_rel: str) -> None:
-    """Elimina la foto original y su thumbnail dado el path relativo almacenado en BD."""
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    original_path = os.path.join(upload_folder, foto_perfil_rel)
-    try:
-        if os.path.exists(original_path):
-            os.remove(original_path)
-    except Exception as e:
-        current_app.logger.error(f"Error eliminando foto original: {e}")
-
-    # thumb vive en la misma carpeta con prefijo 'thumb_'
-    folder, filename = os.path.split(original_path)
-    thumb_path = os.path.join(folder, f"thumb_{filename}")
-    try:
-        if os.path.exists(thumb_path):
-            os.remove(thumb_path)
-    except Exception as e:
-        current_app.logger.error(f"Error eliminando thumbnail: {e}")
+    """Elimina la foto original y su thumbnail (de R2 y de disco). Best-effort."""
+    if not foto_perfil_rel:
+        return
+    archivos.eliminar(foto_perfil_rel)
+    archivos.eliminar(thumb_key(foto_perfil_rel))
 
 bp = Blueprint('api_trabajadores', __name__, url_prefix='/api/trabajadores')
 
@@ -410,8 +405,12 @@ def _replace_credenciales(t: Trabajador, payload_str: str) -> None:
 def _save_foto(t: Trabajador, file) -> None:
     if not allowed_image_file(file):
         raise ValueError('Foto rechazada: solo se permiten imágenes JPG o PNG reales.')
-    if t.foto_perfil:
-        _delete_profile_picture(t.foto_perfil)
+    anterior = t.foto_perfil
     unique_filename = f"pp_{int(time.time())}_{secure_filename(file.filename)}"
-    pp_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], 'perfiles')
-    t.foto_perfil = _save_profile_picture(file, pp_folder, unique_filename)
+    # Guardar la nueva ANTES de borrar la vieja: si la subida falla, el
+    # trabajador conserva la foto que tenía en vez de quedarse sin ninguna.
+    # La comparación evita borrar la recién guardada en el caso límite de que
+    # el nombre coincida (mismo segundo y mismo archivo de origen).
+    t.foto_perfil = _save_profile_picture(file, unique_filename)
+    if anterior and anterior != t.foto_perfil:
+        _delete_profile_picture(anterior)

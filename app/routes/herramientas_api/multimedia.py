@@ -4,15 +4,15 @@ Registra:
   /herramientas-unidades/<int:uid>/fotos                       POST
   /herramientas-unidades/<int:uid>/media/<int:media_id>        GET
 """
-import os
 import uuid
 
-from flask import jsonify, request, current_app, send_file
+from flask import current_app, jsonify, request
 
 from app.extensions import db, limiter, get_real_client_ip_flask
 from app.models import (
     HerramientaUnidad, EventoHerramienta, MediaHerramienta,
 )
+from app.utils import archivos, image_to_webp
 from ._core import (
     bp,
     _require_login,
@@ -21,7 +21,6 @@ from ._core import (
     _media_to_dict,
     _puede_ver_unidad,
     _validar_imagen_archivo,
-    _upload_dir,
 )
 
 
@@ -39,7 +38,7 @@ def subir_foto_unidad(uid: int):
         return jsonify({'detail': 'Forbidden'}), 403
 
     file = request.files.get('foto') or request.files.get('archivo')
-    mime, ext, info = _validar_imagen_archivo(file)
+    mime, _ext, info = _validar_imagen_archivo(file)
     if mime is None:
         return jsonify({'detail': info}), 422
 
@@ -58,21 +57,31 @@ def subir_foto_unidad(uid: int):
         if not evento:
             return jsonify({'detail': 'evento_id no pertenece a esta unidad'}), 422
 
-    folder = _upload_dir(uid)
-    fname = f"{uuid.uuid4().hex}{ext}"
-    fpath = os.path.join(folder, fname)
-    file.save(fpath)
-    rel_path = os.path.relpath(fpath, current_app.config.get('UPLOAD_FOLDER', 'uploads'))
+    # Re-encode a WebP: lo que se almacena es un ráster recién renderizado, así
+    # que ningún payload embebido en el original sobrevive. Es la misma defensa
+    # que ya tenían las fotos de perfil y los documentos-imagen; validar los
+    # magic bytes dice que ES una imagen, no que sea inofensiva. De paso las
+    # fotos de campo (que suelen venir de celular) pesan bastante menos.
+    try:
+        datos = image_to_webp(file).getvalue()
+    except Exception as e:
+        current_app.logger.warning('Error convirtiendo foto de unidad a webp: %s', e)
+        return jsonify({'detail': 'No se pudo procesar la imagen'}), 422
+
+    rel_path = f"herramientas/{uid}/{uuid.uuid4().hex}.webp"
+    archivos.guardar(rel_path, datos, 'image/webp')
 
     user = request.current_user
     media = MediaHerramienta(
         unidad_id=uid,
         evento_id=evento_id,
         tipo=tipo,
-        ruta_archivo=rel_path.replace('\\', '/'),
+        ruta_archivo=rel_path,
+        # Se conserva el nombre que subió el usuario (con su extensión original)
+        # porque es lo que le sirve para reconocer la foto; lo almacenado es WebP.
         nombre_original=file.filename[:250],
-        mime=mime,
-        tamano_bytes=info,  # size returned in info on success
+        mime='image/webp',
+        tamano_bytes=len(datos),
         subido_por_id=user.id,
     )
     db.session.add(media)
@@ -95,8 +104,7 @@ def get_media_file(uid: int, media_id: int):
                                            MediaHerramienta.unidad_id == uid).first()
     if not media:
         return jsonify({'detail': 'Archivo no encontrado'}), 404
-    base = current_app.config.get('UPLOAD_FOLDER', 'uploads')
-    full = os.path.join(base, media.ruta_archivo)
-    if not os.path.exists(full):
+    resp = archivos.enviar(media.ruta_archivo, mimetype=media.mime or 'image/jpeg')
+    if resp is None:
         return jsonify({'detail': 'Archivo perdido en disco'}), 404
-    return send_file(full, mimetype=media.mime or 'image/jpeg')
+    return resp
