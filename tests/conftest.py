@@ -55,6 +55,12 @@ def app():
         os.environ[_r2] = ''
     os.environ['R2_FORCE_ENABLE'] = 'false'
 
+    # Antivirus APAGADO en tests: sin socket ni host, `antivirus.habilitado()`
+    # es False y las subidas se comportan como sin la feature. Los tests que sí
+    # lo ejercitan encienden las vars y sustituyen el cliente por uno falso.
+    os.environ['CLAMAV_SOCKET'] = ''
+    os.environ['CLAMAV_HOST'] = ''
+
     # Resetear el singleton de Redis por si ya se conectó en otro import
     import app.extensions as _ext
     _ext._redis_client = None
