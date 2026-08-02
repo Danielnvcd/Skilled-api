@@ -1,0 +1,171 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Stack de DESARROLLO local.
+#
+#   docker compose up --build
+#
+# Levanta la API con Postgres, Redis y ClamAV propios. La API queda en
+# http://localhost:5000 — el mismo puerto que usaba `python run.py`, para que
+# la configuración del SPA (repo plantilla-frontend) no cambie.
+#
+# Usa el `.env` DE SIEMPRE, el mismo que leía `python run.py`. Es decir: mismas
+# llaves, mismos buckets de R2, mismo correo. El entorno de pruebas es idéntico
+# al que ya conocías, solo que dentro de contenedores.
+#
+#   ⚠ Con ese .env, FLASK_ENV=production y las llaves de R2 son las REALES: lo
+#     que subas probando aquí acaba en los buckets de producción.
+#
+# La base de datos también se mudó al contenedor: es una copia de la `MASTER`
+# que corría en Windows, con el mismo usuario y contraseña (POSTGRES_* del
+# .env). El Postgres de Windows queda intacto por si hay que volver.
+#
+# Lo que resuelve, y que en Windows no se podía:
+#   · gevent. `SOCKETIO_ASYNC_MODE=gevent` revienta con psycopg en Windows, así
+#     que los WebSockets solo se podían probar contra el VPS. Aquí corre el
+#     MISMO worker que producción (GeventWebSocketWorker) sobre Linux.
+#   · ClamAV. En Windows no había demonio, así que los 503 al subir documentos
+#     solo aparecían en producción. Ahora hay un clamd de verdad.
+#
+# Producción usa docker-compose.prod.yml — este archivo NO sirve para el VPS
+# (monta el código del host y recarga en caliente).
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: nominas-dev
+
+services:
+  api:
+    build:
+      context: .
+    # El .env de siempre, tal cual. Todo lo que no se sobrescriba abajo se
+    # comporta exactamente igual que cuando corrías `python run.py`.
+    env_file: .env
+    environment:
+      # Dentro de la red de Docker los servicios se llaman `db`, `redis` y
+      # `clamav`. Las variables del .env apuntan a `localhost`, que dentro del
+      # contenedor es el contenedor mismo — por eso hay que reescribirlas aquí.
+      # Las credenciales salen del propio .env (POSTGRES_*), así que la base
+      # del contenedor es la misma `MASTER` con el mismo usuario.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?falta POSTGRES_USER en .env}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:?falta POSTGRES_DB en .env}
+      REDIS_URL: redis://redis:6379/0
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+      # El socket unix era del clamd del host; tiene prioridad sobre CLAMAV_HOST
+      # en app/utils/antivirus.py, así que se vacía para que use el TCP.
+      CLAMAV_SOCKET: ""
+      # La primera vez, ClamAV tarda minutos bajando firmas. Con `true` toda
+      # subida de PDF respondería 503 mientras tanto.
+      CLAMAV_FAIL_CLOSED: "false"
+      # Aquí sí queremos el camino de producción: es la razón de usar Docker.
+      SOCKETIO_ASYNC_MODE: gevent
+      # Hora de México, no UTC.
+      #
+      # No es cosmético: hay 32 llamadas a `datetime.now()` SIN zona en las
+      # rutas (last_seen, audit_log, nombres de archivos exportados…), y esa
+      # función devuelve la hora local del proceso. Con el contenedor en UTC
+      # —el valor por defecto— esas fechas se guardaban 6 horas adelantadas
+      # respecto a todo lo que había escrito la máquina de Windows, en la
+      # MISMA columna. La imagen ya trae /usr/share/zoneinfo, así que basta
+      # con esta variable.
+      TZ: America/Mexico_City
+      # No hay proxy delante en local, así que no hay nadie de confianza.
+      FORWARDED_ALLOW_IPS: "127.0.0.1"
+    ports:
+      - "5000:8000"
+    volumes:
+      # Código en vivo: editas en Windows y Gunicorn recarga solo (--reload).
+      # Los subdirectorios uploads/ y data/ entran con el mismo montaje, así
+      # que los archivos subidos quedan visibles en el explorador de archivos.
+      - .:/app
+      # El venv de Windows no tiene nada que hacer dentro del contenedor: se
+      # tapa con un volumen anónimo. (De los __pycache__ se encarga
+      # PYTHONPYCACHEPREFIX en el Dockerfile.)
+      - /app/venv
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # A propósito NO se espera a que ClamAV esté sano: la primera vez tarda
+      # varios minutos bajando firmas. Con CLAMAV_FAIL_CLOSED=false (ver el
+      # .env.docker.example) la app arranca igual y las subidas funcionan.
+      clamav:
+        condition: service_started
+    # Un solo worker en desarrollo: los logs se leen sin intercalar y el
+    # `sid` de Socket.IO no rebota entre procesos. --reload aplica los cambios
+    # de código sin reconstruir la imagen.
+    command:
+      - gunicorn
+      - --workers=1
+      - --worker-class=geventwebsocket.gunicorn.workers.GeventWebSocketWorker
+      - --worker-connections=1000
+      - --bind=0.0.0.0:8000
+      - --timeout=120
+      - --reload
+      - --access-logfile=-
+      - --error-logfile=-
+      - --capture-output
+      - run:app
+
+  db:
+    # Misma versión mayor que producción (el VPS corre PostgreSQL 18): así un
+    # dump de prod se puede restaurar aquí para depurar sin sorpresas.
+    image: postgres:18-alpine
+    environment:
+      # Mismos valores que tenía el Postgres de Windows (POSTGRES_* del .env),
+      # para que el volcado restaure sin renombrar nada y el DATABASE_URL solo
+      # cambie de host.
+      POSTGRES_USER: ${POSTGRES_USER:?falta POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:?falta POSTGRES_DB en .env}
+      TZ: America/Mexico_City
+    # `-c timezone=…` y no solo la variable TZ: el `timezone` del servidor lo
+    # fijó initdb la primera vez que arrancó el clúster (en UTC) y quedó
+    # escrito en postgresql.conf, así que cambiar TZ después no lo mueve. Esto
+    # afecta a `now()`, que es el default de servidor de 3 columnas
+    # (producto_estante.updated_at, tomas_inventario.fecha_inicio,
+    # registros_diarios_horas.modificado_en).
+    command:
+      - postgres
+      - -c
+      - timezone=America/Mexico_City
+    ports:
+      # Expuesto al host para poder conectar pgAdmin/DBeaver. 5433 y no 5432
+      # para no chocar con el Postgres que ya tienes instalado en Windows.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      # OJO: en la imagen 18 el punto de montaje es /var/lib/postgresql, NO
+      # /var/lib/postgresql/data como en 16 y anteriores. Con la ruta vieja el
+      # contenedor arranca y se muere avisando de "unused mount/volume".
+      - datos_postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # appendonly: los rate limits sobreviven a un reinicio del contenedor.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - datos_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  clamav:
+    image: clamav/clamav:stable
+    environment:
+      # freshclam actualiza firmas cada 24 h en vez de cada hora: en local no
+      # hace falta y ahorra ancho de banda.
+      FRESHCLAM_CHECKS: "1"
+    volumes:
+      # Persistir las firmas (~350 MB) evita volver a descargarlas en cada
+      # `compose down`. Sin esto, cada arranque son varios minutos.
+      - firmas_clamav:/var/lib/clamav
+
+volumes:
+  datos_postgres:
+  datos_redis:
+  firmas_clamav:

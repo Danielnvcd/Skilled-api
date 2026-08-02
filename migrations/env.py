@@ -51,6 +51,43 @@ def get_metadata():
     return target_db.metadata
 
 
+def _ajustar_timeouts(connection):
+    """Quita el límite de duración que la aplicación impone a cada sentencia.
+
+    Alembic corre sobre el engine de la aplicación (`get_engine()` de arriba), y
+    ese engine abre las conexiones con `statement_timeout=30s` y
+    `lock_timeout=5s` (ver `SQLALCHEMY_ENGINE_OPTIONS` en app/__init__.py). Para
+    las peticiones HTTP está muy bien; para una migración es una trampa:
+
+      · `statement_timeout` — un CREATE INDEX, un backfill o un ALTER TABLE con
+        reescritura sobre una tabla grande tarda MÁS de 30 segundos y Postgres
+        lo aborta a medias. El DDL es transaccional, así que no queda nada roto,
+        pero el despliegue falla y no es evidente por qué. Con la base pequeña
+        no se nota; el día que haya volumen, sí.
+
+      · `lock_timeout` — este SE MANTIENE a propósito. Si una consulta larga
+        tiene tomada la tabla, es preferible que la migración falle en 5
+        segundos a que se quede encolada: mientras un ALTER TABLE espera su
+        lock, bloquea a todo el que llegue detrás y tumba la aplicación entera.
+
+    Solo aplica a PostgreSQL; en SQLite (tests) estos parámetros no existen.
+    """
+    if connection.dialect.name != 'postgresql':
+        return
+
+    from sqlalchemy import text
+
+    connection.execute(text('SET statement_timeout = 0'))
+    connection.execute(text("SET lock_timeout = '5s'"))
+
+    efectivo = connection.execute(text('SHOW statement_timeout')).scalar()
+    bloqueo = connection.execute(text('SHOW lock_timeout')).scalar()
+    logger.info(
+        'Migraciones con statement_timeout=%s y lock_timeout=%s',
+        'sin límite' if efectivo in ('0', None) else efectivo, bloqueo,
+    )
+
+
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
 
@@ -97,6 +134,8 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
+        _ajustar_timeouts(connection)
+
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),

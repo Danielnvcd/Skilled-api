@@ -40,6 +40,15 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 
 ## Instalación Local (Dev)
 
+> **Alternativa con Docker (la recomendada):** `docker compose up -d` levanta la
+> API con su propio PostgreSQL, Redis y ClamAV, usando el mismo `.env` de siempre
+> y una copia de la base `MASTER`. Es la única forma de probar en Windows el
+> camino de WebSockets con gevent y el antivirus, que en el venv nativo no
+> arrancan. Guía del día a día: [docs/DIA_A_DIA.md](docs/DIA_A_DIA.md).
+> Montaje y despliegue: [docs/DOCKER.md](docs/DOCKER.md).
+> El VPS **todavía no está en Docker** — lo pendiente y qué lo bloquea:
+> [docs/PENDIENTE_PRODUCCION.md](docs/PENDIENTE_PRODUCCION.md).
+
 ```bash
 git clone <repo-url>
 cd "Sistema de nominas"

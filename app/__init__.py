@@ -377,16 +377,37 @@ def create_app():
     with app.app_context():
         os.makedirs(os.path.join(BASE_DIR, 'data'), exist_ok=True)
         # Crear tablas auxiliares si aún no existen (idempotente, no afecta otras).
+        #
+        # `notificaciones` y `trabajador_notas` no tienen migración propia: nacen
+        # aquí. Por eso el bloque sigue siendo necesario.
+        #
+        # El try/except NO es paranoia: las tres tablas llevan FK a `users`, así
+        # que contra una base VACÍA esto falla — y como el CLI de Flask importa
+        # la app antes de ejecutar nada, el fallo se llevaba por delante al
+        # propio `flask db upgrade`. Resultado: era imposible levantar un
+        # entorno desde cero (contenedor nuevo, máquina nueva, restauración).
+        # Dejándolo como aviso, `db upgrade` crea `users` y en el siguiente
+        # arranque estas tablas se crean sin problema.
         from sqlalchemy import inspect as _sqla_inspect
-        if not _sqla_inspect(db.engine).has_table('notificaciones'):
-            from app.models import Notificacion
-            Notificacion.__table__.create(db.engine)
-        if not _sqla_inspect(db.engine).has_table('totp_backup_codes'):
-            from app.models import TwoFactorBackupCode
-            TwoFactorBackupCode.__table__.create(db.engine)
-        if not _sqla_inspect(db.engine).has_table('trabajador_notas'):
-            from app.models import NotaTrabajador
-            NotaTrabajador.__table__.create(db.engine)
+        _auxiliares = (
+            ('notificaciones', 'Notificacion'),
+            ('totp_backup_codes', 'TwoFactorBackupCode'),
+            ('trabajador_notas', 'NotaTrabajador'),
+        )
+        for _tabla, _modelo_nombre in _auxiliares:
+            try:
+                if _sqla_inspect(db.engine).has_table(_tabla):
+                    continue
+                import app.models as _modelos
+                getattr(_modelos, _modelo_nombre).__table__.create(db.engine)
+                logging.info("Tabla auxiliar '%s' creada.", _tabla)
+            except Exception as _exc:
+                logging.warning(
+                    "No se pudo crear la tabla auxiliar '%s': %s. "
+                    "Normal si la base aún no está migrada — se reintenta en el "
+                    "próximo arranque, después de `flask db upgrade`.",
+                    _tabla, _exc,
+                )
 
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
