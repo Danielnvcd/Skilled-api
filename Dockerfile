@@ -109,17 +109,24 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 # Diferencias deliberadas con el unit:
 #   --bind 0.0.0.0    dentro del contenedor; quien publica el puerto solo en
 #                     127.0.0.1 es el compose, no la app.
-#   sin --worker-tmp-dir /dev/shm   el /dev/shm de Docker son 64 MB y el
-#                     tmpfs por defecto del contenedor ya vive en RAM.
 #   sin --forwarded-allow-ips   el unit confiaba en 127.0.0.1 porque nginx
 #                     corría en la misma máquina; dentro de Docker el proxy
 #                     llega desde otra IP de la red bridge, así que el valor
 #                     se define por entorno (env FORWARDED_ALLOW_IPS en los
 #                     compose, donde sí se sabe quién es el proxy).
+#
+# --worker-tmp-dir /dev/shm se CONSERVA, igual que en el unit. Los archivos
+# de heartbeat que el master vigila para decidir si un worker sigue vivo son
+# de 0 bytes (solo se les hace `touch`), así que los 64 MB del /dev/shm de
+# Docker sobran de largo. Sin el flag no acaban en RAM: acaban en el /tmp del
+# contenedor, que es overlayfs sobre el disco del VPS — justo lo contrario de
+# lo que el flag busca. Si el disco se bloquea, el master deja de ver los
+# heartbeats a tiempo y mata workers sanos por timeout falso.
 CMD ["gunicorn", \
      "--workers", "4", \
      "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", \
      "--worker-connections", "1000", \
+     "--worker-tmp-dir", "/dev/shm", \
      "--bind", "0.0.0.0:8000", \
      "--timeout", "120", \
      "--graceful-timeout", "60", \

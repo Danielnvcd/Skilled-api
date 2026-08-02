@@ -13,10 +13,43 @@ lo que bloquea y el porqué de cada cosa.
 
 ---
 
-## 0. Bloqueante: en qué hora están los datos de producción
+## 0. Antes de tocar el VPS
 
-**Hay que resolverlo antes de desplegar.** Es lo único que no se pudo verificar
-desde la máquina de desarrollo.
+Dos bloqueantes, en este orden.
+
+### 0.1 Apagar el despliegue automático
+
+**Primero de todo, antes que el respaldo.** El workflow
+`.github/workflows/ci-deploy.yml` sigue escrito para el montaje de systemd (ver
+§4), y si se dispara con el VPS ya en Docker no falla: **reporta éxito habiendo
+desplegado nada**. Los cuatro pasos, uno por uno:
+
+| Paso del job | Qué hace con el VPS ya dockerizado |
+|---|---|
+| Respaldar (`:96`) | `pg_dump "$DATABASE_URL"`, y el `.env` sigue apuntando al Postgres **del host** (así lo pide el paso 4 de DOCKER.md, para conservar el camino de vuelta). Respalda la base que ya nadie usa. |
+| Migraciones (`:121`) | `venv/bin/flask db upgrade` con ese mismo `.env` → **aplica la migración a la base equivocada**. No falla, así que el job continúa. |
+| Reiniciar (`:125`) | `systemctl restart nominas`. `disable` no impide un `restart` explícito: arranca Gunicorn del venv y pelea por el puerto 8000 con el contenedor. Con `Restart=always`, en bucle. |
+| Comprobar (`:127`) | `curl 127.0.0.1:8000/health` → contesta el contenedor, que sigue sano con la imagen **vieja**. Verde. |
+
+Es decir: build en verde, código sin desplegar, migración en otra base y un unit
+en crash-loop de fondo. Los tres primeros son silenciosos.
+
+```
+Variables del repositorio en GitHub → DESPLIEGUE_ACTIVO = false
+```
+
+Es el interruptor que el propio workflow ya trae (`:71`) y justo para esto se
+diseñó. Como segundo cinturón, después de parar el unit en el paso 6:
+
+```bash
+sudo systemctl mask nominas      # ni un restart manual lo levanta
+```
+
+Se vuelve a `true` cuando el job de despliegue esté reescrito (§4), no antes.
+
+### 0.2 En qué hora están los datos de producción
+
+Es lo único que no se pudo verificar desde la máquina de desarrollo.
 
 La aplicación guarda fechas con `datetime.now()` **sin zona** en 32 sitios, así
 que la hora del proceso acaba dentro de la base. Los compose fijan
@@ -62,7 +95,9 @@ orden, que importa:
 7. Verificar (4 comprobaciones, no solo `/health`)
 8. Limpieza, solo tras días estable
 
-El camino de vuelta es parar los contenedores y `systemctl enable --now nominas`.
+El camino de vuelta es parar los contenedores y `systemctl unmask nominas &&
+systemctl enable --now nominas` — el `unmask` hace falta por el cinturón del
+paso 0.1; sin él, `enable` falla con "Unit is masked".
 Por eso el paso 8 se deja para el final: mientras el Postgres del host conserve
 sus datos, hay red de seguridad.
 
@@ -148,7 +183,12 @@ comprobaciones están en [DOCKER.md → Verificar](DOCKER.md#7-verificar):
 
 `.github/workflows/ci-deploy.yml` **sigue sin tocar**, a propósito: cambiar el
 despliegue en caliente merece su propio momento, cuando el stack lleve días
-corriendo a mano.
+corriendo a mano. Hasta entonces `DESPLIEGUE_ACTIVO` se queda en `false` — por
+qué, con el detalle de lo que haría si se dispara, en el paso 0.1.
+
+Mientras tanto los despliegues son a mano: `git pull`, `docker compose -f
+docker-compose.prod.yml build`, migrar como paso aparte y `up -d`. Son los
+pasos 6 y 7 de DOCKER.md, los mismos del despliegue inicial.
 
 El job de despliegue ya reescrito está en
 [DOCKER.md → CI/CD](DOCKER.md#cicd). Los cambios son tres: el respaldo entra por
@@ -157,6 +197,14 @@ diagnóstico de fallo usa `docker compose logs` en vez de `journalctl`.
 
 El usuario del runner autoalojado tiene que estar en el grupo `docker`, y hace
 falta reiniciar el servicio del runner para que la pertenencia surta efecto.
+Conviene saber lo que eso implica: **estar en el grupo `docker` equivale a ser
+root en el host** (`docker run -v /:/host` monta el disco entero). Es inevitable
+para desplegar así, pero convierte al runner en una cuenta a tratar con el mismo
+cuidado que un sudo sin contraseña.
+
+El job reescrito añade un paso de **escaneo de la imagen** con Trivy entre
+construir y migrar, con `--exit-code 1` para que sea una puerta de verdad y no
+un informe decorativo. Está en el mismo bloque de DOCKER.md.
 
 ---
 

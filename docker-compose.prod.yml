@@ -125,6 +125,18 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # SIN `read_only` a propósito, al contrario que `db` y `redis`.
+    #
+    # La aplicación escribe temporales fuera de sus volúmenes en más de un
+    # sitio: xhtml2pdf y pandas/openpyxl al generar PDFs y exports de Excel, y
+    # el propio Python si algo cae a tempfile. Con el rootfs de solo lectura
+    # eso reventaría en caliente y solo en los endpoints de reportes — justo
+    # los que menos se prueban. Se puede intentar después con `tmpfs: /tmp`,
+    # pero exige ejercitar export por export antes de darlo por bueno, y eso
+    # es un cambio con su propio momento.
+    #
+    # Los heartbeats de Gunicorn no son el problema: van a /dev/shm por
+    # --worker-tmp-dir (ver Dockerfile), que es un montaje aparte.
     logging:
       # journald rotaba solo; los logs de Docker no. Sin esto, el
       # access-logfile termina llenando el disco del VPS.
@@ -172,6 +184,25 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    # Rootfs de solo lectura: el contenedor solo puede escribir en el volumen de
+    # datos y en los dos tmpfs de abajo. Es lo que en systemd daba
+    # ProtectSystem=strict, que al pasar a Docker se había perdido.
+    #
+    # Los dos tmpfs NO son opcionales — sin ellos Postgres no arranca:
+    #   /var/run/postgresql  el socket unix. Es por donde entra el healthcheck
+    #                        (`pg_isready`), así que sin esto el contenedor
+    #                        nunca llega a "healthy" y `depends_on` deja la API
+    #                        esperando para siempre.
+    #   /tmp                 archivos temporales de sorts y hashes que no caben
+    #                        en work_mem.
+    #
+    # Verificado contra postgres:18-alpine con este mismo `command`: initdb en
+    # volumen vacío, pg_isready, escrituras, CHECKPOINT, un sort de 200k filas
+    # a disco y el `pg_dump` del respaldo. Sin un solo error en el log.
+    read_only: true
+    tmpfs:
+      - /var/run/postgresql
+      - /tmp
     logging:
       driver: json-file
       options:
@@ -198,6 +229,30 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Rootfs de solo lectura. Redis escribe únicamente en /data, que es el
+    # volumen, así que aquí no hace falta ningún tmpfs. Verificado contra
+    # redis:7-alpine: PING, SET y un BGREWRITEAOF completo —el rewrite del AOF
+    # es lo que más escribe— sin errores.
+    read_only: true
+    # `user: redis` NO es cosmético, es lo que hace posible el `cap_drop` de
+    # abajo. El entrypoint de la imagen arranca como root y baja a `redis` con
+    # setpriv; sin CAP_SETUID/CAP_SETGID esa llamada falla y el contenedor se
+    # muere al instante:
+    #
+    #   setpriv: setresuid failed: Operation not permitted   (exit 127)
+    #
+    # Arrancando ya como `redis`, el entrypoint ve que no es root, se salta el
+    # cambio de usuario y no necesita ninguna capability.
+    #
+    # Ojo si algún día se recrea el volumen: `datos_redis` tiene que pertenecer
+    # a uid 999 (el `redis` de la imagen). Docker lo hace bien al crearlo vacío;
+    # un volumen que ya existiera de un contenedor corriendo como root habría
+    # que hacerle chown.
+    user: redis
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     logging:
       driver: json-file
       options:

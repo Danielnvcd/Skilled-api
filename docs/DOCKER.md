@@ -139,6 +139,11 @@ Windows y el cambio aplica solo. Solo hace falta reconstruir
 
 ### Antes de empezar
 
+- **Pon `DESPLIEGUE_ACTIVO` en `false`** (variables del repositorio en GitHub),
+  antes que nada. El job de despliegue del CI sigue escrito para systemd: si se
+  dispara con el VPS ya en Docker, migra la base equivocada y termina en verde
+  sin haber desplegado nada. El desglose está en
+  [PENDIENTE_PRODUCCION.md → 0.1](PENDIENTE_PRODUCCION.md#01-apagar-el-despliegue-automático).
 - Producción tiene datos, aunque todavía sean de demo. **Respalda primero.**
 - ClamAV pide ~1.5 GB de RAM para las firmas. Sumado a Postgres y a 4 workers
   de Gunicorn, revisa que el VPS aguante (`free -h`). Si va justo, arranca sin
@@ -165,7 +170,15 @@ free -h                 # memoria disponible para clamd
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER    # cerrar sesión y volver a entrar
 docker compose version
+
+# Que lo instalado no arrastre los escapes de contenedor conocidos
+# (ver «Mantenimiento de seguridad» más abajo).
+docker version --format '{{.Server.Version}}'    # ≥ 29.5.1
+runc --version                                   # ≥ 1.2.8 (o 1.3.3)
 ```
+
+Añadir a alguien al grupo `docker` **equivale a darle root en el host**. Es
+inevitable para el despliegue, pero conviene saberlo antes de teclearlo.
 
 ### 3. Permisos de los archivos subidos
 
@@ -246,6 +259,9 @@ docker compose -f docker-compose.prod.yml ps clamav    # debe decir "healthy"
 ```bash
 sudo systemctl stop nominas
 sudo systemctl disable nominas
+# `disable` solo quita el arranque automático: un `systemctl restart` explícito
+# —el que hace el CI viejo— seguiría levantándolo a pelear por el puerto 8000.
+sudo systemctl mask nominas
 
 cd /opt/nominas
 docker compose -f docker-compose.prod.yml build
@@ -316,6 +332,7 @@ seguridad si hay que volver atrás.
 ```bash
 cd /opt/nominas
 docker compose -f docker-compose.prod.yml down
+sudo systemctl unmask nominas          # por el `mask` del paso 6
 sudo systemctl enable --now postgresql redis-server nominas
 curl -fsS http://127.0.0.1:8000/health
 ```
@@ -367,6 +384,28 @@ migraciones» y «Reiniciar el servicio»:
           cd "$APP_DIR"
           docker compose -f docker-compose.prod.yml build
 
+      - name: Escanear la imagen
+        # Después de construir y ANTES de migrar o levantar: si la imagen trae
+        # un CVE crítico, el despliegue se detiene con el servicio viejo aún en
+        # pie. `--exit-code 1` es lo que convierte el informe en una puerta;
+        # sin esa opción el paso siempre pasa y el escaneo es decorativo.
+        #
+        # Solo CRITICAL a propósito: las imágenes base acumulan HIGH de
+        # paquetes del SO que no siempre tienen parche, y una puerta que salta
+        # cada semana se acaba ignorando o quitando. Si algún día se quiere
+        # subir a HIGH, hazlo junto con `--ignore-unfixed`.
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:latest image \
+              --severity CRITICAL \
+              --ignore-unfixed \
+              --exit-code 1 \
+              --scanners vuln \
+              nominas-api:latest
+
       - name: Aplicar migraciones
         # Paso propio, ANTES de tocar el servidor. Si falla, el contenedor que
         # está sirviendo sigue en pie y el despliegue se detiene aquí.
@@ -389,6 +428,14 @@ final por `docker compose -f docker-compose.prod.yml logs --tail=60 api`.
 
 **Este cambio no está aplicado al workflow todavía** — tocar el CI en caliente
 merece su propio momento, cuando el stack ya lleve días corriendo a mano.
+
+⚠ Por eso `DESPLIEGUE_ACTIVO` tiene que estar en `false` mientras tanto: el job
+tal como está hoy da un despliegue **en verde** contra el VPS dockerizado, con
+la migración aplicada al Postgres del host y el contenedor todavía sirviendo la
+imagen vieja. Se vuelve a `true` al aplicar el job de arriba, no antes.
+También hace falta que el usuario del runner autoalojado esté en el grupo
+`docker` y reiniciar el servicio del runner para que la pertenencia surta
+efecto.
 
 ---
 
@@ -437,6 +484,69 @@ importar la app, y para importar la app hacía falta estar migrado.
 
 Ahora el bloque avisa en vez de reventar. En los entornos existentes no cambia
 nada (las tablas ya están y ni se intenta crearlas).
+
+---
+
+## Mantenimiento de seguridad
+
+Lo que el stack ya trae bien resuelto, para no tocarlo por error:
+
+- **El puerto solo en `127.0.0.1`.** Docker escribe sus reglas en la cadena
+  `FORWARD` de iptables, mientras ufw gobierna `INPUT`: las dos nunca se
+  cruzan, así que un `-p 8000:8000` queda abierto a internet aunque ufw diga
+  lo contrario. Publicar en la loopback es la mitigación recomendada, y es lo
+  que hacen los dos compose. `db`, `redis` y `clamav` ni siquiera publican.
+- **Gunicorn 23.0.0** (`requirements.txt:35`) ya incluye el arreglo del
+  request smuggling TE.CL de CVE-2024-1135 y CVE-2024-6827.
+- **Sin `docker cp` en ningún procedimiento.** Los CVE-2026-41567 / -41568 /
+  -42306 (ejecución como root del host y redirección de bind mounts) van por
+  ahí. El respaldo y la restauración usan `exec -T` con redirección de shell,
+  que no toca ese camino.
+
+Lo que sí hay que vigilar en el tiempo:
+
+**Versión de Docker y de runc.** El instalador del paso 2
+(`get.docker.com`) trae la última estable, así que un despliegue nuevo sale
+parcheado. El hueco está en el después, porque nada actualiza esto solo. La
+familia de escapes de contenedor de runc de noviembre de 2025
+(CVE-2025-31133, CVE-2025-52565, CVE-2025-52881 — escrituras a procfs vía
+symlinks y carreras en `maskedPaths` y `/dev/console`) se corrigió en runc
+1.2.8 / 1.3.3 / 1.4.0-rc.3, y hay reportes de explotación activa. Docker
+Engine ≥ 29.5.1 cubre además el bypass de autorización CVE-2026-34040 y los
+fallos de `docker cp`.
+
+```bash
+docker version --format '{{.Server.Version}}'    # ≥ 29.5.1
+runc --version                                   # ≥ 1.2.8 (o 1.3.3)
+```
+
+Estos escapes exigen que el atacante ya ejecute código dentro de un
+contenedor, así que aquí son defensa en profundidad y no la primera línea —
+la superficie real sigue siendo la aplicación Flask detrás de nginx. Aun así,
+conviene revisarlo con las actualizaciones del sistema.
+
+**El runner del CI está en el grupo `docker`.** Es un requisito para que el
+despliegue funcione, pero conviene tenerlo consciente: pertenecer a ese grupo
+**equivale a ser root en el host** — con `docker run -v /:/host` se monta el
+sistema de archivos entero. No es un fallo de esta configuración (es cómo
+funciona el socket de Docker), pero significa que el runner autoalojado hay
+que tratarlo con el mismo cuidado que una cuenta con sudo sin contraseña.
+
+**Escaneo de imágenes.** El job de CI de arriba lo incluye. Para mirarlo a
+mano en cualquier momento:
+
+```bash
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:latest image --severity HIGH,CRITICAL --ignore-unfixed \
+  nominas-api:latest
+```
+
+**Las imágenes base usan tags móviles** (`postgres:18-alpine`,
+`python:3.12-slim`, `clamav/clamav:stable`) y no digests. Es deliberado: fijar
+el digest daría builds reproducibles pero dejaría de traer parches del sistema
+operativo, y para un proyecto de este tamaño recibir los parches pesa más. El
+`-c constraints.txt` ya cubre la reproducibilidad de la parte de Python, que es
+donde vive el código propio.
 
 ---
 
@@ -509,3 +619,17 @@ zona del proceso es parte de la configuración y hay que cuidarla.
 **El endurecimiento de systemd se reconstruyó parcialmente.** `cap_drop: ALL`
 y `no-new-privileges` cubren lo esencial; el `ProtectSystem=strict` del unit
 equivale a que el contenedor solo escriba en sus volúmenes.
+
+Ese equivalente de `ProtectSystem=strict` es `read_only: true`, y está puesto
+en `db` y en `redis` — los dos verificados a mano, con los tmpfs que Postgres
+necesita para el socket y los temporales. **`api` se queda fuera a propósito**:
+xhtml2pdf y pandas escriben temporales fuera de sus volúmenes al generar PDFs
+y exports de Excel, así que el rootfs de solo lectura fallaría en caliente y
+solo en los endpoints de reportes, que son los que menos se ejercitan. Se puede
+intentar más adelante con `tmpfs: /tmp`, probando export por export.
+
+En `redis`, el `cap_drop: ALL` **depende de `user: redis`**. El entrypoint de
+la imagen arranca como root y baja de usuario con setpriv; sin
+CAP_SETUID/CAP_SETGID muere en el arranque con `setpriv: setresuid failed`
+(exit 127). Arrancando ya como `redis` no hace falta ninguna capability. En
+`db` no se aplica `cap_drop` por el mismo motivo, y ahí no se ha tocado.
