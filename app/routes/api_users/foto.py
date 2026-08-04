@@ -6,7 +6,7 @@ from flask import current_app, jsonify, request
 
 from app.extensions import db, limiter
 from app.models import User
-from app.realtime import emit_to_role
+from app.realtime import emit_to_role, ROLES_TODOS
 from app.routes._api_helpers import require_gestion_usuarios
 from app.routes.api_auth import jwt_required
 from app.utils import allowed_image_file, archivos, image_to_webp, log_action
@@ -53,7 +53,7 @@ def subir_foto(user_id):
     try:
         db.session.commit()
         log_action(f"Actualizó la foto del usuario '{user.username}'")
-        emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
+        emit_to_role(ROLES_TODOS, 'usuario:changed', {
             'id': user.id, 'action': 'foto',
         })
         return jsonify(_user_to_dict(user))

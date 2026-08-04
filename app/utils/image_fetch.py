@@ -47,34 +47,80 @@ class ImagenDescargaError(Exception):
     """Falla controlada de descarga/validación de una imagen."""
 
 
-def _host_is_safe(host: str) -> bool:
-    """Resuelve `host` y devuelve False si CUALQUIER IP resuelta es no pública."""
+def _ip_es_publica(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
+def _resolver_host_publico(host: str) -> str:
+    """Resuelve `host` UNA vez; falla si cualquier IR resuelta no es pública.
+
+    Devuelve la IP a la que se conectará. Que devuelva la IP —en vez de un
+    booleano— es justo lo que cierra el agujero: ver `_destino_fijado`.
+    """
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        return False
+        raise ImagenDescargaError('no se pudo resolver el host')
     if not infos:
-        return False
-    for info in infos:
-        ip_str = info[4][0]
-        try:
-            ip = ipaddress.ip_address(ip_str)
-        except ValueError:
-            return False
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
-            return False
-    return True
+        raise ImagenDescargaError('el host no resolvió a ninguna dirección')
+
+    ips = [info[4][0] for info in infos]
+    # TODAS deben ser públicas: una respuesta DNS mixta (una pública y una
+    # interna) no debe colar por quedarnos con la primera que nos convenga.
+    for ip_str in ips:
+        if not _ip_es_publica(ip_str):
+            raise ImagenDescargaError('el host resuelve a una IP no permitida (posible SSRF)')
+    return ips[0]
 
 
-def _validar_url(url: str):
+def _destino_fijado(url: str):
+    """Valida la URL y devuelve a dónde conectarse con la IP ya fijada.
+
+    ── El agujero que cierra ───────────────────────────────────────────────
+    Antes se comprobaba el host con `getaddrinfo` y después se le pasaba la URL
+    a httpx, que resolvía el nombre POR SU CUENTA. Entre las dos resoluciones
+    hay una ventana, y el DNS del atacante la controla: basta con servir un
+    registro con TTL 0 que responda una IP pública en la comprobación y
+    127.0.0.1 (o 169.254.169.254, o `redis`) en la conexión. Es el rebinding de
+    DNS de manual, y anula la defensa entera por muy correcta que sea la lista
+    de rangos.
+
+    El arreglo es conectarse a la IP que YA se validó, en lugar del nombre:
+      · la petición va a `https://<ip>:<puerto><ruta>`,
+      · `Host:` conserva el nombre para que el servidor sirva el vhost correcto,
+      · `sni_hostname` conserva el nombre para el handshake TLS, así que el
+        certificado se sigue validando contra el dominio y no contra la IP
+        (verificado: sin esa extensión, la conexión falla por certificado).
+
+    Devuelve (url_a_la_ip, cabecera_host, hostname_para_sni).
+    """
     parsed = urlparse(url)
     if parsed.scheme != 'https':
         raise ImagenDescargaError('solo se permiten URLs HTTPS')
-    if not parsed.hostname:
+    host = parsed.hostname
+    if not host:
         raise ImagenDescargaError('URL sin host')
-    if not _host_is_safe(parsed.hostname):
-        raise ImagenDescargaError('el host resuelve a una IP no permitida (posible SSRF)')
+
+    try:
+        puerto = parsed.port or 443
+    except ValueError:
+        raise ImagenDescargaError('puerto inválido en la URL')
+
+    ip = _resolver_host_publico(host)
+    literal = f'[{ip}]' if ':' in ip else ip  # IPv6 va entre corchetes
+
+    ruta = parsed.path or '/'
+    if parsed.query:
+        ruta = f'{ruta}?{parsed.query}'
+    destino = f'https://{literal}:{puerto}{ruta}'
+    # El puerto solo va en `Host:` cuando no es el estándar, como haría el browser.
+    cabecera_host = host if puerto == 443 else f'{host}:{puerto}'
+    return destino, cabecera_host, host
 
 
 def _validar_dimensiones(data: bytes, max_pixels: int):
@@ -109,9 +155,17 @@ def descargar_imagen_segura(url: str, max_bytes: int = None, timeout: int = None
     data = None
     # +1 porque el primer intento no es un redirect.
     for _ in range(MAX_REDIRECTS + 1):
-        _validar_url(current)
+        # `current` se mantiene siempre como la URL LÓGICA (con el nombre de
+        # dominio), no la fijada a IP: es contra ella que hay que resolver un
+        # redirect relativo. Cada vuelta del bucle re-resuelve y re-valida, así
+        # que un redirect a IP interna se corta igual que la URL inicial.
+        destino, cabecera_host, sni = _destino_fijado(current)
         with httpx.Client(follow_redirects=False, timeout=timeout) as client:
-            with client.stream('GET', current, headers={'User-Agent': 'SkilledBot/1.0'}) as resp:
+            with client.stream(
+                'GET', destino,
+                headers={'User-Agent': 'SkilledBot/1.0', 'Host': cabecera_host},
+                extensions={'sni_hostname': sni},
+            ) as resp:
                 if resp.is_redirect:
                     loc = resp.headers.get('location')
                     if not loc:

@@ -275,6 +275,7 @@ def _register_audit_emit_hook() -> None:
     from sqlalchemy import event
     from app.extensions import db
     from app.models import AuditLog
+    from app.audit_seguridad import es_evento_de_seguridad
 
     @event.listens_for(AuditLog, 'after_insert')
     def _stash_audit(mapper, connection, target):  # noqa: ARG001
@@ -307,6 +308,27 @@ def _register_audit_emit_hook() -> None:
                 })
             except Exception as e:  # pragma: no cover
                 _logger.warning('emit bitacora:new post-commit falló id=%s err=%s', snap.get('id'), e)
+
+            # Aviso paralelo para el rol `sistemas`, que NO recibe `bitacora:new`.
+            #
+            # Su pantalla (/sistemas/seguridad) escuchaba `bitacora:new`, pero ese
+            # evento solo se emite a admin/super_admin: el panel de seguridad nunca
+            # se refrescaba en vivo justo para el rol que existe para vigilarlo.
+            #
+            # No se reenvía `bitacora:new` tal cual a propósito. Su payload lleva
+            # `action`, y la bitácora completa registra la operación de RRHH
+            # (quién editó a qué empleado, quién cerró una nómina) — precisamente
+            # lo que este rol no debe ver. Aquí solo va el id, y solo cuando la
+            # entrada es de seguridad: el SPA lo usa para invalidar su caché y
+            # volver a pedir la lista por REST, que ya filtra en el servidor con
+            # los mismos patrones.
+            try:
+                if es_evento_de_seguridad(snap.get('action')):
+                    emit_to_role(['sistemas', 'super_admin'], 'seguridad:new', {
+                        'id': snap['id'],
+                    })
+            except Exception as e:  # pragma: no cover
+                _logger.warning('emit seguridad:new post-commit falló id=%s err=%s', snap.get('id'), e)
 
     @event.listens_for(db.session, 'after_rollback')
     def _clear_audit_emits(session):
@@ -556,6 +578,20 @@ def _register_handlers() -> None:
 
 
 # ── API de emisión usada desde los blueprints ──────────────────────────────
+
+# Todos los roles que existen. Para eventos cuya pantalla está abierta a
+# cualquier sesión iniciada (el Directorio y Mi perfil lo están), dirigir el
+# push a un subconjunto deja al resto con datos viejos hasta que la caché
+# vence y el usuario recupera el foco.
+#
+# Es una lista de destinatarios, NO un permiso: lo que viaja en estos eventos
+# es `{id, action}`, y los datos de verdad se vuelven a pedir por REST, donde
+# cada endpoint revalida quién pregunta.
+ROLES_TODOS = [
+    'admin', 'super_admin', 'sistemas', 'coordinador',
+    'inventario', 'finanzas', 'solicitante_material',
+]
+
 
 def emit_to_user(user_id: int, event: str, payload: dict) -> None:
     """Emite `event` con `payload` solo a las conexiones del usuario `user_id`.

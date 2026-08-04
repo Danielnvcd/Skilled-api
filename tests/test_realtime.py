@@ -173,7 +173,11 @@ EVENTOS_ESPERADOS = {
     'notif:read_all', 'prenomina:changed', 'prestamo:changed',
     'producto:changed', 'producto:imagen_progreso', 'proyecto:changed',
     'proyecto_material:changed', 'reporte:estado_cambio',
-    'reporte:lista_changed', 'reporte:registros_cambio', 'solicitud:changed',
+    'reporte:lista_changed', 'reporte:registros_cambio',
+    # Gemelo de `bitacora:new` para el rol `sistemas`, que no recibe aquél.
+    # Solo lleva el id; la pantalla recarga por REST (ver realtime.py).
+    'seguridad:new',
+    'solicitud:changed',
     'toma:changed', 'usuario:changed',
 }
 
