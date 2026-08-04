@@ -87,6 +87,19 @@ def _ajustar_timeouts(connection):
         'sin límite' if efectivo in ('0', None) else efectivo, bloqueo,
     )
 
+    # OBLIGATORIO, no es cosmético. Los `execute` de arriba hacen «autobegin»:
+    # SQLAlchemy 2.0 abre una transacción sola en cuanto se ejecuta algo. Si la
+    # conexión llega en transacción a `context.configure()`, Alembic la marca
+    # como externa (`_in_external_transaction`) y NO comitea nunca: da por hecho
+    # que el dueño de la transacción es este env.py. Como aquí no se comitea, al
+    # salir del `with connectable.connect()` se hace ROLLBACK y la migración se
+    # deshace entera — en silencio, con los logs diciendo que fue bien.
+    #
+    # El commit cierra esa transacción vacía y devuelve la conexión limpia, así
+    # Alembic abre y comitea la suya. Los SET son de sesión (no `SET LOCAL`), de
+    # modo que sobreviven al commit y siguen aplicando a la migración.
+    connection.commit()
+
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
