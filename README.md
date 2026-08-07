@@ -15,7 +15,7 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 
 ---
 
-## Características Principales
+## Características Principales.
 
 - **Empleados**: alta, baja, edición; campos laborales, personales, médicos y financieros con whitelist por rol. Notas internas tipo "chatter" en la ficha (ver `docs/NOTAS_TRABAJADOR.md`).
 - **Listados ordenables**: trabajadores, préstamos y proyectos aceptan `?sort=<campo>&dir=asc|desc` con whitelist de columnas (ver `docs/ORDENAMIENTO_LISTADOS.md`).
