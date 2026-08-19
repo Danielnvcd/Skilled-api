@@ -392,4 +392,10 @@ Documentación en [`docs/`](./docs/):
 
 ---
 
+## Licencia
+
+MIT. Puedes usar, copiar, modificar y distribuir este código, incluso comercialmente, conservando el aviso de copyright. El texto completo está en [`LICENSE`](./LICENSE).
+
+---
+
 > _Desarrollado para mantener la contabilidad organizada, veloz e inquebrantable._
