@@ -285,22 +285,11 @@ def revocar_sesion(session_id: int):
     return jsonify({'ok': True})
 
 
-# Fragmentos que marcan una entrada del AuditLog como evento de seguridad.
-# Se filtra en SQL (ILIKE/LIKE) para no traer la tabla entera a memoria: crece
-# sin límite y ya tiene índice por created_at.
-_PATRONES_SEGURIDAD = (
-    'login fallido',
-    'login rechazado',
-    '2fa',
-    'backup code',
-    'refresh token',
-    'revocó',
-    'contraseña',
-    'desactivó',
-    'reactivó',
-    'creó usuario',
-    'antivirus',
-)
+# La lista vive en `app/audit_seguridad.py`: la comparte con `realtime.py`, que
+# la necesita para decidir si un AuditLog recién insertado debe empujar
+# `seguridad:new` al rol `sistemas`. Se reexporta con el nombre de siempre para
+# no tocar a quien ya lo importa desde aquí.
+from app.audit_seguridad import PATRONES_SEGURIDAD as _PATRONES_SEGURIDAD  # noqa: E402
 
 
 @bp.route('/eventos-seguridad', methods=['GET'])

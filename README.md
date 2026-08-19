@@ -15,7 +15,7 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 
 ---
 
-## Características Principales
+## Características Principales.
 
 - **Empleados**: alta, baja, edición; campos laborales, personales, médicos y financieros con whitelist por rol. Notas internas tipo "chatter" en la ficha (ver `docs/NOTAS_TRABAJADOR.md`).
 - **Listados ordenables**: trabajadores, préstamos y proyectos aceptan `?sort=<campo>&dir=asc|desc` con whitelist de columnas (ver `docs/ORDENAMIENTO_LISTADOS.md`).
@@ -39,6 +39,15 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 ---
 
 ## Instalación Local (Dev)
+
+> **Alternativa con Docker (la recomendada):** `docker compose up -d` levanta la
+> API con su propio PostgreSQL, Redis y ClamAV, usando el mismo `.env` de siempre
+> y una copia de la base `MASTER`. Es la única forma de probar en Windows el
+> camino de WebSockets con gevent y el antivirus, que en el venv nativo no
+> arrancan. Guía del día a día: [docs/DIA_A_DIA.md](docs/DIA_A_DIA.md).
+> Montaje y despliegue: [docs/DOCKER.md](docs/DOCKER.md).
+> El VPS **todavía no está en Docker** — lo pendiente y qué lo bloquea:
+> [docs/PENDIENTE_PRODUCCION.md](docs/PENDIENTE_PRODUCCION.md).
 
 ```bash
 git clone <repo-url>

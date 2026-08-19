@@ -375,10 +375,23 @@ def test_el_candado_se_libera_aunque_la_tanda_reviente(app, db, sistemas, trabaj
 
 # ── Consistencia con el script de línea de comandos ───────────────────────────
 
+_RUTA_SCRIPT_BACKFILL = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'scripts', 'migrar_archivos_a_r2.py',
+)
+
+
+@pytest.mark.skipif(
+    not os.path.exists(_RUTA_SCRIPT_BACKFILL),
+    reason=(
+        'scripts/ está en .gitignore, así que el backfill no viaja con el repo. '
+        'Sin el skip este test falla siempre en cualquier checkout limpio, en '
+        'Docker y en CI — y un rojo permanente entrena a ignorar la suite. '
+        'Cuando el script se versione, el test vuelve a correr solo.'
+    ),
+)
 def test_el_script_usa_la_misma_fuente_de_verdad():
     """El backfill CLI importa `keys_referenciadas` del panel: una sola verdad."""
-    ruta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        'scripts', 'migrar_archivos_a_r2.py')
-    with open(ruta, encoding='utf-8') as f:
+    with open(_RUTA_SCRIPT_BACKFILL, encoding='utf-8') as f:
         fuente = f.read()
     assert 'from app.routes.api_sistemas.archivos import keys_referenciadas' in fuente

@@ -1,0 +1,6 @@
+# Los scripts que corren DENTRO del contenedor deben quedar con saltos de
+# línea LF aunque se editen desde Windows. Con CRLF, Linux lee el `\r` como
+# parte del intérprete y falla con "bad interpreter: /bin/sh^M: no such file
+# or directory" — un error críptico que cuesta media hora encontrar.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf

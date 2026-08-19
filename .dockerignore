@@ -1,0 +1,52 @@
+# Lo que NO debe entrar a la imagen.
+#
+# Regla mental: si el archivo es estado local, secreto o se regenera solo, va
+# aquí. Cada cosa que sobra en el contexto de build alarga el `docker build` y
+# encima invalida la caché de capas cuando cambia.
+
+# ── Secretos ────────────────────────────────────────────────────────────────
+# CRÍTICO: el .env local corre con FLASK_ENV=production y llaves R2 REALES.
+# Si entrara a la imagen, cualquier contenedor construido de este repo
+# escribiría en el bucket de producción. Las variables se pasan por env_file
+# en tiempo de ejecución, nunca horneadas en la imagen.
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# ── Entornos y caché de Python ──────────────────────────────────────────────
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Estado en disco (van como volúmenes, no dentro de la imagen) ────────────
+uploads/
+test_uploads/
+data/
+instance/
+backups/
+*.db
+*.sqlite3
+
+# ── Git y herramientas de escritorio ────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.github/
+.idea/
+.vscode/
+.claude/
+
+# ── Cosas que solo sirven fuera del contenedor ──────────────────────────────
+# El unit de systemd y el nginx del host quedan fuera: dentro del contenedor
+# el proceso lo supervisa Docker y el TLS lo termina Cloudflare.
+gunicorn.serviceee
+nginx.config
+run_venv.py
+docs/
+README.md
+LICENSE.md

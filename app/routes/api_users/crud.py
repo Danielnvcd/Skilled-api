@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash
 
 from app.extensions import db, limiter
 from app.models import RefreshToken, Trabajador, User
-from app.realtime import emit_to_role
+from app.realtime import emit_to_role, ROLES_TODOS
 from app.routes._api_helpers import (
     api_transactional, current_user, is_super_admin, require_gestion_usuarios,
 )
@@ -68,7 +68,7 @@ def crear():
     db.session.add(new_user)
     db.session.commit()
     log_action(f"Creó usuario '{username}' con rol '{role}'")
-    emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
+    emit_to_role(ROLES_TODOS, 'usuario:changed', {
         'id': new_user.id, 'action': 'created',
     })
     return jsonify(_user_to_dict(new_user)), 201
@@ -141,7 +141,7 @@ def actualizar(user_id):
 
     db.session.commit()
     log_action(f"Actualizó perfil del usuario '{user.username}'")
-    emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
+    emit_to_role(ROLES_TODOS, 'usuario:changed', {
         'id': user.id, 'action': 'updated',
     })
     return jsonify(_user_to_dict(user))
@@ -195,7 +195,7 @@ def eliminar(user_id):
             force_logout_user(user.id)
         except Exception as e:
             current_app.logger.warning('force_logout_user falló al desactivar usuario: %s', e)
-        emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
+        emit_to_role(ROLES_TODOS, 'usuario:changed', {
             'id': user.id, 'action': 'deactivated',
         })
         return jsonify({'ok': True})
@@ -230,7 +230,7 @@ def reactivar(user_id):
         user.activo = True
         db.session.commit()
         log_action(f"Reactivó usuario '{user.username}'")
-        emit_to_role(['sistemas', 'super_admin'], 'usuario:changed', {
+        emit_to_role(ROLES_TODOS, 'usuario:changed', {
             'id': user.id, 'action': 'reactivated',
         })
         return jsonify(_user_to_dict(user))

@@ -16,6 +16,18 @@ from app.routes._api_helpers import api_transactional, require_admin
 from app.routes.api_auth import jwt_required
 from app.utils import log_action
 
+# Destinatarios de `proyecto:changed`.
+#
+# Antes iba solo a admin/super_admin/coordinador, pero seis pantallas del módulo
+# de inventario lo escuchan (material por proyecto, plan de materiales, mis
+# pedidos…) y las abren los roles `inventario` y `solicitante_material`. Para
+# ellos el push nunca llegaba: la lista de proyectos se quedaba vieja hasta que
+# expiraba la caché. Coincide con `_INV_ROLES` del blueprint de inventario, pero
+# se declara aquí para no acoplar este módulo a aquél.
+_ROLES_PROYECTO_CHANGED = [
+    'admin', 'super_admin', 'coordinador', 'inventario', 'solicitante_material',
+]
+
 from ._core import (
     _parse_bool,
     _proyecto_detail,
@@ -112,7 +124,7 @@ def crear():
 
     db.session.commit()
     log_action(f"Creó el proyecto {nuevo.numero_proyecto} - {nuevo.nombre}")
-    emit_to_role(['admin', 'super_admin', 'coordinador'], 'proyecto:changed', {
+    emit_to_role(_ROLES_PROYECTO_CHANGED, 'proyecto:changed', {
         'id': nuevo.id, 'action': 'created',
     })
     # Los participantes cambian sus campos derivados (no_proyecto, ubicación,
@@ -183,7 +195,7 @@ def actualizar(id):
 
     db.session.commit()
     log_action(f"Actualizó el proyecto {p.numero_proyecto} - {p.nombre}")
-    emit_to_role(['admin', 'super_admin', 'coordinador'], 'proyecto:changed', {
+    emit_to_role(_ROLES_PROYECTO_CHANGED, 'proyecto:changed', {
         'id': p.id, 'action': 'updated',
     })
     # Todos los afectados (los que entran y los que salen) recalcularon sus

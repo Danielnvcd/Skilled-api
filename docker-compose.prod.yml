@@ -1,0 +1,289 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Stack de PRODUCCIÓN (VPS).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Qué NO cambia respecto al montaje actual, y es a propósito:
+#   · nginx y cloudflared siguen en el host. La API se publica solo en
+#     127.0.0.1:8000 — exactamente donde nginx ya la busca hoy. Cero cambios
+#     en nginx.config ni en la configuración del túnel.
+#   · El `.env` de /opt/nominas sigue siendo la única fuente de secretos.
+#
+# Qué reemplaza:
+#   · `nominas.service` (systemd) → el contenedor `api`. Antes de levantar
+#     esto hay que parar y deshabilitar el unit, o pelearán por el puerto 8000.
+#   · postgresql.service y redis.service del host → contenedores `db` y
+#     `redis`. La migración de los datos está en docs/DOCKER.md; NO levantes
+#     esto sin haberla hecho o arrancarás con una base vacía.
+#
+# El endurecimiento que daba systemd (ProtectSystem, capabilities vacías,
+# NoNewPrivileges) se reconstruye aquí con `security_opt`, `cap_drop` y
+# `read_only` donde se puede.
+# ═══════════════════════════════════════════════════════════════════════════
+
+name: nominas
+
+services:
+  api:
+    build:
+      context: .
+    image: nominas-api:latest
+    restart: unless-stopped
+    # El .env real del servidor, el mismo que leía EnvironmentFile= en systemd.
+    env_file: .env
+    environment:
+      # nginx vive en el host, así que llega por la IP del gateway de la red
+      # bridge, no por 127.0.0.1. Fijar esa IP sería frágil (cambia si se
+      # recrea la red), y `*` es seguro AQUÍ porque el puerto está publicado
+      # solo en la loopback del host: nadie más puede tocar este Gunicorn.
+      FORWARDED_ALLOW_IPS: "*"
+      # Hostnames de la red de Docker. Van aquí y no en el .env para que el
+      # .env siga sirviendo si algún día hay que arrancar sin contenedores.
+      # CRÍTICO. Esta variable NO estaba en el .env del servidor: vivía en el
+      # unit de systemd (`Environment="SOCKETIO_ASYNC_MODE=gevent"`), así que
+      # al jubilar el unit se perdería.
+      #
+      # Sin ella, Flask-SocketIO cae a `async_mode='threading'` y usa
+      # simple-websocket para escribir los frames, mientras el worker
+      # `geventwebsocket` de Gunicorn maneja el socket por su cuenta. Los dos
+      # escriben sobre la misma conexión y el resultado es tráfico WebSocket
+      # MALFORMADO. Comprobado el 2026-08-02:
+      #
+      #   con la variable:  0{"sid":"…"}                       ← correcto
+      #   sin la variable:  1002 Invalid attempt to fragment control frame
+      #
+      # No es un fallo limpio que caiga a polling: el cliente conecta y luego
+      # recibe basura. Y nada de esto se ve desde fuera — la aplicación
+      # arranca sin quejarse y /health responde en verde.
+      #
+      # Ojo: esto es independiente del problema de QUIC en el túnel de
+      # Cloudflare (arreglado con `protocol: http2` en cloudflared). Aquel
+      # estaba en el transporte; este está en la aplicación.
+      SOCKETIO_ASYNC_MODE: gevent
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nominas}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:-nominas}
+      REDIS_URL: redis://redis:6379/0
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+      # El socket unix era para el clamd del host; ahora es por TCP y esta
+      # variable tiene prioridad en app/utils/antivirus.py, así que se vacía.
+      CLAMAV_SOCKET: ""
+      # Las migraciones NO corren al arrancar: son un paso explícito del
+      # despliegue (ver docs/DOCKER.md). Si corrieran aquí, una migración
+      # fallida dejaría el contenedor en bucle de reinicio con el servicio
+      # caído; como paso aparte, el contenedor viejo sigue sirviendo mientras
+      # se decide qué hacer.
+      APLICAR_MIGRACIONES: "false"
+      # Hora de México. Las rutas usan `datetime.now()` sin zona en 32 sitios,
+      # así que la hora local del proceso acaba dentro de la base.
+      #
+      # ⚠ ANTES DE DESPLEGAR: comprueba en qué hora están las fechas que ya
+      #   tiene producción. Si el VPS venía corriendo en UTC, poner esto haría
+      #   que las filas nuevas queden 6 horas por detrás de las viejas — el
+      #   mismo lío al revés. Para verlo:
+      #     date                                   # hora del VPS
+      #     sudo -u postgres psql -d <base> -c \
+      #       "SELECT max(created_at) FROM audit_log"
+      #   Si esa fecha coincide con la hora de México, deja esta línea. Si
+      #   coincide con UTC, quítala (o convierte los datos antes).
+      TZ: America/Mexico_City
+    ports:
+      # Solo loopback. Publicar "8000:8000" a secas abriría el puerto a
+      # internet saltándose el firewall (Docker escribe sus propias reglas de
+      # iptables por encima de ufw): el error clásico al dockerizar un VPS.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Montajes al DIRECTORIO REAL del servidor, no a volúmenes nombrados.
+      #
+      # Los archivos ya viven todos en R2 (verificado 2026-08-02: las 18 claves
+      # de la base están en el bucket), así que las LECTURAS no dependen de
+      # esto — `leer()` va solo a R2.
+      #
+      # El disco sigue siendo la red de seguridad de ESCRITURA: `guardar()` en
+      # app/utils/archivos.py intenta R2 y, si falla, escribe aquí a propósito
+      # para que un incidente de red no le cueste el documento al usuario. Se
+      # monta al directorio real —y no a un volumen— para que lo que caiga ahí
+      # siga estando a la vista del backfill y de los respaldos del servidor.
+      #
+      # nginx además tiene un `location /uploads/` que sirve de este mismo
+      # directorio (ver nginx.config); con todo en R2 es prácticamente código
+      # muerto, pero mientras exista, apuntar a otro sitio lo rompería.
+      #
+      # OJO CON EL PROPIETARIO: el contenedor corre como uid 1000. Si esos
+      # directorios pertenecen a otro usuario, la aplicación no podrá escribir.
+      # Comprobar con `stat -c '%u %U' /opt/nominas/uploads` y ajustar (ver
+      # docs/DOCKER.md).
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_started
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # SIN `read_only` a propósito, al contrario que `db` y `redis`.
+    #
+    # La aplicación escribe temporales fuera de sus volúmenes en más de un
+    # sitio: xhtml2pdf y pandas/openpyxl al generar PDFs y exports de Excel, y
+    # el propio Python si algo cae a tempfile. Con el rootfs de solo lectura
+    # eso reventaría en caliente y solo en los endpoints de reportes — justo
+    # los que menos se prueban. Se puede intentar después con `tmpfs: /tmp`,
+    # pero exige ejercitar export por export antes de darlo por bueno, y eso
+    # es un cambio con su propio momento.
+    #
+    # Los heartbeats de Gunicorn no son el problema: van a /dev/shm por
+    # --worker-tmp-dir (ver Dockerfile), que es un montaje aparte.
+    logging:
+      # journald rotaba solo; los logs de Docker no. Sin esto, el
+      # access-logfile termina llenando el disco del VPS.
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  db:
+    # 18 para igualar al PostgreSQL que ya corre en el VPS. Esto NO es un
+    # detalle menor: un dump hecho con 18 no se restaura en un 16, así que
+    # bajar esta versión rompería la migración de los datos.
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nominas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-nominas}
+      TZ: America/Mexico_City
+    # Sin `ports`: la base solo es alcanzable desde la red interna de Docker.
+    # Para respaldos y psql se entra por `docker compose exec db ...`.
+    volumes:
+      # En la imagen 18 el punto de montaje es /var/lib/postgresql (en 16 y
+      # anteriores era /var/lib/postgresql/data). Con la ruta vieja el
+      # contenedor se apaga al arrancar.
+      - datos_postgres:/var/lib/postgresql
+    # El pool de la app permite hasta workers × (pool + overflow) = 4 × 20 = 80
+    # conexiones. El default de Postgres son 100; se sube el margen porque los
+    # respaldos y el psql manual también consumen.
+    command:
+      - postgres
+      - -c
+      - max_connections=150
+      - -c
+      - shared_buffers=256MB
+      # El `timezone` del servidor lo fija initdb al crear el clúster y queda
+      # en postgresql.conf; la variable TZ por sí sola no lo mueve después.
+      # Afecta al default `now()` de 3 columnas. Misma advertencia que arriba:
+      # tiene que coincidir con la hora en la que están los datos existentes.
+      - -c
+      - timezone=America/Mexico_City
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nominas} -d ${POSTGRES_DB:-nominas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Rootfs de solo lectura: el contenedor solo puede escribir en el volumen de
+    # datos y en los dos tmpfs de abajo. Es lo que en systemd daba
+    # ProtectSystem=strict, que al pasar a Docker se había perdido.
+    #
+    # Los dos tmpfs NO son opcionales — sin ellos Postgres no arranca:
+    #   /var/run/postgresql  el socket unix. Es por donde entra el healthcheck
+    #                        (`pg_isready`), así que sin esto el contenedor
+    #                        nunca llega a "healthy" y `depends_on` deja la API
+    #                        esperando para siempre.
+    #   /tmp                 archivos temporales de sorts y hashes que no caben
+    #                        en work_mem.
+    #
+    # Verificado contra postgres:18-alpine con este mismo `command`: initdb en
+    # volumen vacío, pg_isready, escrituras, CHECKPOINT, un sort de 200k filas
+    # a disco y el `pg_dump` del respaldo. Sin un solo error en el log.
+    read_only: true
+    tmpfs:
+      - /var/run/postgresql
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      # Redis aquí solo guarda rate limits: si se llena, tirar lo más viejo es
+      # preferible a empezar a rechazar escrituras.
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - datos_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Rootfs de solo lectura. Redis escribe únicamente en /data, que es el
+    # volumen, así que aquí no hace falta ningún tmpfs. Verificado contra
+    # redis:7-alpine: PING, SET y un BGREWRITEAOF completo —el rewrite del AOF
+    # es lo que más escribe— sin errores.
+    read_only: true
+    # `user: redis` NO es cosmético, es lo que hace posible el `cap_drop` de
+    # abajo. El entrypoint de la imagen arranca como root y baja a `redis` con
+    # setpriv; sin CAP_SETUID/CAP_SETGID esa llamada falla y el contenedor se
+    # muere al instante:
+    #
+    #   setpriv: setresuid failed: Operation not permitted   (exit 127)
+    #
+    # Arrancando ya como `redis`, el entrypoint ve que no es root, se salta el
+    # cambio de usuario y no necesita ninguna capability.
+    #
+    # Ojo si algún día se recrea el volumen: `datos_redis` tiene que pertenecer
+    # a uid 999 (el `redis` de la imagen). Docker lo hace bien al crearlo vacío;
+    # un volumen que ya existiera de un contenedor corriendo como root habría
+    # que hacerle chown.
+    user: redis
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes:
+      - firmas_clamav:/var/lib/clamav
+    # clamd carga las firmas en RAM (~1.5 GB). Si el VPS va justo de memoria,
+    # esto es lo primero que hay que revisar: el límite evita que el OOM killer
+    # se lleve por delante a Postgres o a la API en su lugar.
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      # La primera descarga de firmas tarda varios minutos.
+      start_period: 10m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  datos_postgres:
+  datos_redis:
+  firmas_clamav:
+  # uploads/ y data/ NO están aquí a propósito: van como montajes al
+  # directorio real del servidor (ver el servicio `api`).
