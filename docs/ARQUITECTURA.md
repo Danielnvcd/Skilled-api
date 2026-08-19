@@ -20,7 +20,7 @@ app/
 ├── realtime.py        # Socket.IO: init, handlers, hooks ORM, emit_to_*
 ├── constants.py       # constantes compartidas
 ├── models/            # SQLAlchemy, particionado por dominio (12 módulos)
-├── routes/            # 17 blueprints api_*, cada uno como sub-paquete
+├── routes/            # 18 blueprints, cada uno como sub-paquete
 │   └── _api_helpers.py  # current_user, is_admin, api_transactional, Excel común
 └── utils/             # helpers por dominio (seguridad, archivos, imágenes…)
 
@@ -59,7 +59,7 @@ exclusivamente `/api/*` + Socket.IO.
    explícitos, preflight cacheado 10 min.
 7. **Talisman**: CSP completa (ver comentarios en el archivo), `frame_options
    DENY`, HSTS solo en producción, `force_https=False` (Cloudflare termina TLS).
-8. **Registro de blueprints**: los 17 módulos `api_*` se registran en bucle y
+8. **Registro de blueprints**: los 18 módulos de rutas se registran en bucle y
    **se eximen de CSRF** (la protección la da el JWT en header + SameSite de
    la cookie `rt`).
 9. **Error handlers globales**: CSRF→419 JSON, 429 JSON, y un handler de
@@ -104,7 +104,7 @@ api_x/
 └── <tema>.py     # endpoints agrupados por tema
 ```
 
-Los 17 blueprints y sus prefijos:
+Los 18 blueprints y sus prefijos:
 
 | Paquete | Prefijo | Dominio |
 |---|---|---|
@@ -123,6 +123,7 @@ Los 17 blueprints y sus prefijos:
 | `api_metricas` | `/api/metricas` | Métricas generales |
 | `api_notificaciones` | `/api/notificaciones` | Notificaciones in-app |
 | `api_search` | `/api/v1/buscar` | Búsqueda global |
+| `api_sistemas` | `/api/sistemas` | Panel de TI: infraestructura, sesiones, bloqueos, eventos de seguridad, archivos |
 | `inventario_api` | `/api/v1` | Materiales: productos, almacenes, movimientos, solicitudes, tomas, reportes |
 | `herramientas_api` | `/api/v1` | Herramientas: catálogo, unidades, asignaciones, mantenimientos, bajas |
 

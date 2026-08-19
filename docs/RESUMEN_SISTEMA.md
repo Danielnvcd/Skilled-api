@@ -27,13 +27,13 @@ app/
 ├── extensions.py   # db, limiter, csrf, migrate, mail + IP real tras Cloudflare
 ├── realtime.py     # Socket.IO: auth del handshake, salas, hooks ORM, emit_to_*
 ├── models/         # SQLAlchemy, 12 módulos por dominio
-├── routes/         # 17 blueprints api_* (cada uno: _core.py + módulos por tema)
+├── routes/         # 18 blueprints (cada uno: _core.py + módulos por tema)
 └── utils/          # seguridad, archivos, imágenes, horas, nómina, R2, antivirus
 ```
 
 - **Sin `static_folder`**: no hay UI server-side; solo `/api/*` + Socket.IO.
 - **`create_app()`** arranca en orden fijo: config → espera Redis → extensiones
-  → CORS (solo `/api/*`) → Talisman/CSP → registra los 17 blueprints (exentos
+  → CORS (solo `/api/*`) → Talisman/CSP → registra los 18 blueprints (exentos
   de CSRF, protegidos por JWT) → error handlers globales → headers de
   seguridad + `Cache-Control: no-store` → tablas auxiliares autocreadas →
   `ProxyFix` → Socket.IO (al final, para ver los headers ya corregidos).
@@ -112,7 +112,7 @@ Detalle de hallazgos, fixes y pendientes operativos:
 
 ## 5. Código y funciones — organización
 
-- **`routes/`**: 17 blueprints, uno por dominio (`api_auth`, `api_trabajadores`,
+- **`routes/`**: 18 blueprints, uno por dominio (`api_auth`, `api_trabajadores`,
   `api_proyectos`, `api_horas`, `api_prenomina`, `api_prestamos`, `api_ajustes`,
   `inventario_api`, `herramientas_api`, etc.), cada uno como sub-paquete con
   `_core.py` (blueprint + decoradores + serializers) y módulos por tema.
@@ -139,5 +139,6 @@ Detalle de hallazgos, fixes y pendientes operativos:
 | [`API_REFERENCE.md`](./API_REFERENCE.md) | Los 216 endpoints por blueprint |
 | [`MODELOS_BD.md`](./MODELOS_BD.md) | Todas las tablas, columnas y relaciones |
 | [`SEGURIDAD.md`](./SEGURIDAD.md) | Auditoría de seguridad completa |
+| [`STACK_Y_ALTERNATIVAS.md`](./STACK_Y_ALTERNATIVAS.md) | Tecnologías del backend, por qué cada una y comparativa vs Supabase |
 | [`DOCKER.md`](./DOCKER.md) / [`DIA_A_DIA.md`](./DIA_A_DIA.md) | Desarrollo local y despliegue |
 | [`WEBSOCKETS_Y_DEPLOY.md`](./WEBSOCKETS_Y_DEPLOY.md) | Socket.IO en producción |
