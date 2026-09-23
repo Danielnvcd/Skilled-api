@@ -1138,3 +1138,210 @@ def test_digest_pide_reto_nuevo_en_cada_peticion():
         assert cli.pedir_json('GET', '/ISAPI/System/status?format=json') == {'statusCode': 1}
     # Nunca se mandó una credencial con nonce vencido: no cuenta para el bloqueo.
     assert con_credenciales_rechazadas == []
+
+
+# ─── Fase 2: checadas del lector → registros de horas ────────────────────────
+# Fechas fijas: el martes 2026-09-22 abre la semana de nómina (martes a lunes).
+
+def _acceso(serial, emp, cuando, minor=75):
+    return {'major': 5, 'minor': minor, 'time': f'{cuando}-06:00', 'serialNo': serial,
+            'employeeNoString': emp, 'name': 'Ana', 'pictureURL': ''}
+
+
+def _checar(db, lector, crudos):
+    """Ingesta + asistencia, como lo hace la escucha."""
+    from app.services.hikvision import asistencia, ingesta
+    nuevos = ingesta.guardar(lector.id, crudos)
+    resultados = asistencia.aplicar_eventos(nuevos)
+    db.session.commit()
+    return resultados
+
+
+def _registro(trabajador, fecha='2026-09-24'):
+    from app.models import RegistroDiarioHoras
+    return RegistroDiarioHoras.query.filter_by(
+        trabajador_id=trabajador.id, fecha=date.fromisoformat(fecha),
+    ).first()
+
+
+@pytest.fixture
+def oficinista(db, lector):
+    t = _trab(db, 'OF1', 'Ana')
+    t.tipo_nomina = 'Por hora'
+    db.session.commit()
+    _fila_sincronizada(db, lector, t)
+    return t
+
+
+@pytest.mark.parametrize('dia, inicio', [
+    ('2026-09-22', '2026-09-22'),   # martes: abre su propia semana
+    ('2026-09-24', '2026-09-22'),
+    ('2026-09-28', '2026-09-22'),   # lunes: cierra la semana del martes anterior
+    ('2026-09-29', '2026-09-29'),
+])
+def test_semana_de_nomina_va_de_martes_a_lunes(dia, inicio):
+    from app.services.hikvision.asistencia import semana_de
+    ini, fin = semana_de(date.fromisoformat(dia))
+    assert ini.isoformat() == inicio and (fin - ini).days == 6
+
+
+@pytest.mark.parametrize('hora, esperado', [
+    ('08:07:00', '08:00'), ('08:20:59', '08:30'), ('17:44:00', '17:30'),
+    ('17:46:00', '18:00'), ('23:50:00', '00:00'),
+    # Empates: `round()` de Python va al par, igual que el QR del móvil.
+    ('08:15:00', '08:00'), ('08:45:00', '09:00'),
+])
+def test_redondeo_igual_que_el_qr(hora, esperado):
+    from datetime import time
+    from app.services.hikvision.asistencia import redondear
+    assert redondear(time.fromisoformat(hora)).strftime('%H:%M') == esperado
+
+
+def test_primer_y_ultimo_acceso_son_entrada_y_salida(db, lector, oficinista):
+    from app.models import Proyecto
+    _checar(db, lector, [
+        _acceso(1, 'OF1', '2026-09-24T08:07:00'),
+        _acceso(2, 'OF1', '2026-09-24T13:02:00'),     # pasada intermedia
+        _acceso(3, 'OF1', '2026-09-24T17:52:00'),
+    ])
+    reg = _registro(oficinista)
+    assert (reg.hora_entrada.strftime('%H:%M'), reg.hora_salida.strftime('%H:%M')) == ('08:00', '18:00')
+    assert float(reg.horas_productivas) == 10.0      # Por hora, sin comida marcada
+    assert reg.origen == 'LECTOR'
+
+    # Va al reporte OFICINA de la semana, que se abrió solo.
+    oficina = Proyecto.query.filter_by(numero_proyecto='OFICINA').one()
+    assert reg.reporte.proyecto_id == oficina.id
+    assert reg.reporte.estado == 'BORRADOR'
+    assert reg.reporte.fecha_inicio_semana.isoformat() == '2026-09-22'
+    assert oficinista in oficina.participantes
+
+
+def test_un_solo_acceso_deja_solo_la_entrada_y_la_salida_llega_despues(db, lector, oficinista):
+    _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:07:00')])
+    reg = _registro(oficinista)
+    assert reg.hora_entrada.strftime('%H:%M') == '08:00' and reg.hora_salida is None
+    assert reg.horas_productivas is None
+
+    _checar(db, lector, [_acceso(2, 'OF1', '2026-09-24T16:10:00')])
+    db.session.refresh(reg)
+    assert reg.hora_salida.strftime('%H:%M') == '16:00'
+    assert float(reg.horas_productivas) == 8.0
+
+
+def test_reprocesar_no_duplica(db, lector, oficinista):
+    from app.models import RegistroDiarioHoras, ReporteSemanal
+    from app.services.hikvision import asistencia
+    _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:00:00'),
+                         _acceso(2, 'OF1', '2026-09-24T17:00:00')])
+    resultados = asistencia.recalcular(date(2026, 9, 22), date(2026, 9, 28))
+    db.session.commit()
+    assert [r['accion'] for r in resultados] == ['sin_cambios']
+    assert RegistroDiarioHoras.query.count() == 1
+    assert ReporteSemanal.query.count() == 1
+
+
+def test_rechazos_no_son_checadas(db, lector, oficinista):
+    _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:00:00', minor=104),
+                         _acceso(2, 'OF1', '2026-09-24T08:01:00', minor=76)])
+    assert _registro(oficinista) is None
+
+
+def test_la_edicion_manual_manda(client, admin, db, lector, oficinista):
+    """Si alguien corrige a mano la hora que puso el lector, el lector ya no la pisa."""
+    _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:07:00'),
+                         _acceso(2, 'OF1', '2026-09-24T17:00:00')])
+    reg = _registro(oficinista)
+
+    r = client.put(f'/api/horas/registros/{reg.id}', headers=_hdr(admin), json={
+        'hora_entrada': '07:30', 'hora_salida': '17:00', 'tomo_comida': False,
+    })
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json()['origen'] == 'LECTOR_EDITADO'
+
+    _checar(db, lector, [_acceso(3, 'OF1', '2026-09-24T19:00:00')])
+    db.session.refresh(reg)
+    assert reg.hora_entrada.strftime('%H:%M') == '07:30'
+    assert reg.hora_salida.strftime('%H:%M') == '17:00'
+
+
+def test_guardar_sin_cambiar_horas_no_le_quita_el_registro_al_lector(client, admin, db, lector,
+                                                                   oficinista):
+    """El guardado reenvía registros intactos; marcar comida tampoco cambia el dueño."""
+    _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:00:00'),
+                         _acceso(2, 'OF1', '2026-09-24T17:00:00')])
+    reg = _registro(oficinista)
+    r = client.put(f'/api/horas/registros/{reg.id}', headers=_hdr(admin), json={
+        'hora_entrada': '08:00', 'hora_salida': '17:00', 'tomo_comida': True,
+    })
+    assert r.status_code == 200 and r.get_json()['origen'] == 'LECTOR'
+
+    _checar(db, lector, [_acceso(3, 'OF1', '2026-09-24T18:10:00')])
+    db.session.refresh(reg)
+    assert reg.hora_salida.strftime('%H:%M') == '18:00'
+    assert float(reg.horas_productivas) == 9.0     # 10 h menos la comida que marcó el admin
+
+
+def test_no_pisa_un_registro_capturado_por_otra_via(db, lector, oficinista):
+    from datetime import time
+    from app.models import RegistroDiarioHoras
+    from app.services.hikvision import asistencia
+    reporte, _, _ = asistencia.reporte_oficina(date(2026, 9, 24))
+    db.session.add(RegistroDiarioHoras(
+        reporte_id=reporte.id, trabajador_id=oficinista.id, fecha=date(2026, 9, 24),
+        hora_entrada=time(9, 0), hora_salida=time(14, 0),
+    ))
+    db.session.commit()
+
+    resultados = _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:00:00'),
+                                      _acceso(2, 'OF1', '2026-09-24T17:00:00')])
+    assert resultados[0]['accion'] == 'omitido'
+    assert _registro(oficinista).hora_entrada == time(9, 0)
+
+
+def test_no_escribe_en_semana_con_prenomina_guardada(db, lector, oficinista):
+    from app.models import Prenomina
+    db.session.add(Prenomina(trabajador_id=oficinista.id, fecha_inicio=date(2026, 9, 22),
+                             fecha_fin=date(2026, 9, 28)))
+    db.session.commit()
+    resultados = _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:00:00'),
+                                      _acceso(2, 'OF1', '2026-09-24T17:00:00')])
+    assert resultados[0]['accion'] == 'omitido'
+    assert 'prenómina' in resultados[0]['motivo']
+    assert _registro(oficinista) is None
+
+
+def test_no_escribe_si_el_reporte_oficina_ya_se_cerro(db, lector, oficinista):
+    from app.services.hikvision import asistencia
+    reporte, _, _ = asistencia.reporte_oficina(date(2026, 9, 24))
+    reporte.estado = 'TERMINADO'
+    db.session.commit()
+    resultados = _checar(db, lector, [_acceso(1, 'OF1', '2026-09-24T08:00:00')])
+    assert resultados[0]['accion'] == 'omitido'
+
+
+def test_cada_dia_va_a_su_registro_y_cada_semana_a_su_reporte(db, lector, oficinista):
+    from app.models import ReporteSemanal
+    _checar(db, lector, [
+        _acceso(1, 'OF1', '2026-09-24T08:00:00'), _acceso(2, 'OF1', '2026-09-24T17:00:00'),
+        _acceso(3, 'OF1', '2026-09-28T08:00:00'),     # lunes: misma semana
+        _acceso(4, 'OF1', '2026-09-29T08:00:00'),     # martes: semana nueva
+    ])
+    assert _registro(oficinista, '2026-09-28').reporte_id == _registro(oficinista).reporte_id
+    assert _registro(oficinista, '2026-09-29').reporte_id != _registro(oficinista).reporte_id
+    assert ReporteSemanal.query.count() == 2
+
+
+def test_la_escucha_pasa_los_accesos_a_horas(app, db, lector, oficinista, monkeypatch):
+    from app.services.hikvision import escucha as mod_escucha
+    from app.services.hikvision import eventos as svc_eventos
+    monkeypatch.setattr(svc_eventos, 'desde_serial', lambda cli, ultimo: [
+        _acceso(11, 'OF1', '2026-09-24T08:00:00'), _acceso(12, 'OF1', '2026-09-24T17:00:00'),
+    ])
+    monkeypatch.setattr(mod_escucha, '_avisar', lambda *a: None)
+    _ingresar(db, lector, [_acceso(10, 'OF1', '2026-09-23T08:00:00')])
+
+    e = mod_escucha.EscuchaLector(app, lector.id)
+    e.max_serial = 10
+    e.atender_parte(None, _aviso(11))
+    assert _registro(oficinista).hora_salida.strftime('%H:%M') == '17:00'

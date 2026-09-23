@@ -8,7 +8,7 @@ Capa de servicio: las rutas Flask llaman aquí y nunca hablan HTTP con el equipo
     eventos.py     consulta de eventos por serial y lectura del alertStream
     ingesta.py     guardar eventos en el ERP sin duplicar (toca la base)
     escucha.py     proceso de escucha en tiempo real (`flask hikvision escuchar`)
-    asistencia.py  lectura de checadas (esqueleto, fase 2)
+    asistencia.py  checadas → registros de horas del reporte OFICINA (fase 2)
     errores.py     jerarquía de errores con mensaje para el usuario y detalle
                    para el log — ninguno contiene credenciales
 

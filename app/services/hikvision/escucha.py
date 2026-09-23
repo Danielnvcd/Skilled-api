@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from app.extensions import db
 from app.models import DispositivoHikvision
 
-from . import ingesta
+from . import asistencia, ingesta
 from .client import ClienteHikvision
 from .errores import ErrorAutenticacion, ErrorHikvision
 
@@ -223,9 +223,14 @@ class EscuchaLector:
             return True
         self.max_serial = max(self.max_serial, max(e.serial_no for e in nuevos))
         cargas = [e.to_dict() for e in nuevos[-MAX_EVENTOS_POR_AVISO:]]
+        # Fase 2: los accesos pasan a los registros de horas en la MISMA
+        # transacción que los eventos. `aplicar_eventos` aísla cada día en su
+        # propio savepoint, así que una checada rara no pierde los eventos.
+        checadas = asistencia.aplicar_eventos(nuevos)
         db.session.commit()
         logger.info('Hikvision escucha disp=%s: %d evento(s) nuevo(s)', self.dispositivo_id, len(nuevos))
         _avisar(self.dispositivo_id, cargas, len(nuevos))
+        asistencia.avisar_cambios(checadas)
         return True
 
     # ── Estado en la base ────────────────────────────────────────────────

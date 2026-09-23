@@ -26,7 +26,7 @@ from app.models import EventoHikvision, SyncEmpleadoHikvision
 from app.realtime import emit_to_role
 from app.routes._api_helpers import api_transactional, require_admin
 from app.routes.api_auth import jwt_required
-from app.services.hikvision import ClienteHikvision, ErrorHikvision, ingesta
+from app.services.hikvision import ClienteHikvision, ErrorHikvision, asistencia, ingesta
 from app.services.hikvision import eventos as svc_eventos
 
 from ._core import bp, error, obtener_dispositivo_o_404
@@ -147,7 +147,9 @@ def sincronizar_eventos(dispositivo_id):
         current_app.logger.warning('Hikvision sincronizar_eventos(%s): %s', d.id, e.detalle)
         db.session.rollback()
         return jsonify({'ok': False, 'error': e.mensaje}), 502
+    checadas = asistencia.aplicar_eventos(nuevos)
     db.session.commit()
+    asistencia.avisar_cambios(checadas)
 
     if nuevos:
         emit_to_role(['admin', 'super_admin'], 'hikvision:evento', {
