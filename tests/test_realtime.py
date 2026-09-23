@@ -168,7 +168,15 @@ EVENTOS_ESPERADOS = {
     'asignacion:changed',
     'baja:changed', 'bitacora:new', 'compra:changed', 'credencial:changed',
     'documento:changed', 'empleado:changed', 'estante:changed',
-    'herramienta:changed', 'incidencia:changed', 'mantenimiento:changed',
+    'herramienta:changed',
+    # Sincronización de empleados con un lector biométrico Hikvision. Solo
+    # lleva el id del dispositivo; la pantalla recarga la lista por REST.
+    'hikvision:changed',
+    # Acceso nuevo guardado por la escucha en tiempo real (o por «Traer
+    # eventos»). Trae los últimos eventos, pero la pestaña de actividad lo usa
+    # solo para invalidar y recargar desde la base.
+    'hikvision:evento',
+    'incidencia:changed', 'mantenimiento:changed',
     'movimiento:changed', 'nota:changed', 'notif:new', 'notif:read',
     'notif:read_all', 'prenomina:changed', 'prestamo:changed',
     'producto:changed', 'producto:imagen_progreso', 'proyecto:changed',

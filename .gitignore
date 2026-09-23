@@ -22,3 +22,6 @@ backups/
 # la variable DESPLIEGUE_ACTIVO). Instrucciones en docs/DESPLIEGUE_CI.md.
 .github/
 docs/DESPLIEGUE_CI.md
+
+# Foto de prueba para el lector biométrico: datos personales, fuera del repo.
+upscalemedia-transformed.jpeg

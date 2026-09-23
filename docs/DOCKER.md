@@ -343,6 +343,32 @@ sentido contrario.
 
 ---
 
+## Escucha de lectores Hikvision (`hikvision-escucha`)
+
+Servicio aparte, con la misma imagen que la API, que corre
+`flask hikvision escuchar`. Mantiene abierta la conexión de eventos
+(`alertStream`) de cada lector activo, guarda cada acceso en
+`hikvision_eventos` y avisa al navegador por Socket.IO a través de Redis. La
+pantalla de actividad lee de esa tabla: abrirla no le pregunta nada al lector.
+
+- **Una sola réplica.** Dos no duplican eventos (la tabla es única por lector
+  y serial), pero sí abren dos conexiones a cada lector.
+- **Red:** necesita llegar a los lectores igual que la API (misma LAN o VPN).
+- **Si se cae:** la pantalla muestra «Sin tiempo real». Al volver se pone al
+  día sola desde el último evento guardado, sin perder nada. Mientras tanto,
+  el botón «Traer eventos» o `flask hikvision al-dia` hacen la misma ingesta
+  una vez.
+- **Producción:** la migración `hikv2026c` tiene que estar aplicada antes de
+  levantarlo (las migraciones son un paso aparte, ver arriba).
+
+```bash
+docker compose logs -f hikvision-escucha            # conectado / eventos nuevos
+docker compose restart hikvision-escucha
+docker compose exec api flask hikvision al-dia      # ingesta manual, una vez
+```
+
+---
+
 ## Respaldos con la base en contenedor
 
 El paso de respaldo del CI usa `pg_dump` del host contra `DATABASE_URL`. Con

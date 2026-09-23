@@ -145,6 +145,51 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  # Escucha en tiempo real de los lectores Hikvision (ver
+  # app/services/hikvision/escucha.py): una conexión abierta por lector,
+  # guarda cada acceso en `hikvision_eventos` y avisa por Socket.IO vía Redis.
+  # UNA sola réplica. Misma imagen que la API; necesita llegar a la LAN de los
+  # lectores igual que ella.
+  hikvision-escucha:
+    image: nominas-api:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nominas}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:-nominas}
+      REDIS_URL: redis://redis:6379/0
+      # Hilos normales: no atiende WebSockets, solo publica en Redis.
+      SOCKETIO_ASYNC_MODE: threading
+      TZ: America/Mexico_City
+    command: ["flask", "hikvision", "escuchar"]
+    # El healthcheck de la imagen pregunta por /health de la API, que aquí no
+    # existe. Este mira lo que importa: que cada lector activo tenga latido de
+    # hace menos de 90 s. «unhealthy» = algún lector sin tiempo real (apagado,
+    # sin red o con la contraseña cambiada), no necesariamente el proceso caído.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,sys,sqlalchemy as sa; e=sa.create_engine(os.environ['DATABASE_URL']); n=e.connect().execute(sa.text(\"SELECT count(*) FROM hikvision_dispositivos WHERE activo AND (escucha_latido IS NULL OR escucha_latido < now() - interval '90 seconds')\")).scalar(); sys.exit(1 if n else 0)"
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db:
     # 18 para igualar al PostgreSQL que ya corre en el VPS. Esto NO es un
     # detalle menor: un dump hecho con 18 no se restaura en un 16, así que

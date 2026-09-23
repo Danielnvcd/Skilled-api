@@ -19,6 +19,7 @@ consumidores.
   solicitudes.py   SolicitudMaterial, SolicitudMaterialDetalle
   compras.py       SolicitudCompra, SolicitudCompraDetalle (ESTADOS_COMPRA)
   notificaciones.py Notificacion + crear_notif_admins / crear_notif_inventario
+  hikvision.py     DispositivoHikvision, SyncEmpleadoHikvision, EventoHikvision
   herramientas.py  HerramientaCategoria, Herramienta, HerramientaUnidad,
                    AsignacionHerramienta, MantenimientoHerramienta,
                    IncidenciaHerramienta, SolicitudBajaHerramienta,
@@ -140,6 +141,17 @@ from app.models.herramientas import (
     crear_evento_herramienta,
 )
 
+# hikvision depende de trabajador (FK a `trabajadores`), ya importado arriba.
+from app.models.hikvision import (
+    EMPLOYEE_NO_MAX,
+    ESTADOS_SYNC_HIKVISION,
+    MAX_RESULTS_PAGINA,
+    NOMBRE_REMOTO_MAX,
+    DispositivoHikvision,
+    EventoHikvision,
+    SyncEmpleadoHikvision,
+)
+
 
 __all__ = [
     # _base
@@ -182,4 +194,8 @@ __all__ = [
     'ESTADOS_INCIDENCIA', 'ESTADOS_SOLICITUD_BAJA', 'TIPO_ITEM_SOLICITUD',
     'USO_HERRAMIENTA', 'TIPO_INCIDENCIA', 'TIPO_MANTENIMIENTO',
     'CONDICION_HERRAMIENTA', 'TIPO_EVENTO_HERRAMIENTA',
+    # hikvision
+    'DispositivoHikvision', 'SyncEmpleadoHikvision', 'EventoHikvision',
+    'ESTADOS_SYNC_HIKVISION', 'EMPLOYEE_NO_MAX', 'NOMBRE_REMOTO_MAX',
+    'MAX_RESULTS_PAGINA',
 ]
