@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import socket
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -161,6 +162,34 @@ class _DigestSinReuso(httpx.DigestAuth):
         yield from super().auth_flow(request)
 
 
+_RE_RETRY = re.compile(r'retryTimes["\s>:]*?(-?\d+)', re.IGNORECASE)
+_RE_LOCK_TIME = re.compile(r'resLockTime["\s>:]*?(\d+)', re.IGNORECASE)
+_RE_LOCKED = re.compile(r'lockStatus["\s>:]*?"?locked', re.IGNORECASE)
+
+
+def error_autenticacion(texto: str, contexto: str) -> ErrorAutenticacion:
+    """`ErrorAutenticacion` con lo que el equipo diga sobre el bloqueo.
+
+    ISAPI (`XML_ResponseStatus_AuthenticationFailed`) puede traer
+    `lockStatus`, `retryTimes` (intentos restantes) y `resLockTime` (segundos
+    de bloqueo). Se buscan igual en XML que en JSON, porque según firmware
+    llega uno u otro; si no vienen, el error queda sin esos datos.
+    """
+    texto = texto or ''
+    retry = _RE_RETRY.search(texto)
+    lock_time = _RE_LOCK_TIME.search(texto)
+    bloqueado = bool(_RE_LOCKED.search(texto))
+    intentos = int(retry.group(1)) if retry else None
+    segundos = int(lock_time.group(1)) if lock_time else None
+    return ErrorAutenticacion(
+        detalle=(f'401 en {contexto} (credenciales inválidas o cuenta bloqueada;'
+                 f' intentos_restantes={intentos} bloqueo_s={segundos} bloqueado={bloqueado})'),
+        intentos_restantes=intentos,
+        segundos_bloqueo=segundos,
+        bloqueado=bloqueado or (intentos is not None and intentos <= 0 and bool(segundos)),
+    )
+
+
 class ClienteHikvision:
     """Sesión contra UN lector. Usar como context manager para cerrar el socket.
 
@@ -178,6 +207,10 @@ class ClienteHikvision:
         # no se loggea y no entra en ningún mensaje de error.
         self._password = password
         self._cliente: httpx.Client | None = None
+
+    # Solo para pruebas: un `httpx.MockTransport` que simula el lector (ver
+    # tests/lector_falso.py). En producción siempre es None.
+    transporte = None
 
     def __repr__(self) -> str:
         # Explícito: sin este repr, un traceback de httpx podría imprimir el
@@ -202,6 +235,7 @@ class ClienteHikvision:
                 base_url=f'http://{self.host}:{self.puerto}',
                 auth=_DigestSinReuso(self._usuario, self._password),
                 timeout=httpx.Timeout(TIMEOUT_LECTURA, connect=TIMEOUT_CONEXION),
+                transport=self.transporte,
                 # Sin redirecciones: ISAPI no las usa, y seguirlas ciegamente
                 # mandaría las credenciales a donde diga el equipo.
                 follow_redirects=False,
@@ -238,9 +272,7 @@ class ClienteHikvision:
             ) from None
 
         if resp.status_code == 401:
-            raise ErrorAutenticacion(
-                detalle=f'401 en {metodo} {ruta} (credenciales inválidas o cuenta bloqueada)',
-            )
+            raise error_autenticacion(resp.text, f'{metodo} {ruta}')
         # A propósito NO se aborta aquí ante un 4xx/5xx. ISAPI responde los
         # errores de negocio con HTTP 400 y un cuerpo JSON que SÍ dice qué pasó
         # (p. ej. 400 + subStatusCode=SubpicAnalysisModelingError cuando el
@@ -341,9 +373,8 @@ class ClienteHikvision:
                 timeout=httpx.Timeout(TIMEOUT_STREAM, connect=TIMEOUT_CONEXION),
             ) as resp:
                 if resp.status_code == 401:
-                    raise ErrorAutenticacion(
-                        detalle=f'401 en GET {ruta} (credenciales inválidas o cuenta bloqueada)',
-                    )
+                    resp.read()
+                    raise error_autenticacion(resp.text, f'GET {ruta}')
                 if resp.status_code != 200:
                     raise ErrorDispositivo(
                         'El lector rechazó la conexión de eventos en tiempo real.',
@@ -491,6 +522,73 @@ class ClienteHikvision:
         )
         self.pedir_xml('PUT', '/ISAPI/System/time', cuerpo)
         return self.hora_dispositivo()
+
+    def configurar_ntp(self, servidor: str, intervalo_min: int = 60) -> dict:
+        """Pone el reloj del equipo a sincronizarse por NTP. Devuelve la hora nueva.
+
+        Dos pasos, los mismos que hace la web del lector: el servidor NTP
+        (`ntpServers/1`, el único que admite este modelo) y el modo de hora
+        (`timeMode=NTP`, conservando la zona horaria actual).
+
+        `ntpServers/test` responde `notSupport` en este firmware, así que no hay
+        forma de probar el servidor antes: si no sincroniza, lo detecta la
+        vigilancia del reloj de la escucha y alerta a los admins.
+        """
+        servidor = (servidor or '').strip()
+        if not servidor or len(servidor) > 64:
+            raise ErrorConfiguracion('Indica el servidor NTP (IP o nombre, máx. 64 caracteres).')
+        try:
+            ipaddress.ip_address(servidor)
+            tipo, campo = 'ipaddress', 'ipAddress'
+        except ValueError:
+            if not re.fullmatch(r'[A-Za-z0-9.-]+', servidor):
+                raise ErrorConfiguracion('El servidor NTP no es una IP ni un nombre válido.') from None
+            tipo, campo = 'hostname', 'hostName'
+        intervalo = max(1, min(int(intervalo_min), 10080))   # límites de capabilities
+
+        self.pedir_xml('PUT', '/ISAPI/System/time/ntpServers/1', (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<NTPServer version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">'
+            '<id>1</id>'
+            f'<addressingFormatType>{tipo}</addressingFormatType>'
+            f'<{campo}>{escape(servidor)}</{campo}>'
+            '<portNo>123</portNo>'
+            f'<synchronizeInterval>{intervalo}</synchronizeInterval>'
+            '</NTPServer>'
+        ))
+        actual = self.hora_dispositivo()
+        self.pedir_xml('PUT', '/ISAPI/System/time', (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">'
+            '<timeMode>NTP</timeMode>'
+            f'<timeZone>{escape(actual["zona"])}</timeZone>'
+            '</Time>'
+        ))
+        return self.hora_dispositivo()
+
+    def ntp(self) -> dict:
+        """Servidor NTP configurado (vacío si ninguno)."""
+        raiz = self.pedir_xml('GET', '/ISAPI/System/time/ntpServers')
+        for servidor in raiz:
+            campos = {etiqueta_local(h.tag): (h.text or '').strip() for h in servidor}
+            return {
+                'servidor': campos.get('hostName') or campos.get('ipAddress') or '',
+                'intervalo_min': int(campos.get('synchronizeInterval') or 0),
+            }
+        return {'servidor': '', 'intervalo_min': 0}
+
+    def red(self) -> dict:
+        """Direccionamiento de la interfaz de red: si es IP fija o por DHCP.
+
+        Un lector con DHCP puede cambiar de IP al reiniciar el router y el ERP
+        lo perdería: la vigilancia lo avisa.
+        """
+        raiz = self.pedir_xml('GET', '/ISAPI/System/Network/interfaces/1/ipAddress')
+        campos = {etiqueta_local(h.tag): (h.text or '').strip() for h in raiz}
+        return {
+            'direccionamiento': campos.get('addressingType', ''),   # static | dynamic | apipa
+            'ip': campos.get('ipAddress', ''),
+        }
 
     def capacidad(self) -> dict:
         """Usuarios y rostros registrados contra el máximo que admite el equipo.

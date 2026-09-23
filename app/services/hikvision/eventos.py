@@ -125,6 +125,30 @@ def recientes(cli, inicio: str, fin: str, *, limite: int) -> list[dict]:
     }, limite=limite, paginas=(limite // MAX_RESULTS) + 1)
 
 
+# Eventos de la cerradura: el lector los manda por el stream al desbloquear
+# (acceso reconocido, apertura remota o botón) y al volver a bloquear.
+MINOR_PUERTA_ABIERTA = 21
+MINOR_PUERTA_CERRADA = 22
+
+
+def ultimo_estado_puerta(eventos) -> dict | None:
+    """Estado de la cerradura según el evento de puerta más reciente del lote.
+
+    `eventos` son `EventoHikvision` recién guardados. Devuelve
+    {'cerradura': 'Abierta'|'Cerrada', 'hora': hora_local} o None si el lote
+    no trae eventos de puerta.
+    """
+    de_puerta = [e for e in eventos
+                 if e.minor in (MINOR_PUERTA_ABIERTA, MINOR_PUERTA_CERRADA)]
+    if not de_puerta:
+        return None
+    ultimo = max(de_puerta, key=lambda e: e.serial_no)
+    return {
+        'cerradura': 'Abierta' if ultimo.minor == MINOR_PUERTA_ABIERTA else 'Cerrada',
+        'hora': ultimo.hora_local,
+    }
+
+
 def ruta_captura(picture_url: str) -> str | None:
     """Ruta local de la foto que tomó el equipo, o None si no hay o no es válida.
 

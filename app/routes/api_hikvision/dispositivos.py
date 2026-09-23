@@ -7,11 +7,16 @@ Registra:
   PUT    /api/hikvision/dispositivos/<id>            actualizar
   DELETE /api/hikvision/dispositivos/<id>            eliminar
   POST   /api/hikvision/dispositivos/<id>/probar     probar conexión
+  POST   /api/hikvision/dispositivos/<id>/foto       subir o cambiar la foto del lector
+  GET    /api/hikvision/dispositivos/<id>/foto       la foto
+  DELETE /api/hikvision/dispositivos/<id>/foto       quitarla
 
 La contraseña entra por el payload pero NUNCA sale: ninguna respuesta de este
 módulo la incluye, y `DispositivoHikvision.to_dict()` la omite por diseño.
 """
 from __future__ import annotations
+
+import time
 
 from flask import current_app, jsonify, request
 
@@ -25,12 +30,65 @@ from app.services.hikvision import (
     validar_host,
     validar_puerto,
 )
-from app.utils import log_action
+from app.realtime import emit_to_role
+from app.utils import allowed_image_file, archivos, image_to_webp, log_action
 
 from ._core import bp, error, obtener_dispositivo_o_404
 
 # Longitudes máximas, espejo de las columnas del modelo.
-_LARGOS = {'nombre': 120, 'host': 120, 'usuario': 64, 'password': 200}
+_LARGOS = {'nombre': 120, 'host': 120, 'usuario': 64, 'password': 200,
+           'ubicacion': 120, 'notas': 500}
+
+# La foto del lector solo sirve para reconocerlo en pantalla: 1024 px sobran.
+FOTO_MAX_PX = 1024
+
+
+def _texto_opcional(valor) -> str | None:
+    valor = (valor or '').strip() if isinstance(valor, str) else ''
+    return valor or None
+
+
+def _resumenes() -> dict[int, dict]:
+    """Cifras de cada lector para la lista, SIN consultar a los equipos.
+
+    Empleados sincronizados, accesos permitidos de hoy (día de la oficina) y el
+    último acceso. Todo sale de la base: abrir la lista no le cuesta nada a
+    ningún lector.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func
+
+    from app.models import EventoHikvision, SyncEmpleadoHikvision
+
+    from .actividad import _zona_del_lector
+
+    sincronizados = dict(
+        db.session.query(SyncEmpleadoHikvision.dispositivo_id, func.count())
+        .filter(SyncEmpleadoHikvision.estado == 'SINCRONIZADO')
+        .group_by(SyncEmpleadoHikvision.dispositivo_id).all()
+    )
+    ahora = datetime.now(timezone.utc)
+    resumen = {}
+    for (disp_id,) in db.session.query(DispositivoHikvision.id):
+        local = ahora.astimezone(_zona_del_lector(disp_id))
+        inicio_hoy = local.replace(hour=0, minute=0, second=0, microsecond=0)
+        accesos_hoy = db.session.query(func.count(EventoHikvision.id)).filter(
+            EventoHikvision.dispositivo_id == disp_id,
+            EventoHikvision.tipo == 'permitido',
+            EventoHikvision.fecha_hora >= inicio_hoy,
+        ).scalar() or 0
+        ultimo = EventoHikvision.query.filter_by(dispositivo_id=disp_id, tipo='permitido') \
+            .order_by(EventoHikvision.fecha_hora.desc(), EventoHikvision.serial_no.desc()).first()
+        resumen[disp_id] = {
+            'empleados': sincronizados.get(disp_id, 0),
+            'accesos_hoy': accesos_hoy,
+            'ultimo_acceso': {
+                'hora': ultimo.hora_local,
+                'nombre': ultimo.nombre_en_equipo or ultimo.employee_no or '',
+            } if ultimo else None,
+        }
+    return resumen
 
 
 def _validar_payload(datos: dict, *, es_alta: bool) -> str | None:
@@ -60,7 +118,8 @@ def listar():
     if err:
         return err
     filas = DispositivoHikvision.query.order_by(DispositivoHikvision.nombre).all()
-    return jsonify({'items': [d.to_dict() for d in filas]})
+    resumenes = _resumenes()
+    return jsonify({'items': [{**d.to_dict(), 'resumen': resumenes.get(d.id)} for d in filas]})
 
 
 @bp.route('/dispositivos/<int:dispositivo_id>', methods=['GET'])
@@ -99,6 +158,8 @@ def crear():
         usuario=datos['usuario'].strip(),
         password=datos['password'],
         activo=bool(datos.get('activo', True)),
+        ubicacion=_texto_opcional(datos.get('ubicacion')),
+        notas=_texto_opcional(datos.get('notas')),
     )
     db.session.add(d)
     db.session.commit()
@@ -136,6 +197,10 @@ def actualizar(dispositivo_id):
         d.usuario = datos['usuario'].strip()
     if 'activo' in datos:
         d.activo = bool(datos['activo'])
+    if 'ubicacion' in datos:
+        d.ubicacion = _texto_opcional(datos['ubicacion'])
+    if 'notas' in datos:
+        d.notas = _texto_opcional(datos['notas'])
     # Contraseña: solo se toca si llega con contenido. Mandar el campo vacío
     # desde un formulario significa "no la cambies", no "bórrala" — un lector
     # sin contraseña no serviría para nada.
@@ -224,3 +289,78 @@ def probar(dispositivo_id):
         # de asistencia, no después.
         'hora': hora,
     })
+
+
+# ── Foto del lector ───────────────────────────────────────────────────────────
+
+@bp.route('/dispositivos/<int:dispositivo_id>/foto', methods=['POST'])
+@jwt_required
+@limiter.limit('20 per minute')
+@api_transactional('No se pudo guardar la foto del lector')
+def subir_foto(dispositivo_id):
+    """Foto de cómo se ve el lector instalado (multipart, campo `foto`).
+
+    Mismas reglas y mismo almacenamiento que la foto de perfil de un empleado:
+    JPG/PNG reales de hasta 5 MB, convertidos a WebP. La anterior se borra
+    DESPUÉS de guardar la nueva, para no quedar sin foto si algo falla.
+    """
+    err = require_admin()
+    if err:
+        return err
+
+    d = obtener_dispositivo_o_404(dispositivo_id)
+    archivo = request.files.get('foto')
+    if not archivo or not archivo.filename:
+        return error('No se envió ninguna fotografía.', 422)
+    if not allowed_image_file(archivo):
+        return error('Solo se permiten imágenes JPG o PNG reales de hasta 5 MB.', 422)
+
+    try:
+        datos = image_to_webp(archivo, max_dim=FOTO_MAX_PX).getvalue()
+    except Exception:  # noqa: BLE001 — imagen corrupta que pasó la verificación de tipo
+        return error('La imagen no se pudo procesar. Prueba con otra.', 422)
+
+    anterior = d.foto
+    d.foto = f'lectores/lector_{d.id}_{int(time.time())}.webp'
+    archivos.guardar(d.foto, datos, 'image/webp')
+    db.session.commit()
+    if anterior and anterior != d.foto:
+        archivos.eliminar(anterior)
+    log_action(f'Cambió la foto del lector "{d.nombre}" ({d.host}:{d.puerto})')
+    db.session.commit()
+    emit_to_role(['admin', 'super_admin'], 'hikvision:changed', {
+        'dispositivo_id': d.id, 'action': 'foto',
+    })
+    return jsonify(d.to_dict())
+
+
+@bp.route('/dispositivos/<int:dispositivo_id>/foto', methods=['GET'])
+@jwt_required
+def ver_foto(dispositivo_id):
+    err = require_admin()
+    if err:
+        return err
+    d = obtener_dispositivo_o_404(dispositivo_id)
+    if not d.foto:
+        return error('Este lector no tiene foto.', 404)
+    resp = archivos.enviar(d.foto, mimetype='image/webp')
+    if resp is None:
+        return error('No se encontró el archivo de la foto.', 404)
+    return resp
+
+
+@bp.route('/dispositivos/<int:dispositivo_id>/foto', methods=['DELETE'])
+@jwt_required
+@api_transactional('No se pudo quitar la foto del lector')
+def quitar_foto(dispositivo_id):
+    err = require_admin()
+    if err:
+        return err
+    d = obtener_dispositivo_o_404(dispositivo_id)
+    if d.foto:
+        anterior, d.foto = d.foto, None
+        db.session.commit()
+        archivos.eliminar(anterior)
+        log_action(f'Quitó la foto del lector "{d.nombre}" ({d.host}:{d.puerto})')
+        db.session.commit()
+    return jsonify(d.to_dict())

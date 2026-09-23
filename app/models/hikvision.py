@@ -9,6 +9,8 @@ la relación es N a N (un empleado puede estar en varios lectores, y cada lector
 tiene su propio resultado para ese empleado). Meterlo en `trabajadores` obligaría
 a suponer que solo existirá un lector, que es justo lo que hay que evitar.
 """
+import hashlib
+
 from app.extensions import EncryptedString, db
 from app.models._base import _now_utc
 
@@ -62,6 +64,14 @@ class DispositivoHikvision(db.Model):
 
     activo = db.Column(db.Boolean, nullable=False, default=True, server_default='true', index=True)
 
+    # Datos para que la gente reconozca el equipo en la pantalla: dónde está,
+    # una foto de cómo se ve instalado y notas libres (quién lo instaló, qué
+    # puerta abre…). `foto` es la key en el almacenamiento (R2 o disco), igual
+    # que `Trabajador.foto_perfil`.
+    ubicacion = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.String(500), nullable=True)
+    foto = db.Column(db.String(255), nullable=True)
+
     # Identidad que reportó el equipo la última vez que se probó la conexión
     # (GET /ISAPI/System/deviceInfo). Se cachea para mostrarla sin volver a
     # llamar al lector y para detectar que alguien cambió el equipo de sitio.
@@ -81,6 +91,14 @@ class DispositivoHikvision(db.Model):
     escucha_latido = db.Column(db.DateTime(timezone=True), nullable=True)
     escucha_error = db.Column(db.String(500), nullable=True)
 
+    # Época de la numeración de eventos del equipo. El `serialNo` del lector
+    # vuelve a empezar desde 1 si se resetea de fábrica, se borra su historial
+    # o se cambia por otro equipo. Sin esto, la ingesta pediría «lo posterior
+    # al 409» para siempre y dejaría de guardar eventos EN SILENCIO. Al
+    # detectar el salto hacia atrás se abre una época nueva y los seriales se
+    # vuelven a contar desde cero sin chocar con los anteriores.
+    epoca_eventos = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+
     created_at = db.Column(db.DateTime, default=_now_utc)
     updated_at = db.Column(db.DateTime, default=_now_utc, onupdate=_now_utc)
 
@@ -96,6 +114,15 @@ class DispositivoHikvision(db.Model):
             # decidir entre "cambiar" y "capturar", nunca su valor.
             'tiene_password': bool(self.password),
             'activo': self.activo,
+            'ubicacion': self.ubicacion or '',
+            'notas': self.notas or '',
+            'tiene_foto': bool(self.foto),
+            # Cambia con cada foto nueva (sin exponer la key del almacenamiento):
+            # el frontend lo usa para no mostrar la imagen vieja en caché.
+            'foto_version': (
+                hashlib.sha256(self.foto.encode('utf-8')).hexdigest()[:12]
+                if self.foto else None
+            ),
             'modelo': self.modelo or '',
             'numero_serie': self.numero_serie or '',
             'firmware': self.firmware or '',
@@ -208,7 +235,8 @@ class EventoHikvision(db.Model):
     """
     __tablename__ = "hikvision_eventos"
     __table_args__ = (
-        db.UniqueConstraint('dispositivo_id', 'serial_no', name='uq_hikvision_evento_serial'),
+        db.UniqueConstraint('dispositivo_id', 'epoca', 'serial_no',
+                            name='uq_hikvision_evento_epoca_serial'),
         db.Index('ix_hikvision_eventos_disp_fecha', 'dispositivo_id', 'fecha_hora'),
     )
 
@@ -218,6 +246,9 @@ class EventoHikvision(db.Model):
         nullable=False,
     )
     serial_no = db.Column(db.BigInteger, nullable=False)
+    # Ver `DispositivoHikvision.epoca_eventos`: el serial solo es único dentro
+    # de su época.
+    epoca = db.Column(db.Integer, nullable=False, default=1, server_default='1')
 
     # Instante absoluto (para ordenar y filtrar) y la hora TAL COMO la reportó
     # el lector, con su desfase: es la hora de la oficina, la que se muestra.
@@ -258,3 +289,99 @@ class EventoHikvision(db.Model):
             'cubrebocas': bool(self.cubrebocas),
             'captura': self.captura,
         }
+
+
+# Sucesos de la conexión con el lector, para el panel de salud y la auditoría.
+TIPOS_SUCESO_ESCUCHA = (
+    'CONECTADO',           # la escucha abrió el stream
+    'DESCONECTADO',        # se cortó (detalle = motivo)
+    'AUTENTICACION',       # el lector rechazó las credenciales
+    'SERIALES_REINICIADOS',
+    'EQUIPO_CAMBIADO',     # otro número de serie en la misma dirección
+    'FIRMWARE_CAMBIADO',
+    'RELOJ_DESFASADO',
+    'IP_DINAMICA',         # el lector dejó de tener IP fija
+)
+
+
+class SucesoEscuchaHikvision(db.Model):
+    """Bitácora de la conexión ERP ↔ lector (no de los accesos).
+
+    La escribe el proceso de escucha. Alimenta el panel «Salud de la conexión»
+    (reconexiones en 24 h, último error) y deja rastro de lo que pasó cuando
+    alguien pregunta por qué no se registró una checada.
+    """
+    __tablename__ = "hikvision_escucha_sucesos"
+    __table_args__ = (
+        db.Index('ix_hikvision_sucesos_disp_fecha', 'dispositivo_id', 'creado_en'),
+    )
+
+    id = db.Column(db.BigInteger().with_variant(db.Integer, 'sqlite'), primary_key=True)
+    dispositivo_id = db.Column(
+        db.Integer, db.ForeignKey('hikvision_dispositivos.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    tipo = db.Column(db.String(30), nullable=False)
+    detalle = db.Column(db.String(500), nullable=True)
+    creado_en = db.Column(db.DateTime(timezone=True), default=_now_utc, nullable=False)
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'tipo': self.tipo,
+            'detalle': self.detalle or '',
+            'creado_en': self.creado_en.isoformat() if self.creado_en else None,
+        }
+
+
+ESTADOS_TAREA_HIKVISION = ('PENDIENTE', 'EN_CURSO', 'TERMINADA', 'ERROR')
+
+
+class TareaHikvision(db.Model):
+    """Sincronización de empleados que corre en segundo plano.
+
+    Sincronizar a una persona tarda ~3.6 s contra el equipo real; una tanda de
+    50 superaba el límite de 120 s de gunicorn y el navegador veía un error
+    aunque parte sí se había enviado. La API crea la tarea y responde al
+    instante; el proceso de escucha, que ya vive todo el tiempo, la ejecuta y
+    avisa el avance por Socket.IO (`hikvision:tarea`).
+    """
+    __tablename__ = "hikvision_tareas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    dispositivo_id = db.Column(
+        db.Integer, db.ForeignKey('hikvision_dispositivos.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    tipo = db.Column(db.String(20), nullable=False, default='SINCRONIZAR')
+    trabajador_ids = db.Column(db.JSON, nullable=False)
+    estado = db.Column(db.String(15), nullable=False, default='PENDIENTE',
+                       server_default='PENDIENTE', index=True)
+    total = db.Column(db.Integer, nullable=False, default=0)
+    procesados = db.Column(db.Integer, nullable=False, default=0)
+    resultados = db.Column(db.JSON, nullable=True)
+    error = db.Column(db.String(500), nullable=True)
+    creado_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'),
+                              nullable=True)
+    creada_en = db.Column(db.DateTime(timezone=True), default=_now_utc, nullable=False)
+    iniciada_en = db.Column(db.DateTime(timezone=True), nullable=True)
+    terminada_en = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def to_dict(self, *, con_resultados: bool = False) -> dict:
+        d = {
+            'id': self.id,
+            'dispositivo_id': self.dispositivo_id,
+            'tipo': self.tipo,
+            'estado': self.estado,
+            'total': self.total,
+            'procesados': self.procesados,
+            'error': self.error or '',
+            'creada_en': self.creada_en.isoformat() if self.creada_en else None,
+            'terminada_en': self.terminada_en.isoformat() if self.terminada_en else None,
+        }
+        if con_resultados:
+            d['resultados'] = self.resultados or []
+            ok = sum(1 for r in (self.resultados or []) if r.get('ok'))
+            d['resumen'] = {'sincronizados': ok, 'fallidos': len(self.resultados or []) - ok,
+                            'total': len(self.resultados or [])}
+        return d

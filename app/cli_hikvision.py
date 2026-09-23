@@ -3,6 +3,7 @@
     flask hikvision escuchar      escucha en tiempo real de todos los lectores
     flask hikvision al-dia        trae lo pendiente de cada lector una vez y sale
     flask hikvision checadas      reprocesa eventos guardados → registros de horas
+    flask hikvision purgar        aplica la retención (eventos, sucesos, tareas)
 
 `escuchar` es un proceso de larga vida: en Docker corre como su propio
 servicio (`hikvision-escucha`), UNO solo. Dos a la vez no duplican eventos (la
@@ -72,3 +73,17 @@ def checadas(dias):
         linea = f"{r['fecha']} trab={r['trabajador_id']}: {r['accion']}"
         click.echo(linea + (f" ({r['motivo']})" if r['motivo'] else ''))
     click.echo(f'{len(resultados)} día(s) procesado(s) entre {desde} y {hasta}.')
+
+
+@hikvision_cli.command('purgar')
+@click.option('--meses', type=int, default=None,
+              help='Meses de eventos a conservar (por defecto HIKVISION_RETENCION_MESES o 12).')
+def purgar_cmd(meses):
+    """Borra eventos, sucesos y tareas que exceden la retención."""
+    from app.extensions import db
+    from app.services.hikvision.retencion import purgar
+
+    resultado = purgar(meses=meses)
+    db.session.commit()
+    click.echo(f"Borrados: {resultado['eventos']} evento(s), {resultado['sucesos']} suceso(s), "
+               f"{resultado['tareas']} tarea(s).")

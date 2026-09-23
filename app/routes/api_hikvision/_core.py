@@ -17,6 +17,9 @@ from flask import Blueprint, jsonify
 from app.models import DispositivoHikvision, SyncEmpleadoHikvision, Trabajador
 from app.services.hikvision import fotos
 from app.services.hikvision import usuarios as svc_usuarios
+# Viven en el servicio porque también las usa el trabajador de tareas; se
+# reexportan aquí para las rutas.
+from app.services.hikvision.sincronizar import candidatos_query, sync_por_trabajador  # noqa: F401
 
 bp = Blueprint('api_hikvision', __name__, url_prefix='/api/hikvision')
 
@@ -31,34 +34,6 @@ def _no_store(response):
 
 def error(mensaje: str, codigo: int = 400):
     return jsonify({'error': mensaje}), codigo
-
-
-def sync_por_trabajador(dispositivo_id: int) -> dict[int, SyncEmpleadoHikvision]:
-    """Filas de sincronización de un dispositivo, indexadas por trabajador.
-
-    Una sola consulta para todo el listado: hacer una por empleado convertiría
-    la pantalla en N+1 consultas.
-    """
-    filas = SyncEmpleadoHikvision.query.filter_by(dispositivo_id=dispositivo_id).all()
-    return {f.trabajador_id: f for f in filas}
-
-
-def candidatos_query():
-    """Empleados que PUEDEN ir a un lector: de oficina, activos y sin baja.
-
-    Es la misma condición que aplica el backend al sincronizar. Tenerla en un
-    solo lugar evita que el listado ofrezca a alguien que luego la
-    sincronización rechaza.
-    """
-    return (
-        Trabajador.query
-        .filter(
-            Trabajador.es_oficina.is_(True),
-            Trabajador.activo.is_(True),
-            Trabajador.fecha_baja.is_(None),
-        )
-        .order_by(Trabajador.nombre, Trabajador.nombre_apellidos)
-    )
 
 
 def cambios_pendientes(t: Trabajador, sync: SyncEmpleadoHikvision | None) -> list[str]:

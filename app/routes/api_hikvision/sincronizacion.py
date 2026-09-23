@@ -3,6 +3,8 @@
 Registra:
   GET    /api/hikvision/dispositivos/<id>/empleados                    candidatos + estado
   POST   /api/hikvision/dispositivos/<id>/sincronizar                  enviar al lector
+  GET    /api/hikvision/tareas/<id>                                    tarea en segundo plano
+  GET    /api/hikvision/dispositivos/<id>/tareas                       tareas activas
   DELETE /api/hikvision/dispositivos/<id>/empleados/<trab_id>          quitar del lector
   POST   /api/hikvision/dispositivos/<id>/empleados/<trab_id>/foto     cambiar foto y enviarla
   GET    /api/hikvision/dispositivos/<id>/empleados/<trab_id>/rostro   rostro que tiene el lector
@@ -24,13 +26,15 @@ import hashlib
 from flask import Response, current_app, jsonify, request
 
 from app.extensions import db, limiter
-from app.models import SyncEmpleadoHikvision, Trabajador, _now_utc
+from app.models import SyncEmpleadoHikvision, TareaHikvision, Trabajador, _now_utc
 from app.realtime import emit_to_role
 from app.routes.api_trabajadores._core import _save_foto
-from app.routes._api_helpers import api_transactional, require_admin
+from app.routes._api_helpers import api_transactional, current_user, require_admin
 from app.routes.api_auth import jwt_required
 from app.services.hikvision import ClienteHikvision, ErrorFoto, ErrorHikvision
+from app.services.hikvision import tareas as svc_tareas
 from app.services.hikvision import usuarios as svc_usuarios
+from app.services.hikvision.sincronizar import sincronizar_lote, sincronizar_uno
 from app.utils import allowed_image_file, log_action
 
 from ._core import (
@@ -42,10 +46,15 @@ from ._core import (
     sync_por_trabajador,
 )
 
-# Tope por llamada. Cada empleado son varias peticiones al equipo (consulta,
-# alta, foto, verificación), así que una tanda enorme agotaría el timeout de
-# gunicorn antes de terminar.
-MAX_POR_TANDA = 50
+# Tope por llamada. Las tandas grandes ya no corren dentro de la petición (ver
+# `sincronizar`), así que el límite solo acota el tamaño de una tarea.
+MAX_POR_TANDA = 500
+# Hasta cuántos empleados se sincroniza en la misma petición. ~3.6 s cada uno
+# contra el equipo real: 5 caben con holgura en el límite de gunicorn.
+SINCRONO_MAX = 5
+
+# La cambiar_foto de abajo reutiliza la sincronización de UN empleado.
+_sincronizar_uno = sincronizar_uno
 
 
 @bp.route('/dispositivos/<int:dispositivo_id>/empleados', methods=['GET'])
@@ -79,131 +88,6 @@ def listar_empleados(dispositivo_id):
     })
 
 
-def _sincronizar_uno(cli, dispositivo, trabajador, estados, caps, *,
-                     foto: tuple[bytes, str] | None = None,
-                     marcar_error: bool = True) -> dict:
-    """Sincroniza a UN empleado. Nunca lanza: devuelve el resultado de su intento.
-
-    Que no lance es la razón de que una foto mala de una persona no cancele la
-    tanda entera de las demás.
-
-    `foto` = (jpeg, hash) ya preparados, para enviar una foto que todavía no es
-    la de perfil. `marcar_error=False` no toca la fila si falla: al probar una
-    foto nueva, que el lector la rechace no significa que el registro que ya
-    tenía haya dejado de funcionar.
-    """
-    resultado = {
-        'trabajador_id': trabajador.id,
-        'no_empleado': trabajador.no_empleado,
-        'nombre_completo': trabajador.nombre_completo,
-        'ok': False,
-        'estado': 'ERROR',
-        'accion': '',
-        'error': '',
-    }
-
-    fila = estados.get(trabajador.id)
-    try:
-        employee_no = svc_usuarios.employee_no_de(trabajador, maximo=caps['employee_no_max'])
-
-        # Se prepara la foto ANTES de tocar el equipo: si no se puede leer ni
-        # convertir, no se le crea el usuario.
-        jpeg, hash_foto = foto or svc_usuarios.preparar_foto(trabajador)
-
-        accion = svc_usuarios.crear_o_actualizar(
-            cli, trabajador, employee_no, nombre_max=caps['nombre_max'],
-        )
-
-        # Desde aquí el usuario YA existe en el equipo. Que la foto se haya
-        # convertido bien no garantiza que el lector pueda modelar el rostro:
-        # eso lo decide su motor facial, y lo hace DESPUÉS del alta. Si falla,
-        # quedaría un usuario sin cara —inútil en un lector facial y confuso al
-        # auditar el equipo—, así que se revierte.
-        #
-        # Solo se revierte lo que esta llamada creó. Si el usuario ya existía,
-        # borrarlo destruiría un registro que hasta hace un momento funcionaba,
-        # y una foto nueva mala no es razón para dejar a alguien fuera.
-        try:
-            svc_usuarios.subir_rostro(cli, employee_no, jpeg)
-
-            # Verificación explícita contra el equipo: sin esto daríamos por
-            # buena una sincronización que el lector pudo no haber completado.
-            if not svc_usuarios.tiene_rostro(cli, employee_no):
-                raise ErrorHikvision(
-                    'El lector aceptó la fotografía pero no la registró. Inténtalo de nuevo.',
-                    detalle=f'FDSearch sin coincidencias tras subir el rostro de {employee_no}',
-                )
-        except ErrorHikvision:
-            if accion == 'creado':
-                try:
-                    svc_usuarios.eliminar(cli, employee_no)
-                except ErrorHikvision as e_limpieza:
-                    # La reversión es best-effort: si tampoco se puede borrar,
-                    # se deja constancia en el log y gana el error original,
-                    # que es el que explica qué hay que arreglar.
-                    current_app.logger.warning(
-                        'Hikvision: no se pudo revertir el alta de %s tras fallar el '
-                        'rostro: %s', employee_no, e_limpieza.detalle,
-                    )
-            raise
-
-        # Si el número de empleado cambió en el ERP, el lector acaba de recibir
-        # un usuario NUEVO con el número nuevo y todavía tiene el viejo. Sin
-        # esto quedaría una segunda identidad de la misma persona en el equipo
-        # que el ERP ya no puede ver ni quitar.
-        if (fila is not None and fila.estado == 'SINCRONIZADO'
-                and fila.employee_no_remoto != employee_no):
-            try:
-                svc_usuarios.eliminar(cli, fila.employee_no_remoto)
-            except ErrorHikvision as e_viejo:
-                current_app.logger.warning(
-                    'Hikvision: no se pudo quitar el número anterior %s de trab=%s: %s',
-                    fila.employee_no_remoto, trabajador.id, e_viejo.detalle,
-                )
-
-        if fila is None:
-            fila = SyncEmpleadoHikvision(
-                dispositivo_id=dispositivo.id,
-                trabajador_id=trabajador.id,
-                employee_no_remoto=employee_no,
-            )
-            db.session.add(fila)
-            estados[trabajador.id] = fila
-
-        fila.employee_no_remoto = employee_no
-        fila.estado = 'SINCRONIZADO'
-        fila.hash_datos = svc_usuarios.huella_datos(trabajador, employee_no)
-        fila.hash_foto = hash_foto
-        # Con `foto` explícita la key aún no existe: la fija quien la guarda.
-        fila.foto_key = None if foto else trabajador.foto_perfil
-        fila.ultimo_error = None
-        fila.ultimo_intento = _now_utc()
-        fila.sincronizado_en = _now_utc()
-
-        resultado.update(ok=True, estado='SINCRONIZADO', accion=accion)
-
-    except ErrorHikvision as e:
-        current_app.logger.warning(
-            'Hikvision sync disp=%s trab=%s: %s', dispositivo.id, trabajador.id, e.detalle,
-        )
-        resultado['error'] = e.mensaje
-        if not marcar_error:
-            return resultado
-        if fila is None:
-            fila = SyncEmpleadoHikvision(
-                dispositivo_id=dispositivo.id,
-                trabajador_id=trabajador.id,
-                employee_no_remoto=(trabajador.no_empleado or '')[:32] or '?',
-            )
-            db.session.add(fila)
-            estados[trabajador.id] = fila
-        fila.estado = 'ERROR'
-        fila.ultimo_error = e.mensaje[:500]
-        fila.ultimo_intento = _now_utc()
-
-    return resultado
-
-
 @bp.route('/dispositivos/<int:dispositivo_id>/sincronizar', methods=['POST'])
 @jwt_required
 @limiter.limit('10 per minute')
@@ -213,7 +97,11 @@ def sincronizar(dispositivo_id):
 
     Body: {"trabajador_ids": [1, 2, 3]}
 
-    Si uno falla, los demás siguen. La respuesta trae el detalle por persona.
+    Hasta `SINCRONO_MAX` empleados se sincroniza aquí mismo y la respuesta
+    (200) trae el detalle por persona. Más que eso no cabe en el límite de
+    gunicorn (~3.6 s por persona contra el equipo real): se crea una tarea que
+    ejecuta el proceso de escucha y se responde 202 con ella; el avance llega
+    por Socket.IO (`hikvision:tarea`) y el detalle con GET /tareas/<id>.
     """
     err = require_admin()
     if err:
@@ -233,76 +121,72 @@ def sincronizar(dispositivo_id):
             'Divide la selección en varias tandas.', 422,
         )
     try:
-        ids = {int(i) for i in ids}
+        ids = sorted({int(i) for i in ids})
     except (TypeError, ValueError):
         return error('La lista de empleados contiene valores inválidos.', 422)
 
-    # Se re-filtra contra la MISMA condición del listado. Un id que no salga de
-    # aquí es alguien que no es de oficina, está dado de baja, o no existe —
-    # da igual lo que haya mandado el cliente.
-    permitidos = candidatos_query().filter(Trabajador.id.in_(ids)).all()
-    encontrados = {t.id for t in permitidos}
-    rechazados = [
-        {
-            'trabajador_id': i, 'ok': False, 'estado': 'RECHAZADO',
-            'error': 'No es personal de oficina activo, o no existe.',
-        }
-        for i in sorted(ids - encontrados)
-    ]
+    if len(ids) > SINCRONO_MAX:
+        tarea = svc_tareas.encolar(d, ids, creado_por_id=current_user().id)
+        db.session.commit()
+        svc_tareas.avisar(tarea)
+        return jsonify({'ok': True, 'tarea': tarea.to_dict()}), 202
 
-    # Sin fotografía no se intenta siquiera: se reporta y se sigue.
-    from app.services.hikvision import fotos as svc_fotos
-    con_foto = [t for t in permitidos if svc_fotos.tiene_foto(t)]
-    sin_foto = [
-        {
-            'trabajador_id': t.id, 'no_empleado': t.no_empleado,
-            'nombre_completo': t.nombre_completo, 'ok': False, 'estado': 'SIN_FOTO',
-            'error': 'No tiene fotografía de perfil. Súbela en su ficha.',
-        }
-        for t in permitidos if not svc_fotos.tiene_foto(t)
-    ]
-
-    resultados = []
-    estados = sync_por_trabajador(d.id)
-
-    if con_foto:
-        try:
-            with ClienteHikvision.desde_dispositivo(d) as cli:
-                caps = cli.capacidades_usuario()
-                for t in con_foto:
-                    resultados.append(_sincronizar_uno(cli, d, t, estados, caps))
-        except ErrorHikvision as e:
-            # Falla la CONEXIÓN, no un empleado: no tiene sentido seguir.
-            current_app.logger.warning('Hikvision sincronizar(%s): %s', d.id, e.detalle)
-            d.ultimo_estado = 'ERROR'
-            d.ultimo_error = e.mensaje
-            d.ultima_conexion = _now_utc()
-            db.session.commit()
-            return jsonify({'ok': False, 'error': e.mensaje}), 502
-
-    resultados.extend(sin_foto)
-    resultados.extend(rechazados)
+    try:
+        respuesta = sincronizar_lote(d, ids)
+    except ErrorHikvision as e:
+        # Falla la CONEXIÓN, no un empleado: no tiene sentido seguir.
+        current_app.logger.warning('Hikvision sincronizar(%s): %s', d.id, e.detalle)
+        db.session.rollback()
+        d.ultimo_estado = 'ERROR'
+        d.ultimo_error = e.mensaje
+        d.ultima_conexion = _now_utc()
+        db.session.commit()
+        return jsonify({'ok': False, 'error': e.mensaje}), 502
 
     d.ultimo_estado = 'OK'
     d.ultimo_error = None
     d.ultima_conexion = _now_utc()
     db.session.commit()
 
-    ok = sum(1 for r in resultados if r['ok'])
-    fallos = len(resultados) - ok
+    resumen = respuesta['resumen']
     log_action(
-        f'Sincronizó {ok} empleado(s) con el lector "{d.nombre}" '
-        f'({d.host}:{d.puerto}); {fallos} sin sincronizar'
+        f'Sincronizó {resumen["sincronizados"]} empleado(s) con el lector "{d.nombre}" '
+        f'({d.host}:{d.puerto}); {resumen["fallidos"]} sin sincronizar'
     )
     db.session.commit()
     emit_to_role(['admin', 'super_admin'], 'hikvision:changed', {
         'dispositivo_id': d.id, 'action': 'sincronizado',
     })
+    return jsonify(respuesta)
 
+
+@bp.route('/tareas/<int:tarea_id>', methods=['GET'])
+@jwt_required
+def obtener_tarea(tarea_id):
+    """Estado de una sincronización en segundo plano, con el detalle al terminar."""
+    err = require_admin()
+    if err:
+        return err
+    tarea = db.get_or_404(TareaHikvision, tarea_id)
+    return jsonify(tarea.to_dict(con_resultados=tarea.estado in ('TERMINADA', 'ERROR')))
+
+
+@bp.route('/dispositivos/<int:dispositivo_id>/tareas', methods=['GET'])
+@jwt_required
+def listar_tareas(dispositivo_id):
+    """Tareas en curso o en cola del lector (para retomar el progreso al recargar)."""
+    err = require_admin()
+    if err:
+        return err
+    d = obtener_dispositivo_o_404(dispositivo_id)
+    activas = TareaHikvision.query.filter(
+        TareaHikvision.dispositivo_id == d.id,
+        TareaHikvision.estado.in_(['PENDIENTE', 'EN_CURSO']),
+    ).order_by(TareaHikvision.id).all()
     return jsonify({
-        'ok': fallos == 0,
-        'resultados': resultados,
-        'resumen': {'sincronizados': ok, 'fallidos': fallos, 'total': len(resultados)},
+        'items': [t.to_dict() for t in activas],
+        # Si la escucha no corre, las tareas no avanzan: la pantalla lo dice.
+        'trabajador_activo': d.estado_escucha()['en_vivo'],
     })
 
 

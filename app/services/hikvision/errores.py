@@ -40,12 +40,39 @@ class ErrorConexion(ErrorHikvision):
 class ErrorAutenticacion(ErrorHikvision):
     """El equipo respondió 401. Usuario o contraseña incorrectos.
 
-    OJO: Hikvision bloquea la cuenta ~30 min tras varios intentos fallidos, así
-    que ante este error NUNCA se reintenta automáticamente.
+    OJO: Hikvision bloquea la cuenta tras varios intentos fallidos (5 por
+    defecto, `IllegalLoginLock`), así que ante este error NUNCA se reintenta
+    automáticamente.
+
+    Si el equipo lo informa en la respuesta (`retryTimes`, `resLockTime`,
+    `lockStatus`), quedan en `intentos_restantes`, `segundos_bloqueo` y
+    `bloqueado`; si no, son None. La escucha los usa para detenerse ANTES de
+    agotar los intentos.
     """
     mensaje_por_defecto = (
         'El lector rechazó las credenciales. Verifica el usuario y la contraseña.'
     )
+
+    def __init__(self, mensaje: str = '', detalle: str = '', *,
+                 intentos_restantes: int | None = None,
+                 segundos_bloqueo: int | None = None,
+                 bloqueado: bool = False):
+        if not mensaje:
+            if bloqueado:
+                minutos = max(1, round((segundos_bloqueo or 0) / 60)) if segundos_bloqueo else None
+                mensaje = (
+                    'El lector bloqueó la cuenta por demasiados intentos fallidos'
+                    + (f'; se desbloquea en unos {minutos} min.' if minutos else '.')
+                )
+            elif intentos_restantes is not None:
+                mensaje = (
+                    'El lector rechazó la contraseña. '
+                    f'Quedan {intentos_restantes} intento(s) antes de que bloquee la cuenta.'
+                )
+        super().__init__(mensaje, detalle)
+        self.intentos_restantes = intentos_restantes
+        self.segundos_bloqueo = segundos_bloqueo
+        self.bloqueado = bloqueado
 
 
 class ErrorDispositivo(ErrorHikvision):

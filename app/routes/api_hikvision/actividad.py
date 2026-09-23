@@ -28,6 +28,7 @@ from app.routes._api_helpers import api_transactional, require_admin
 from app.routes.api_auth import jwt_required
 from app.services.hikvision import ClienteHikvision, ErrorHikvision, asistencia, ingesta
 from app.services.hikvision import eventos as svc_eventos
+from app.services.hikvision.escucha import avisar_puerta
 
 from ._core import bp, error, obtener_dispositivo_o_404
 
@@ -150,6 +151,7 @@ def sincronizar_eventos(dispositivo_id):
     checadas = asistencia.aplicar_eventos(nuevos)
     db.session.commit()
     asistencia.avisar_cambios(checadas)
+    avisar_puerta(d.id, nuevos)
 
     if nuevos:
         emit_to_role(['admin', 'super_admin'], 'hikvision:evento', {

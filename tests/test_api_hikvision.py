@@ -31,6 +31,24 @@ def _hdr(user):
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def sin_red(monkeypatch):
+    """Ninguna prueba habla con un lector de verdad.
+
+    El fixture `lector` usa la IP del equipo real de la oficina; sin esto, una
+    prueba mal aislada le mandaría credenciales falsas y cada intento cuenta
+    para el bloqueo de la cuenta. Cualquier petición que no pase por un doble
+    revienta aquí con un mensaje claro.
+    """
+    import httpx
+    from app.services.hikvision.client import ClienteHikvision
+
+    def prohibido(request):
+        raise AssertionError(f'La prueba intentó hablar con un lector real: {request.url}')
+
+    monkeypatch.setattr(ClienteHikvision, 'transporte', httpx.MockTransport(prohibido))
+
+
 @pytest.fixture
 def admin(db):
     u = User(username='hik_admin', password_hash=generate_password_hash('Pass123!'), role='admin')
@@ -125,6 +143,8 @@ def cliente_falso(monkeypatch):
 
     monkeypatch.setattr(mod_disp, 'ClienteHikvision', ClienteFalso)
     monkeypatch.setattr(mod_sync, 'ClienteHikvision', ClienteFalso)
+    from app.services.hikvision import sincronizar as svc_sincronizar
+    monkeypatch.setattr(svc_sincronizar, 'ClienteHikvision', ClienteFalso)
 
     def crear_o_actualizar(cli, t, emp, **kw):
         ClienteFalso.creados.append(emp)
@@ -699,6 +719,18 @@ class ClienteEquipo(ClienteFalso):
 
     def capacidad(self):
         return {'usuarios': 3, 'con_rostro': 2, 'max_usuarios': 1500, 'max_rostros': 1500}
+
+    ntp_configurado: dict = {'servidor': '', 'intervalo_min': 0}
+
+    def ntp(self):
+        return dict(ClienteEquipo.ntp_configurado)
+
+    def configurar_ntp(self, servidor, intervalo_min=60):
+        ClienteEquipo.ntp_configurado = {'servidor': servidor, 'intervalo_min': intervalo_min}
+        return self.hora_dispositivo()
+
+    def red(self):
+        return {'direccionamiento': 'static', 'ip': '192.168.1.159'}
 
     def descargar(self, ruta):
         return b'\xff\xd8captura'
@@ -1345,3 +1377,128 @@ def test_la_escucha_pasa_los_accesos_a_horas(app, db, lector, oficinista, monkey
     e.max_serial = 10
     e.atender_parte(None, _aviso(11))
     assert _registro(oficinista).hora_salida.strftime('%H:%M') == '17:00'
+
+
+# ─── Estado de la puerta en vivo ──────────────────────────────────────────────
+
+def test_ultimo_estado_puerta_toma_el_evento_mas_reciente(db, lector):
+    from app.services.hikvision.eventos import ultimo_estado_puerta
+    nuevos = _ingresar(db, lector, [
+        _acceso(20, 'OF1', '2026-09-24T08:00:00'),                   # acceso: no es puerta
+        _acceso(21, '', '2026-09-24T08:00:01', minor=21),
+        _acceso(22, '', '2026-09-24T08:00:06', minor=22),
+    ])
+    assert ultimo_estado_puerta(nuevos) == {'cerradura': 'Cerrada', 'hora': '2026-09-24T08:00:06-06:00'}
+    assert ultimo_estado_puerta(nuevos[:2])['cerradura'] == 'Abierta'
+    assert ultimo_estado_puerta(nuevos[:1]) is None
+
+
+def test_la_escucha_avisa_cuando_cambia_la_cerradura(app, db, lector, monkeypatch):
+    from app.services.hikvision import escucha as mod_escucha
+    from app.services.hikvision import eventos as svc_eventos
+    monkeypatch.setattr(svc_eventos, 'desde_serial',
+                        lambda cli, ultimo: [_acceso(31, '', '2026-09-24T09:00:00', minor=21)])
+    monkeypatch.setattr(mod_escucha, '_avisar', lambda *a: None)
+    emitidos = []
+    import app.realtime as rt
+    monkeypatch.setattr(rt, 'emit_to_role', lambda roles, ev, carga: emitidos.append((ev, carga)))
+    _ingresar(db, lector, [_acceso(30, '', '2026-09-24T08:59:00', minor=22)])
+
+    e = mod_escucha.EscuchaLector(app, lector.id)
+    e.max_serial = 30
+    e.atender_parte(None, _aviso(31))
+    assert ('hikvision:puerta', {'dispositivo_id': lector.id, 'cerradura': 'Abierta',
+                                 'hora': '2026-09-24T09:00:00-06:00'}) in emitidos
+
+
+# ─── Ficha del lector: ubicación, notas y foto ────────────────────────────────
+
+@pytest.fixture
+def almacen(monkeypatch):
+    """Almacenamiento en memoria: las pruebas NO deben subir nada a R2."""
+    from flask import Response
+    from app.routes.api_hikvision import dispositivos as mod_disp
+    guardado = {}
+
+    monkeypatch.setattr(mod_disp.archivos, 'guardar',
+                        lambda key, data, ct=None: guardado.__setitem__(key, data) or False)
+    monkeypatch.setattr(mod_disp.archivos, 'eliminar', lambda key: guardado.pop(key, None))
+    monkeypatch.setattr(mod_disp.archivos, 'enviar',
+                        lambda key, mimetype=None, **kw: Response(guardado[key], mimetype=mimetype)
+                        if key in guardado else None)
+    return guardado
+
+
+def test_alta_con_ubicacion_y_notas(client, admin, db):
+    r = client.post('/api/hikvision/dispositivos', headers=_hdr(admin), json={
+        'nombre': 'Recepción', 'host': '192.168.1.200', 'usuario': 'admin', 'password': 'x',
+        'ubicacion': 'Planta baja, puerta principal', 'notas': '  ',
+    })
+    assert r.status_code == 201
+    cuerpo = r.get_json()
+    assert cuerpo['ubicacion'] == 'Planta baja, puerta principal'
+    assert cuerpo['notas'] == ''                 # solo espacios = sin notas
+    assert cuerpo['tiene_foto'] is False
+
+    r = client.put(f"/api/hikvision/dispositivos/{cuerpo['id']}", headers=_hdr(admin),
+                   json={'notas': 'Lo instaló TI en 2026'})
+    assert r.get_json()['notas'] == 'Lo instaló TI en 2026'
+    assert r.get_json()['ubicacion'] == 'Planta baja, puerta principal'   # no se tocó
+
+
+def test_ubicacion_demasiado_larga(client, admin, lector):
+    r = client.put(f'/api/hikvision/dispositivos/{lector.id}', headers=_hdr(admin),
+                   json={'ubicacion': 'x' * 121})
+    assert r.status_code == 422
+
+
+def test_foto_del_lector_subir_ver_cambiar_y_quitar(client, admin, db, lector, almacen):
+    r = client.post(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(admin),
+                    data={'foto': (_png(), 'lector.png')}, content_type='multipart/form-data')
+    assert r.status_code == 200, r.get_json()
+    primera = r.get_json()
+    assert primera['tiene_foto'] is True and primera['foto_version']
+    [key] = list(almacen)
+    assert key.startswith('lectores/') and almacen[key][:4] == b'RIFF'     # WebP
+
+    r = client.get(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(admin))
+    assert r.status_code == 200 and r.mimetype == 'image/webp'
+
+    # Cambiarla borra la anterior (después de guardar la nueva).
+    import time as _t
+    _t.sleep(1.1)
+    r = client.post(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(admin),
+                    data={'foto': (_png(), 'otra.png')}, content_type='multipart/form-data')
+    assert r.get_json()['foto_version'] != primera['foto_version']
+    assert len(almacen) == 1 and key not in almacen
+
+    r = client.delete(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(admin))
+    assert r.get_json()['tiene_foto'] is False and almacen == {}
+    r = client.get(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(admin))
+    assert r.status_code == 404
+
+
+def test_foto_del_lector_rechaza_lo_que_no_es_imagen(client, admin, lector, almacen):
+    import io
+    r = client.post(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(admin),
+                    data={'foto': (io.BytesIO(b'no soy imagen'), 'x.png')},
+                    content_type='multipart/form-data')
+    assert r.status_code == 422 and almacen == {}
+
+
+def test_coordinador_no_sube_foto_del_lector(client, coord, lector, almacen):
+    r = client.post(f'/api/hikvision/dispositivos/{lector.id}/foto', headers=_hdr(coord),
+                    data={'foto': (_png(), 'lector.png')}, content_type='multipart/form-data')
+    assert r.status_code == 403
+
+
+def test_lista_trae_resumen_sin_tocar_el_lector(client, admin, db, lector):
+    t = _trab(db, 'OF1', 'Ana')
+    _fila_sincronizada(db, lector, t)
+    _ingresar(db, lector, [_evento(75, 1, 'OF1', hace_min=0), _evento(76, 2, 'X', hace_min=0)])
+
+    r = client.get('/api/hikvision/dispositivos', headers=_hdr(admin))
+    [item] = r.get_json()['items']
+    assert item['resumen']['empleados'] == 1
+    assert item['resumen']['accesos_hoy'] == 1         # el rechazo no cuenta
+    assert item['resumen']['ultimo_acceso']['nombre'] == 'Ana'
