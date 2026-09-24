@@ -22,3 +22,5 @@ backups/
 # la variable DESPLIEGUE_ACTIVO). Instrucciones en docs/DESPLIEGUE_CI.md.
 .github/
 docs/DESPLIEGUE_CI.md
+
+

@@ -343,6 +343,45 @@ sentido contrario.
 
 ---
 
+## Escucha de lectores Hikvision (`hikvision-escucha`)
+
+Servicio aparte, con la misma imagen que la API, que corre
+`flask hikvision escuchar`. Mantiene abierta la conexión de eventos
+(`alertStream`) de cada lector activo, guarda cada acceso en
+`hikvision_eventos` y avisa al navegador por Socket.IO a través de Redis. La
+pantalla de actividad lee de esa tabla: abrirla no le pregunta nada al lector.
+
+- **Una sola instancia activa.** Toma un candado en Redis
+  (`hikvision:escucha:lider`); si por error se levanta una segunda, queda en
+  espera y toma el relevo solo si la primera muere (≤ 90 s). Sin Redis se
+  degrada a «siempre activa» con un aviso en el log.
+- **También ejecuta las sincronizaciones grandes** de empleados (más de 5):
+  la API las encola en `hikvision_tareas` y este servicio las corre con avance
+  en vivo. Si no está corriendo, esperan en cola.
+- **Vigila y alerta a los admins** (notificación, sin repetir): más de 5 min
+  sin conexión, contraseña rechazada (y se detiene antes de bloquear la
+  cuenta), otro equipo en la misma IP, firmware nuevo, reinicio de la
+  numeración de eventos (abre una «época» nueva sin perder nada), reloj
+  desfasado más de 1 min e IP dinámica. Todo queda en
+  `hikvision_escucha_sucesos` y se ve en Lectores → Equipo → Salud.
+- **Retención** diaria: eventos 12 meses (`HIKVISION_RETENCION_MESES`),
+  sucesos 90 días, tareas terminadas 30 días. A mano: `flask hikvision purgar`.
+- **Red:** necesita llegar a los lectores igual que la API (misma LAN o VPN).
+- **Si se cae:** la pantalla muestra «Sin tiempo real». Al volver se pone al
+  día sola desde el último evento guardado, sin perder nada. Mientras tanto,
+  el botón «Traer eventos» o `flask hikvision al-dia` hacen la misma ingesta
+  una vez.
+- **Producción:** la migración `hikv2026c` tiene que estar aplicada antes de
+  levantarlo (las migraciones son un paso aparte, ver arriba).
+
+```bash
+docker compose logs -f hikvision-escucha            # conectado / eventos nuevos
+docker compose restart hikvision-escucha
+docker compose exec api flask hikvision al-dia      # ingesta manual, una vez
+```
+
+---
+
 ## Respaldos con la base en contenedor
 
 El paso de respaldo del CI usa `pg_dump` del host contra `DATABASE_URL`. Con

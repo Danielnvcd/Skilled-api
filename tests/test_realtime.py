@@ -168,7 +168,22 @@ EVENTOS_ESPERADOS = {
     'asignacion:changed',
     'baja:changed', 'bitacora:new', 'compra:changed', 'credencial:changed',
     'documento:changed', 'empleado:changed', 'estante:changed',
-    'herramienta:changed', 'incidencia:changed', 'mantenimiento:changed',
+    'herramienta:changed',
+    # Sincronización de empleados con un lector biométrico Hikvision. Solo
+    # lleva el id del dispositivo; la pantalla recarga la lista por REST.
+    'hikvision:changed',
+    # Acceso nuevo guardado por la escucha en tiempo real (o por «Traer
+    # eventos»). Trae los últimos eventos, pero la pestaña de actividad lo usa
+    # solo para invalidar y recargar desde la base.
+    'hikvision:evento',
+    # Cambio de la cerradura (21 desbloqueada / 22 bloqueada) que reporta el
+    # lector por el stream. La pantalla de la puerta y el botón de la barra
+    # superior se actualizan con él, sin recargar.
+    'hikvision:puerta',
+    # Avance de una sincronización en segundo plano (la ejecuta el proceso de
+    # escucha). La pestaña Empleados muestra la barra de progreso con él.
+    'hikvision:tarea',
+    'incidencia:changed', 'mantenimiento:changed',
     'movimiento:changed', 'nota:changed', 'notif:new', 'notif:read',
     'notif:read_all', 'prenomina:changed', 'prestamo:changed',
     'producto:changed', 'producto:imagen_progreso', 'proyecto:changed',

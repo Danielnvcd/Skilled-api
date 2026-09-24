@@ -105,6 +105,50 @@ services:
       - --capture-output
       - run:app
 
+  # Escucha en tiempo real de los lectores Hikvision (ver
+  # app/services/hikvision/escucha.py). Mantiene abierta la conexión de
+  # eventos de cada lector, guarda cada acceso en `hikvision_eventos` y avisa
+  # al navegador por Socket.IO (vía Redis). UNA sola réplica: dos no duplican
+  # eventos, pero sí conexiones al lector.
+  hikvision-escucha:
+    build:
+      context: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?falta POSTGRES_USER en .env}:${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:?falta POSTGRES_DB en .env}
+      REDIS_URL: redis://redis:6379/0
+      # Hilos normales: este proceso no atiende WebSockets, solo publica en
+      # Redis. `gevent` sin el monkey-patch de Gunicorn no funcionaría aquí.
+      SOCKETIO_ASYNC_MODE: threading
+      TZ: America/Mexico_City
+    volumes:
+      - .:/app
+      - /app/venv
+    depends_on:
+      # Tras la API y no solo tras la base: en desarrollo es la API quien
+      # aplica las migraciones al arrancar, y la tabla de eventos tiene que
+      # existir antes de que la escucha guarde nada.
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["flask", "hikvision", "escuchar"]
+    # El healthcheck de la imagen pregunta por /health de la API, que aquí no
+    # existe. Este mira lo que importa: que cada lector activo tenga latido de
+    # hace menos de 90 s. «unhealthy» = algún lector sin tiempo real (apagado,
+    # sin red o con la contraseña cambiada), no necesariamente el proceso caído.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import os,sys,sqlalchemy as sa; e=sa.create_engine(os.environ['DATABASE_URL']); n=e.connect().execute(sa.text(\"SELECT count(*) FROM hikvision_dispositivos WHERE activo AND (escucha_latido IS NULL OR escucha_latido < now() - interval '90 seconds')\")).scalar(); sys.exit(1 if n else 0)"
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
   db:
     # Misma versión mayor que producción (el VPS corre PostgreSQL 18): así un
     # dump de prod se puede restaurar aquí para depurar sin sorpresas.

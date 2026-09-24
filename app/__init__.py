@@ -240,7 +240,7 @@ def create_app():
         api_auth, api_trabajadores, api_proyectos, api_notificaciones, api_horas,
         api_prenomina, api_prestamos, api_ajustes, api_proyecto_total,
         api_historico, api_users, api_dashboard, api_bitacora, api_metricas,
-        api_search, api_sistemas,
+        api_search, api_sistemas, api_hikvision,
     )
 
     # ── API JWT (siempre activa — es lo que consume el SPA React en Vercel) ──
@@ -252,6 +252,7 @@ def create_app():
         api_prenomina, api_prestamos, api_ajustes, api_proyecto_total,
         api_historico, api_users, api_dashboard, api_bitacora, api_metricas,
         inventario_api, herramientas_api, api_search, api_sistemas,
+        api_hikvision,
     )
     for mod in _api_modules:
         csrf.exempt(mod.bp)
@@ -421,5 +422,8 @@ def create_app():
     # para que SocketIO vea los headers X-Forwarded-* corregidos al validar
     # el origen del handshake.
     init_socketio(app)
+
+    from app.cli_hikvision import hikvision_cli
+    app.cli.add_command(hikvision_cli)
 
     return app
