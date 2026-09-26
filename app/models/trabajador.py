@@ -38,13 +38,6 @@ class Trabajador(db.Model):
     termino_prueba = db.Column(db.Date)
     fecha_baja = db.Column(db.Date)
     activo = db.Column(db.Boolean, default=True, index=True)
-    # Personal de oficina: marca explícita de quién puede darse de alta en un
-    # lector biométrico. Es un campo propio y no un filtro sobre `area` porque
-    # `area` es texto libre y ya trae capturas divergentes (PROYECTOS vs
-    # PROYECTOSs, ADMINISTRACION vs ADMINISTRATIVO): derivar de ahí quién checa
-    # haría que un error de dedo cambiara los permisos del lector.
-    es_oficina = db.Column(db.Boolean, nullable=False, default=False,
-                           server_default='false', index=True)
 
     # Datos Personales Generales
     curp = db.Column(db.String(18))

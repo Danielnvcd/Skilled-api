@@ -19,12 +19,8 @@ class Notificacion(db.Model):
     usuario = db.relationship('User', foreign_keys=[usuario_id])
 
 
-def crear_notif_admins(tipo, titulo, mensaje, url=None, referencia=None):
-    """Crea una notificación para cada admin/super_admin. El caller debe hacer commit.
-
-    `referencia` (opcional) marca el origen para poder evitar duplicados; ver
-    `app/services/hikvision/vigilancia.py`.
-    """
+def crear_notif_admins(tipo, titulo, mensaje, url=None):
+    """Crea una notificación para cada admin/super_admin. El caller debe hacer commit."""
     admins = User.query.filter(
         User.role.in_(['admin', 'super_admin']),
     ).all()
@@ -35,7 +31,6 @@ def crear_notif_admins(tipo, titulo, mensaje, url=None, referencia=None):
             titulo=titulo,
             mensaje=mensaje,
             url=url,
-            referencia=referencia,
         ))
 
 

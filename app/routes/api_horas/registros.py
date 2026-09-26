@@ -106,13 +106,6 @@ def _validar_y_aplicar_registro(reg: RegistroDiarioHoras, payload: dict, *, trab
             tomo_comida=tomo_comida,
         )
 
-    # Si el lector puso estas horas y aquí cambian, el registro pasa a ser de
-    # quien lo editó: el lector ya no lo sobreescribe. Solo cuentan entrada y
-    # salida — marcar viáticos o comida no le quita las horas al lector — y
-    # solo si CAMBIAN: el guardado masivo reenvía también lo que no se tocó.
-    if reg.origen == 'LECTOR' and (reg.hora_entrada, reg.hora_salida) != (hora_entrada, hora_salida):
-        reg.origen = 'LECTOR_EDITADO'
-
     reg.hora_entrada = hora_entrada
     reg.hora_salida = hora_salida
     reg.tomo_comida = tomo_comida
