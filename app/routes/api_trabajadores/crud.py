@@ -445,10 +445,7 @@ def bulk_accion():
     action = (payload.get('action') or '').strip()
     raw_ids = payload.get('ids') or []
 
-    # `marcar_oficina` / `desmarcar_oficina` permiten capturar la marca de
-    # personal de oficina sobre la selección del listado (que ya trae filtro por
-    # área) en vez de abrir ficha por ficha.
-    if action not in ('baja', 'reactivar', 'marcar_oficina', 'desmarcar_oficina'):
+    if action not in ('baja', 'reactivar'):
         return jsonify({'error': 'Acción no válida'}), 422
     if not isinstance(raw_ids, list) or not raw_ids:
         return jsonify({'error': 'Lista de IDs vacía'}), 422
@@ -473,21 +470,12 @@ def bulk_accion():
                 continue
             t.activo = False
             t.fecha_baja = today
-        elif action == 'reactivar':
+        else:  # reactivar
             if t.activo:
                 skipped.append({'id': t.id, 'reason': 'ya_activo'})
                 continue
             t.activo = True
             t.fecha_baja = None
-        else:  # marcar_oficina / desmarcar_oficina
-            destino = action == 'marcar_oficina'
-            if bool(t.es_oficina) == destino:
-                skipped.append({
-                    'id': t.id,
-                    'reason': 'ya_es_oficina' if destino else 'ya_no_es_oficina',
-                })
-                continue
-            t.es_oficina = destino
         affected.append(t.id)
 
     if not affected:

@@ -84,9 +84,6 @@ def _registro_dict(reg: RegistroDiarioHoras) -> dict:
         'horas_productivas': float(reg.horas_productivas) if reg.horas_productivas is not None else 0.0,
         'client_record_id': reg.client_record_id,
         'modificado_en': reg.modificado_en.isoformat() if reg.modificado_en else None,
-        # 'LECTOR' | 'LECTOR_EDITADO' | None (manual/QR/kiosko). La pantalla lo
-        # usa para señalar las horas que puso el lector biométrico.
-        'origen': reg.origen,
     }
 
 

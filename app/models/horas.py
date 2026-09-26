@@ -64,12 +64,6 @@ class RegistroDiarioHoras(db.Model):
     client_record_id = db.Column(db.String(36), unique=True, nullable=True, index=True)
     modificado_en = db.Column(db.DateTime(timezone=True), default=_now_utc, onupdate=_now_utc)
 
-    # De dónde salieron entrada/salida. None = captura manual, QR o kiosko (lo
-    # de siempre). 'LECTOR' = las escribe el lector biométrico y las sigue
-    # actualizando con cada acceso del día. 'LECTOR_EDITADO' = alguien cambió
-    # a mano la hora que puso el lector: desde ahí el lector ya no la toca.
-    origen = db.Column(db.String(20), nullable=True)
-
     # Relaciones
     reporte = db.relationship('ReporteSemanal', backref=db.backref('registros', lazy=True, cascade="all, delete-orphan"))
     trabajador = db.relationship('Trabajador')
