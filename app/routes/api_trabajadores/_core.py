@@ -55,13 +55,6 @@ def apply_trabajador_filtros(query, args):
     tipo_pago = (args.get('tipo_pago') or '').strip()
     if tipo_pago:
         query = query.filter(Trabajador.tipo_pago == tipo_pago)
-    # Filtro de personal de oficina: lo usa la pantalla de empleados para
-    # revisar y capturar la marca en lote antes de sincronizar un lector.
-    es_oficina = (args.get('es_oficina') or '').strip().lower()
-    if es_oficina in ('1', 'true', 'yes', 'si'):
-        query = query.filter(Trabajador.es_oficina.is_(True))
-    elif es_oficina in ('0', 'false', 'no'):
-        query = query.filter(Trabajador.es_oficina.is_(False))
     if (args.get('sin_salario') or '').lower() in ('1', 'true', 'yes'):
         query = query.filter(or_(
             Trabajador.salario_real_pactado_x_sem == None,  # noqa: E711
@@ -169,7 +162,6 @@ def _row_summary(t: Trabajador) -> dict:
         'fecha_ingreso': t.fecha_ingreso.isoformat() if t.fecha_ingreso else None,
         'fecha_baja': t.fecha_baja.isoformat() if t.fecha_baja else None,
         'activo': t.activo,
-        'es_oficina': bool(t.es_oficina),
         'foto_perfil': t.foto_perfil,
     }
 
@@ -264,7 +256,6 @@ def _full_detail(t: Trabajador) -> dict:
         'foto_perfil': t.foto_perfil or '',
         'qr_code': t.qr_code or '',
         'activo': t.activo,
-        'es_oficina': bool(t.es_oficina),
         'credenciales': credenciales,
         'documentos': documentos,
     }
@@ -295,9 +286,6 @@ _ADMIN_ONLY_FIELDS = {
     'folio_mov_idse',
     # Contacto formal (admin)
     'correo',
-    # Marca de personal de oficina: decide quién puede darse de alta en un
-    # lector biométrico, así que es admin-only como el resto de lo laboral.
-    'es_oficina',
 }
 
 # Campos editables por coordinador (operativos / contacto en campo):
@@ -383,16 +371,6 @@ def _apply_payload(t: Trabajador, data, *, actor_is_admin: bool) -> list[str]:
     # Edad: int o None
     if 'edad' in editable and 'edad' in data:
         t.edad = data.get('edad') or None
-
-    # es_oficina: booleano. Los formularios HTML mandan 'true'/'on'/'1' como
-    # texto, así que se normaliza en vez de confiar en la verdad de Python
-    # (donde la cadena 'false' sería True).
-    if 'es_oficina' in editable and 'es_oficina' in data:
-        valor = data.get('es_oficina')
-        if isinstance(valor, str):
-            t.es_oficina = valor.strip().lower() in ('1', 'true', 'on', 'yes', 'si', 'sí')
-        else:
-            t.es_oficina = bool(valor)
 
     # Salario: float estricto
     if 'salario_real_pactado_x_sem' in editable and 'salario_real_pactado_x_sem' in data:
