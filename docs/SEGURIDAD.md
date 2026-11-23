@@ -21,6 +21,7 @@
 10. [Roadmap priorizado](#10-roadmap-priorizado)
 11. [Score final](#11-score-final)
 12. [Apéndices](#12-apéndices)
+13. [Controles vigentes e higiene continua](#13-controles-vigentes-e-higiene-continua)
 
 ---
 
@@ -924,6 +925,62 @@ PUT  /api/v1/categorias-config/<nombre> - mismo
 - JWT Best Practices RFC 8725: https://datatracker.ietf.org/doc/html/rfc8725
 - Cloudflare IPs: https://www.cloudflare.com/ips/
 - Vercel Headers: https://vercel.com/docs/edge-network/headers
+
+---
+
+## 13. Controles vigentes e higiene continua
+
+Resumen de lo que hoy está en código e infraestructura (antes vivía en el README).
+
+### Autenticación
+
+- **JWT** HS256 con `iss=skilled-erp-api` y `aud=skilled-erp-spa`. Access token corto + refresh rotativo en cookie httpOnly con detección de replay.
+- **2FA en dos pasos**: la contraseña devuelve un `stepToken` de un solo uso (con `jti` quemado en Redis) y solo con él se puede verificar el TOTP. El secreto se guarda cifrado con Fernet.
+- **Refresh proactivo en el SPA**: renueva el access token 60 s antes de expirar y re-evalúa al volver el foco a una pestaña inactiva (ver `plantilla-frontend/src/api/axios.js`).
+- **CSRF**: `/api/auth/refresh` y `/api/auth/logout` exigen `X-Requested-With: XMLHttpRequest` — el header custom fuerza preflight y bloquea POST cross-site desde un `<form>`.
+- **Lockout escalado** por IP y usuario en Redis (10 min → 24 h), y anti-replay de TOTP durante 90 s.
+- Cambiar la contraseña invalida los JWT en uso mediante `password_version`.
+
+### Autorización
+
+- **Whitelist de campos por rol** en `PUT /api/trabajadores/<id>`: el coordinador solo toca médicos y contacto, el admin los financieros y la PII fiscal; lo prohibido se ignora y vuelve en `warnings`.
+- **`/api/dashboard`**: solo admin y super_admin (filtra PII).
+- **`/api/auth/users`**: oculta `role`, `totp_enabled` y `last_seen` a los roles no admin.
+- **`/api/sistemas`**: exige rol `sistemas` o `super_admin` **y** 2FA activo, y marca todas sus respuestas como `no-store`.
+- Solo `super_admin` crea o elimina otros admins, y cambiarle la contraseña a un admin **no** le resetea el 2FA.
+
+### Archivos e inputs
+
+- Documentos de trabajador: PDF, JPG, PNG o HEIC, ≤ 20 MB, validados por magic bytes y no por extensión, y escaneados con ClamAV (`fail closed` en producción).
+- Imágenes externas: el host se resuelve y se rechaza si cae en red interna (anti-SSRF, incluidos redirects), tope de bytes y de píxeles, y reescritura completa a WebP con Pillow.
+- `imagen_url` solo acepta `https://` o paths `/static/...` locales; bloquea `javascript:`, `data:`, `http://` y `file:///`.
+- Prenómina valida `tipo` enum, `concepto` de 1 a 250 chars, `monto` ≤ $999,999.99 y `fecha_incidencia` no futura.
+
+### Infraestructura
+
+- Rate-limit en Nginx (`api_general` 30/s, `api_auth` 30/min) más Flask-Limiter por usuario/IP en Redis.
+- Gunicorn con `--forwarded-allow-ips=127.0.0.1` cierra el spoofing de `CF-Connecting-IP`.
+- `.env` con `chown root:sistemanominas` y `chmod 640`, no legible por otros usuarios del host.
+- Hardening systemd completo en `gunicorn.serviceee` (ProtectKernel*, RestrictAddressFamilies, CapabilityBoundingSet vacío, MemoryDenyWriteExecute).
+- Toda mutación relevante escribe en `audit_log` con usuario, IP y acción, y se empuja en vivo al panel de bitácora.
+
+### Pendientes operativos (no se resuelven desde el repo)
+
+1. **Rotar credenciales**: Postgres (`ALTER USER ... WITH PASSWORD '...'` y actualizar `DATABASE_URL`) y el App Password de Gmail (https://myaccount.google.com/apppasswords). Si `.env` llegó a commitearse: `git filter-repo --invert-paths --path .env --force && git push --force --all`.
+2. **Firewall del origin** (ufw): `deny 8000` desde cualquier origen que no sea localhost, para que filtrar la IP real no baste para saltarse Cloudflare.
+3. **DNS limpio**: `dig api.skilled.com.mx +short` debe devolver solo IPs de Cloudflare.
+4. **Cloudflare WAF**: Bot Fight Mode y rate-limit en `/api/auth/login` (5/min/IP).
+
+### Higiene continua
+
+| Tarea | Frecuencia | Comando |
+|---|---|---|
+| `pip-audit` | mensual | `pip-audit -r requirements.txt` |
+| `npm audit` | mensual | `cd plantilla-frontend && npm audit --production` |
+| Revisar bitácora | semanal | UI `/bitacora` o `SELECT * FROM audit_log WHERE action ILIKE '%fallido%' ORDER BY created_at DESC LIMIT 50;` |
+| Backup BD + archivos | diario | `pg_dump nominas \| gzip > backup_$(date +%F).sql.gz` |
+| Rotar `SECRET_KEY` | semestral | `python -c "import secrets; print(secrets.token_urlsafe(64))"` + restart |
+| Re-pentest externo | anual | — |
 
 ---
 
