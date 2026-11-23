@@ -8,6 +8,8 @@ API JSON en **Flask** que sirve al SPA Skilled ERP (React) para nóminas, emplea
 
 Los diagramas de abajo resumen las decisiones que más se notan en el día a día: por dónde entra una petición, cómo se reparte entre workers, qué pasa con los archivos y cómo llegan los cambios a la pantalla del usuario. El detalle escrito está en [`docs/RESUMEN_SISTEMA.md`](./docs/RESUMEN_SISTEMA.md) y [`docs/ARQUITECTURA.md`](./docs/ARQUITECTURA.md).
 
+> Los diagramas se generan con [`docs/diagramas/gen.js`](./docs/diagramas/gen.js) (Node, sin dependencias): `node docs/diagramas/gen.js <carpeta>` escribe un HTML por imagen, que luego se captura con Chrome headless (`--screenshot --force-device-scale-factor=2`).
+
 ### El camino de una petición y los contenedores
 
 ![Camino de una petición y stack de contenedores](static/Capturas/01-peticion-y-contenedores.png)
