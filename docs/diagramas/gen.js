@@ -31,6 +31,12 @@ function tile(name, x, y, s, color) {
     icon(name, x + pad, y + pad, s - pad * 2, color);
 }
 
+// Etiqueta de proceso: cuadro plano con el id en monoespaciada (W1, W2…)
+function tagTile(text, x, y, s) {
+  return `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="${s * 0.26}" fill="#1A2C4D" stroke="#3D6BC2"/>` +
+    `<text x="${x + s / 2}" y="${y + s / 2 + 5}" text-anchor="middle" class="tg">${esc(text)}</text>`;
+}
+
 // ---------- tarjetas ----------
 const STYLE = {
   normal: { fill: '#152034', stroke: '#2B3A55', title: '#F1F5FB', sub: '#93A4BF' },
@@ -39,26 +45,28 @@ const STYLE = {
   ghost: { fill: 'none', stroke: '#3B4C68', title: '#C5D2E6', sub: '#8597B3', dash: '5 5' },
 };
 // Tarjeta vertical: logo arriba, título y subtítulo centrados
-function vcard({ x, y, w, h = 112, title, sub, icons = [], kind = 'normal', colors = [], badge }) {
+function vcard({ x, y, w, h = 112, title, sub, icons = [], kind = 'normal', colors = [], badge, tag }) {
   const st = STYLE[kind];
   const s = 40, gap = 8;
   const total = icons.length * s + (icons.length - 1) * gap;
   let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.2" ${st.dash ? `stroke-dasharray="${st.dash}"` : ''}/>`;
+  if (tag) out += tagTile(tag, x + w / 2 - s / 2, y + 16, s);
   icons.forEach((n, i) => { out += tile(n, x + w / 2 - total / 2 + i * (s + gap), y + 16, s, colors[i]); });
-  const ty = icons.length ? y + 77 : y + h / 2 + (sub ? -4 : 5);
+  const ty = icons.length || tag ? y + 77 : y + h / 2 + (sub ? -4 : 5);
   out += `<text x="${x + w / 2}" y="${ty}" text-anchor="middle" class="t" fill="${st.title}">${esc(title)}</text>`;
   if (sub) out += `<text x="${x + w / 2}" y="${ty + 19}" text-anchor="middle" class="s" fill="${st.sub}">${esc(sub)}</text>`;
   if (badge) out += `<circle cx="${x + 16}" cy="${y + 16}" r="11" fill="#2F5BA8"/><text x="${x + 16}" y="${y + 20}" text-anchor="middle" class="b">${badge}</text>`;
   return out;
 }
 // Tarjeta horizontal: logo a la izquierda, texto a la derecha
-function hcard({ x, y, w, h = 76, title, sub, icon: ic, kind = 'normal', color, mono }) {
+function hcard({ x, y, w, h = 76, title, sub, icon: ic, kind = 'normal', color, mono, tag }) {
   const st = STYLE[kind];
   const s = 40;
   let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.2" ${st.dash ? `stroke-dasharray="${st.dash}"` : ''}/>`;
   const cy = y + h / 2;
   let tx = x + 18;
   if (ic) { out += tile(ic, x + 16, cy - s / 2, s, color); tx = x + 16 + s + 14; }
+  else if (tag) { out += tagTile(tag, x + 16, cy - s / 2, s); tx = x + 16 + s + 14; }
   if (sub) {
     out += `<text x="${tx}" y="${cy - 3}" class="${mono ? 'tm' : 't'}" fill="${st.title}">${esc(title)}</text>`;
     out += `<text x="${tx}" y="${cy + 16}" class="s" fill="${st.sub}">${esc(sub)}</text>`;
@@ -156,11 +164,11 @@ D.compose = () => {
 };
 
 D.workers = () => {
-  let b = group(0, 0, W, 124, 'GUNICORN · GEVENT', 'gunicorn');
+  let b = group(0, 0, W, 124, 'GUNICORN · 4 WORKERS GEVENT');
   const w = 245, gap = (W - 48 - 4 * w) / 3;
   for (let i = 0; i < 4; i++) {
     const x = 24 + i * (w + gap);
-    b += hcard({ x, y: 38, w, h: 70, title: `Worker ${i + 1}`, sub: '1000 conexiones', icon: 'gunicorn' });
+    b += hcard({ x, y: 38, w, h: 70, title: `Worker ${i + 1}`, sub: 'hasta 1000 conexiones', tag: `W${i + 1}` });
     b += vcurve(x + w / 2, 110, W / 2 - 60 + i * 40, 186, 'blue');
   }
   b += hcard({ x: W / 2 - 170, y: 190, w: 340, h: 80, title: 'Redis', sub: 'estado compartido entre procesos', icon: 'redis', kind: 'hl' });
@@ -256,7 +264,7 @@ D.metricas = () => {
 D.realtime = () => {
   let b = '';
   const y = 64, cy = y + 56;
-  b += vcard({ x: 0, y, w: 160, title: 'Worker 2', sub: 'hace el cambio', icons: ['gunicorn'] });
+  b += vcard({ x: 0, y, w: 160, title: 'Worker 2', sub: 'hace el cambio', tag: 'W2' });
   b += vcard({ x: 206, y, w: 170, title: 'Redis', sub: 'message_queue', icons: ['redis'], kind: 'hl' });
   b += vcard({ x: 422, y, w: 186, title: 'Workers 1 · 3 · 4', sub: 'reenvían a sus sockets', icons: ['socketdotio'] });
   b += hcard({ x: 660, y: 14, w: 220, h: 68, title: 'user:{id}', sub: 'a esa persona', mono: true });
@@ -332,6 +340,7 @@ svg .s2{font:400 12.5px Inter,"Segoe UI",sans-serif}
 svg .l{font:600 10.5px "JetBrains Mono",Consolas,monospace;letter-spacing:.08em}
 svg .lm{font:500 12px "JetBrains Mono",Consolas,monospace}
 svg .c{font:500 12px "JetBrains Mono",Consolas,monospace}
+svg .tg{font:700 14px "JetBrains Mono",Consolas,monospace;fill:#8FB2F7}
 svg .b{font:700 11px Inter,"Segoe UI",sans-serif;fill:#fff}
 `;
 for (const [file, secs] of PAGES) {
