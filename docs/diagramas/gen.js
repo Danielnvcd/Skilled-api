@@ -13,19 +13,14 @@ const BRAND = {
   socketdotio: '#E6EDF3', react: '#61DAFB', googlechrome: '#4C8BF5', jsonwebtokens: '#D63AFF',
   sqlalchemy: '#E8452C', pwa: '#9B7BFF',
 };
+// Solo logos oficiales (simple-icons); sin iconos genéricos.
 function iconInner(name) {
-  if (name.startsWith('l-')) {
-    const s = fs.readFileSync(path.join(ICONS, name + '.svg'), 'utf8');
-    return { lucide: true, body: s.slice(s.indexOf('>', s.indexOf('<svg')) + 1, s.lastIndexOf('</svg>')) };
-  }
   const s = fs.readFileSync(path.join(ICONS, name + '.svg'), 'utf8');
   const d = s.match(/<path d="([^"]+)"/)[1];
-  return { lucide: false, body: `<path d="${d}"/>` };
+  return { body: `<path d="${d}"/>` };
 }
 function icon(name, x, y, size, color) {
   const ic = iconInner(name);
-  if (ic.lucide)
-    return `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic.body}</svg>`;
   return `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}">${ic.body}</svg>`;
 }
 // Mosaico: cuadro redondeado con tinte del color + logo
@@ -50,8 +45,9 @@ function vcard({ x, y, w, h = 112, title, sub, icons = [], kind = 'normal', colo
   const total = icons.length * s + (icons.length - 1) * gap;
   let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.2" ${st.dash ? `stroke-dasharray="${st.dash}"` : ''}/>`;
   icons.forEach((n, i) => { out += tile(n, x + w / 2 - total / 2 + i * (s + gap), y + 16, s, colors[i]); });
-  out += `<text x="${x + w / 2}" y="${y + 77}" text-anchor="middle" class="t" fill="${st.title}">${esc(title)}</text>`;
-  if (sub) out += `<text x="${x + w / 2}" y="${y + 96}" text-anchor="middle" class="s" fill="${st.sub}">${esc(sub)}</text>`;
+  const ty = icons.length ? y + 77 : y + h / 2 + (sub ? -4 : 5);
+  out += `<text x="${x + w / 2}" y="${ty}" text-anchor="middle" class="t" fill="${st.title}">${esc(title)}</text>`;
+  if (sub) out += `<text x="${x + w / 2}" y="${ty + 19}" text-anchor="middle" class="s" fill="${st.sub}">${esc(sub)}</text>`;
   if (badge) out += `<circle cx="${x + 16}" cy="${y + 16}" r="11" fill="#2F5BA8"/><text x="${x + 16}" y="${y + 20}" text-anchor="middle" class="b">${badge}</text>`;
   return out;
 }
@@ -120,7 +116,7 @@ D.peticion = () => {
   const nodes = [
     { title: 'Usuario', sub: 'navegador · PWA', icons: ['googlechrome', 'pwa'] },
     { title: 'Cloudflare', sub: 'TLS · CDN · WAF', icons: ['cloudflare'] },
-    { title: 'Túnel CF', sub: 'conexión saliente', icons: ['cloudflare', 'l-link'], colors: [null, '#F6A945'] },
+    { title: 'Túnel CF', sub: 'conexión saliente', icons: ['cloudflare'] },
     { title: 'Nginx', sub: 'proxy · rate-limit', icons: ['nginx'] },
     { title: 'Gunicorn', sub: 'Flask · 4 workers', icons: ['gunicorn', 'flask'] },
     { title: 'Datos', sub: 'PostgreSQL · Redis', icons: ['postgresql', 'redis'] },
@@ -135,8 +131,7 @@ D.peticion = () => {
     b += lbl((x1 + x2) / 2, cy - 22, protos[i]);
   }
   b += `<rect x="${W / 2 - 300}" y="182" width="600" height="34" rx="17" fill="#5B8DEF" fill-opacity="0.08" stroke="#5B8DEF" stroke-opacity="0.35"/>`;
-  b += icon('l-shield-check', W / 2 - 284, 190, 18, '#7FA6F5');
-  b += `<text x="${W / 2 + 10}" y="203.5" text-anchor="middle" class="s2" fill="#BFD0EE">6 roles · el permiso se valida en el frontend y se exige otra vez en cada endpoint</text>`;
+  b += `<text x="${W / 2}" y="203.5" text-anchor="middle" class="s2" fill="#BFD0EE">6 roles · el permiso se valida en el frontend y se exige otra vez en cada endpoint</text>`;
   return svg(230, b);
 };
 
@@ -147,14 +142,14 @@ D.compose = () => {
   const svc = [
     { title: 'db', sub: 'postgres:18-alpine', icon: 'postgresql', vol: 'datos_postgres' },
     { title: 'redis', sub: 'redis:7-alpine', icon: 'redis', vol: 'datos_redis' },
-    { title: 'clamav', sub: 'clamav/clamav:stable', icon: 'l-shield-check', color: '#E5484D', vol: 'firmas_clamav' },
+    { title: 'clamav', sub: 'clamav/clamav:stable', vol: 'firmas_clamav' },
   ];
   svc.forEach((s, i) => {
     const y = 50 + i * 92, cy = y + 38;
     b += hcard({ x: 350, y, w: 300, title: s.title, sub: s.sub, icon: s.icon, color: s.color, mono: true });
     b += curve(252, 170, 346, cy, 'gray');
     b += line(`M652 ${cy} L${776} ${cy}`, 'gray', { dash: '4 4' });
-    b += hcard({ x: 780, y: y + 6, w: 308, h: 64, title: s.vol, icon: 'l-hard-drive', kind: 'ghost', color: '#8EA3C4', mono: true });
+    b += hcard({ x: 780, y: y + 6, w: 308, h: 64, title: s.vol, kind: 'ghost', color: '#8EA3C4', mono: true });
   });
   b += lbl(780, 34, 'VOLÚMENES PERSISTENTES', '#8A9BB8', 'start');
   return svg(336, b);
@@ -175,9 +170,9 @@ D.workers = () => {
 
 D.tunel = () => {
   let b = '';
-  b += hcard({ x: 0, y: 40, w: 270, h: 84, title: 'Usuarios', sub: 'internet', icon: 'l-users', color: '#9FB3D1' });
+  b += hcard({ x: 0, y: 40, w: 270, h: 84, title: 'Usuarios', sub: 'internet' });
   b += hcard({ x: 409, y: 40, w: 270, h: 84, title: 'Cloudflare', sub: 'borde global · WAF', icon: 'cloudflare' });
-  b += hcard({ x: 818, y: 40, w: 270, h: 84, title: 'Origen', sub: '0 puertos expuestos', icon: 'l-server', kind: 'hl', color: '#7FA6F5' });
+  b += hcard({ x: 818, y: 40, w: 270, h: 84, title: 'Origen', sub: '0 puertos expuestos', kind: 'hl', color: '#7FA6F5' });
   b += line('M274 82 L405 82', 'gray'); b += lbl(340, 70, 'HTTPS');
   b += line('M814 82 L683 82', 'green', { width: 2 }); b += lbl(748, 70, 'TÚNEL SALIENTE', '#2BD38A');
   b += line('M135 128 L135 190 L520 190', 'red', { dash: '6 5', end: false });
@@ -190,11 +185,11 @@ D.tunel = () => {
 D.imagenes = () => {
   const w = 152, step = (W - w) / 5, y = 24;
   const n = [
-    { title: 'URL externa', sub: 'llega del cliente', icons: ['l-link'], colors: ['#9FB3D1'] },
-    { title: 'Anti-SSRF', sub: 'host válido · https', icons: ['l-shield-alert'], colors: ['#FF8A65'] },
-    { title: 'Magic bytes', sub: 'máx. 50 MP', icons: ['l-shield-check'], colors: ['#F6A945'] },
-    { title: 'Re-encode', sub: 'Pillow → WebP', icons: ['l-file-image'], colors: ['#2BD38A'] },
-    { title: 'SHA-256', sub: 'llave del objeto', icons: ['l-hash'], colors: ['#D63AFF'] },
+    { title: 'URL externa', sub: 'llega del cliente' },
+    { title: 'Anti-SSRF', sub: 'host válido · https' },
+    { title: 'Magic bytes', sub: 'máx. 50 MP' },
+    { title: 'Re-encode', sub: 'Pillow → WebP' },
+    { title: 'SHA-256', sub: 'llave del objeto' },
     { title: 'R2 + CDN', sub: 'caché 1 año · aviso WS', icons: ['cloudflare'] },
   ];
   let b = '';
@@ -206,9 +201,9 @@ D.imagenes = () => {
 
 D.lock = () => {
   let b = '';
-  b += hcard({ x: 0, y: 20, w: 270, title: 'Transacción A', sub: 'quiere escribir', icon: 'l-activity', color: '#2BD38A' });
-  b += hcard({ x: 0, y: 156, w: 270, title: 'Transacción B', sub: 'quiere escribir', icon: 'l-activity', color: '#FF5370' });
-  b += hcard({ x: 409, y: 84, w: 290, h: 84, title: 'Bloqueo de fila', sub: 'SELECT … FOR UPDATE NOWAIT', icon: 'l-lock', kind: 'hl', color: '#7FA6F5' });
+  b += hcard({ x: 0, y: 20, w: 270, title: 'Transacción A', sub: 'quiere escribir' });
+  b += hcard({ x: 0, y: 156, w: 270, title: 'Transacción B', sub: 'quiere escribir' });
+  b += hcard({ x: 409, y: 84, w: 290, h: 84, title: 'Bloqueo de fila', sub: 'SELECT … FOR UPDATE NOWAIT', kind: 'hl', color: '#7FA6F5' });
   b += hcard({ x: 838, y: 88, w: 250, title: 'PostgreSQL', sub: 'stock ya escrito', icon: 'postgresql' });
   b += curve(274, 58, 405, 116, 'green', { width: 2 }); b += lbl(318, 52, 'toma el bloqueo', '#2BD38A', 'start', 'lm');
   b += curve(274, 194, 405, 138, 'red', { dash: '5 5' }); b += lbl(318, 214, 'espera o se rechaza', '#FF5370', 'start', 'lm');
@@ -219,10 +214,10 @@ D.lock = () => {
 D.login = () => {
   const w = 172, step = (W - w) / 4, y = 34, cy = y + 56;
   const n = [
-    { title: 'Usuario', sub: 'contraseña', icons: ['l-user'], colors: ['#9FB3D1'] },
+    { title: 'Usuario', sub: 'contraseña' },
     { title: '/auth/login', sub: 'verifica el hash', icons: ['flask'] },
-    { title: 'stepToken', sub: 'jti · un solo uso', icons: ['l-ticket'], colors: ['#F6A945'], kind: 'hl' },
-    { title: '/verify-2fa', sub: 'TOTP de 6 dígitos', icons: ['l-smartphone'], colors: ['#2BD38A'] },
+    { title: 'stepToken', sub: 'jti · un solo uso', kind: 'hl' },
+    { title: '/verify-2fa', sub: 'TOTP de 6 dígitos' },
     { title: 'Sesión', sub: 'access + refresh', icons: ['jsonwebtokens'] },
   ];
   const lab = ['POST', 'TOKEN', 'TOTP', 'OK'];
@@ -236,7 +231,7 @@ D.login = () => {
   [[1, '5 fallos en 15 min', 'lockout de 10 min a 24 h'], [3, 'anti-replay', 'código quemado 90 s']].forEach(([i, t, s]) => {
     const cx = i * step + w / 2;
     b += line(`M${cx} ${y + 114} L${cx} 196`, 'red', { dash: '4 4' });
-    b += hcard({ x: cx - 120, y: 200, w: 240, h: 64, title: t, sub: s, icon: 'l-shield-alert', kind: 'danger', color: '#FF5370' });
+    b += hcard({ x: cx - 120, y: 200, w: 240, h: 64, title: t, sub: s, kind: 'danger', color: '#FF5370' });
   });
   return svg(272, b);
 };
@@ -244,12 +239,12 @@ D.login = () => {
 D.metricas = () => {
   let b = '';
   const cy = 150;
-  b += vcard({ x: 0, y: cy - 56, w: 150, title: 'Petición', sub: 'termina', icons: ['l-activity'], colors: ['#9FB3D1'] });
+  b += vcard({ x: 0, y: cy - 56, w: 150, title: 'Petición', sub: 'termina' });
   b += vcard({ x: 200, y: cy - 56, w: 200, title: 'after_request', sub: 'nunca frena la respuesta', icons: ['flask'] });
-  b += vcard({ x: 466, y: 6, w: 220, title: 'Contadores', sub: 'siempre, sin muestreo', icons: ['l-hash'], colors: ['#2BD38A'], kind: 'hl' });
-  b += vcard({ x: 466, y: 182, w: 220, title: 'Detalle', sub: 'error · ≥500 ms · 1 de 20', icons: ['l-timer'], colors: ['#F6A945'] });
+  b += vcard({ x: 466, y: 6, w: 220, title: 'Contadores', sub: 'siempre, sin muestreo', kind: 'hl' });
+  b += vcard({ x: 466, y: 182, w: 220, title: 'Detalle', sub: 'error · ≥500 ms · 1 de 20' });
   b += vcard({ x: 752, y: cy - 56, w: 150, title: 'Redis', sub: 'agregados del día', icons: ['redis'] });
-  b += vcard({ x: 942, y: cy - 56, w: 146, title: 'Panel', sub: 'p50 · p95 · p99', icons: ['react', 'l-bar-chart-3'], colors: [null, '#5B8DEF'] });
+  b += vcard({ x: 942, y: cy - 56, w: 146, title: 'Panel', sub: 'p50 · p95 · p99', icons: ['react'] });
   b += line(`M154 ${cy} L196 ${cy}`, 'gray');
   b += curve(404, cy, 462, 62, 'gray'); b += curve(404, cy, 462, 238, 'gray');
   b += curve(690, 62, 748, cy, 'gray'); b += curve(690, 238, 748, cy, 'gray');
@@ -264,8 +259,8 @@ D.realtime = () => {
   b += vcard({ x: 0, y, w: 160, title: 'Worker 2', sub: 'hace el cambio', icons: ['gunicorn'] });
   b += vcard({ x: 206, y, w: 170, title: 'Redis', sub: 'message_queue', icons: ['redis'], kind: 'hl' });
   b += vcard({ x: 422, y, w: 186, title: 'Workers 1 · 3 · 4', sub: 'reenvían a sus sockets', icons: ['socketdotio'] });
-  b += hcard({ x: 660, y: 14, w: 220, h: 68, title: 'user:{id}', sub: 'a esa persona', icon: 'l-user', color: '#5B8DEF', mono: true });
-  b += hcard({ x: 660, y: 158, w: 220, h: 68, title: 'role:{rol}', sub: 'a todo un rol', icon: 'l-users', color: '#D63AFF', mono: true });
+  b += hcard({ x: 660, y: 14, w: 220, h: 68, title: 'user:{id}', sub: 'a esa persona', mono: true });
+  b += hcard({ x: 660, y: 158, w: 220, h: 68, title: 'role:{rol}', sub: 'a todo un rol', mono: true });
   b += vcard({ x: 928, y, w: 160, title: 'Navegador', sub: 'recibe el aviso', icons: ['googlechrome', 'react'] });
   b += line(`M164 ${cy} L202 ${cy}`, 'gray'); b += line(`M380 ${cy} L418 ${cy}`, 'gray');
   b += curve(612, cy, 656, 48, 'gray'); b += curve(612, cy, 656, 192, 'gray');
@@ -280,8 +275,8 @@ D.realtime = () => {
 D.sesion = () => {
   let b = '';
   const lanes = [
-    { label: 'PROACTIVO', c: 'gray', cards: [['Faltan 60 s', 'para que expire', 'l-clock', '#F6A945'], ['/auth/refresh', 'cookie httpOnly', 'flask'], ['Token nuevo', 'sin cortes', 'jsonwebtokens']] },
-    { label: 'REACTIVO', c: 'green', cards: [['Llega un 401', 'el token ya venció', 'l-shield-alert', '#FF5370'], ['Un solo refresh', 'aunque fallen 5 a la vez', 'l-refresh-cw', '#2BD38A'], ['Reintenta', 'la petición original', 'l-rotate-ccw', '#5B8DEF']] },
+    { label: 'PROACTIVO', c: 'gray', cards: [['Faltan 60 s', 'para que expire', null], ['/auth/refresh', 'cookie httpOnly', 'flask'], ['Token nuevo', 'sin cortes', 'jsonwebtokens']] },
+    { label: 'REACTIVO', c: 'green', cards: [['Llega un 401', 'el token ya venció', null], ['Un solo refresh', 'aunque fallen 5 a la vez', null], ['Reintenta', 'la petición original', null]] },
   ];
   const x0 = 140, w = 276, step = (W - x0 - w) / 2;
   lanes.forEach((ln, li) => {
@@ -322,11 +317,11 @@ const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:#070C17}
 body{width:1200px;padding:28px 32px 32px;font-family:Inter,"Segoe UI",system-ui,sans-serif;color:#E6EDF3;
- background:radial-gradient(1200px 500px at 15% -10%,#13254A 0%,transparent 60%),radial-gradient(900px 400px at 100% 110%,#1B1438 0%,transparent 60%),#070C17}
+ background:#070C17}
 section+section{margin-top:30px}
 h2{display:flex;align-items:center;gap:12px;font-size:21px;font-weight:650;letter-spacing:-.01em;margin:0 0 14px 2px}
 h2 .n{font:600 12px "JetBrains Mono",Consolas,monospace;color:#8FB2F7;background:#16284A;border:1px solid #3D6BC2;border-radius:7px;padding:3px 7px}
-.panel{background:linear-gradient(180deg,#111B2E,#0E1727);border:1px solid #233149;border-radius:18px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.panel{background:#0F1828;border:1px solid #233149;border-radius:18px;padding:24px}
 .panel svg{display:block}
 .foot{margin-top:20px;padding-top:14px;border-top:1px solid #223047;font:12.5px "JetBrains Mono",Consolas,monospace;color:#8A9BB8}
 .foot .g{color:#8FA0BB}.foot .gr{color:#2BD38A}
