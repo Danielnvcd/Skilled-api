@@ -8,7 +8,7 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 
 // ---------- iconos ----------
 const BRAND = {
-  cloudflare: '#F38020', nginx: '#22B24C', gunicorn: '#5DBB5A', flask: '#E6EDF3',
+  cloudflare: '#F38020', nginx: '#22B24C', flask: '#E6EDF3',
   postgresql: '#6E91F0', redis: '#FF5A4E', docker: '#2496ED', python: '#FFD43B',
   socketdotio: '#E6EDF3', react: '#61DAFB', googlechrome: '#4C8BF5', jsonwebtokens: '#D63AFF',
   sqlalchemy: '#E8452C', pwa: '#9B7BFF',
@@ -126,7 +126,7 @@ D.peticion = () => {
     { title: 'Cloudflare', sub: 'TLS · CDN · WAF', icons: ['cloudflare'] },
     { title: 'Túnel CF', sub: 'conexión saliente', icons: ['cloudflare'] },
     { title: 'Nginx', sub: 'proxy · rate-limit', icons: ['nginx'] },
-    { title: 'Gunicorn', sub: 'Flask · 4 workers', icons: ['gunicorn', 'flask'] },
+    { title: 'Gunicorn', sub: 'Flask · 4 workers', icons: ['python', 'flask'] },
     { title: 'Datos', sub: 'PostgreSQL · Redis', icons: ['postgresql', 'redis'] },
   ];
   const protos = ['HTTPS', 'TÚNEL', 'HTTP', 'WSGI', 'SQL'];
