@@ -1,4 +1,4 @@
-<img src="static/imagenes/skilled%20(1).png" alt="Skilled · Proyectos Industriales" width="130" align="left">
+<img src="static/imagenes/skilled%20(1).png" alt="Skilled · Proyectos Industriales" width="130">
 
 # Sistema de Nóminas — Backend (Skilled ERP)
 
